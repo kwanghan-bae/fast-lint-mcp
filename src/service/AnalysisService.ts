@@ -4,11 +4,12 @@ import glob from 'fast-glob';
 import pMap from 'p-map';
 import { simpleGit, SimpleGit } from 'simple-git';
 import { QualityDB } from '../db.js';
-import { ConfigService, CustomRule } from '../config.js';
+import { ConfigService } from '../config.js';
 import { analyzeFile } from '../analysis/sg.js';
 import { getDependencyMap, findOrphanFiles } from '../analysis/fd.js';
 import { countTechDebt } from '../analysis/rg.js';
 import { checkEnv } from '../checkers/env.js';
+import { checkHallucination, checkFakeLogic } from '../analysis/import-check.js';
 import { Violation, QualityReport } from '../types/index.js';
 import { join } from 'path';
 
@@ -42,7 +43,7 @@ export class AnalysisService {
       ];
 
       return [...new Set(changedFiles)]
-        .filter(f => f.startsWith('src/') && /\.(ts|js)$/.test(f));
+        .filter(f => (f.startsWith('src/') || f.startsWith('tests/')) && /\.(ts|js)$/.test(f));
     } catch (error) {
       console.warn('Warning: Failed to get changed files from git, fallback to full scan.');
       return [];
@@ -63,7 +64,6 @@ export class AnalysisService {
         if (!visited.has(neighbor)) {
           dfs(neighbor, [...path]);
         } else if (stack.has(neighbor)) {
-          // 사이클 발견
           const cycleStartIdx = path.indexOf(neighbor);
           cycles.push([...path.slice(cycleStartIdx), neighbor]);
         }
@@ -109,7 +109,7 @@ export class AnalysisService {
       files = await glob(['src/**/*.{ts,js}']);
     }
 
-    // 1. 병렬 파일 분석
+    // 1. 병렬 파일 분석 (시맨틱 분석 및 환각 체크 통합)
     const analysisResults = await pMap(files, async (file) => {
       try {
         const currentHash = this.getFileHash(file);
@@ -124,6 +124,8 @@ export class AnalysisService {
         }
 
         const fileViolations: Violation[] = [];
+        
+        // 사이즈 및 복잡도 체크
         if (metrics.lineCount > rules.maxLineCount) {
           fileViolations.push({
             type: 'SIZE',
@@ -142,6 +144,26 @@ export class AnalysisService {
             message: `함수/클래스 복잡도가 임계값(${rules.maxComplexity})을 초과했습니다.`,
           });
         }
+
+        // 환각(Hallucination) 체크
+        const hallucinationViolations = await checkHallucination(file);
+        hallucinationViolations.forEach(hv => {
+          fileViolations.push({
+            type: 'HALLUCINATION',
+            file,
+            message: `[환각 경고] ${hv.message}`,
+          });
+        });
+
+        // 가짜 구현(Fake Logic) 체크
+        const fakeLogicViolations = await checkFakeLogic(file);
+        fakeLogicViolations.forEach(fv => {
+          fileViolations.push({
+            type: 'FAKE_LOGIC',
+            file,
+            message: `[논리 의심] ${fv.message}`,
+          });
+        });
 
         metrics.customViolations?.forEach(cv => {
           fileViolations.push({
@@ -192,7 +214,7 @@ export class AnalysisService {
       });
     }
 
-    let currentCoverage = 85; 
+    let currentCoverage = 80; // 기본값
     const coveragePath = join(process.cwd(), 'coverage', 'coverage-summary.json');
     if (existsSync(coveragePath)) {
       try {
@@ -201,31 +223,33 @@ export class AnalysisService {
       } catch (e) {}
     }
 
+    // 커버리지 80% 하한선 강제
     if (currentCoverage < rules.minCoverage) {
       violations.push({
         type: 'COVERAGE',
         value: `${currentCoverage}%`,
         limit: `${rules.minCoverage}%`,
-        message: `테스트 커버리지가 기준(${rules.minCoverage}%)에 미달합니다.`,
+        message: `테스트 커버리지가 기준(${rules.minCoverage}%)에 미달합니다. 테스트 코드를 추가하세요!`,
       });
     }
 
     const lastSession = this.db.getLastSession();
     let pass = violations.length === 0;
 
+    // 커버리지 하락 방지 (No-Regression)
     if (lastSession && currentCoverage < lastSession.total_coverage) {
       violations.push({
         type: 'COVERAGE',
         value: `${currentCoverage}%`,
         limit: `${lastSession.total_coverage}%`,
-        message: '이전 세션보다 커버리지가 하락했습니다. REJECT!',
+        message: `이전 세션보다 커버리지가 하락했습니다 (${lastSession.total_coverage}% -> ${currentCoverage}%). REJECT!`,
       });
       pass = false;
     }
 
     let suggestion = pass 
-      ? `모든 품질 기준을 통과했습니다. (모드: ${incrementalMode ? '증분' : '전체'})` 
-      : violations.map(v => v.message).join('\n') + '\n위 사항들을 수정한 후 다시 제출하세요.';
+      ? `모든 품질 인증 기준을 통과했습니다. (모드: ${incrementalMode ? '증분' : '전체'})` 
+      : violations.map(v => v.message).join('\n') + '\n\n위 사항들을 수정한 후 다시 인증을 요청하세요.';
 
     this.db.saveSession(currentCoverage, violations.length, pass);
 

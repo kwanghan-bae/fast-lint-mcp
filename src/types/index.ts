@@ -21,7 +21,7 @@ export interface QualityReport {
 }
 
 export interface Violation {
-  type: 'SIZE' | 'COMPLEXITY' | 'COVERAGE' | 'ORPHAN' | 'TECH_DEBT' | 'CUSTOM' | 'ENV';
+  type: 'SIZE' | 'COMPLEXITY' | 'COVERAGE' | 'ORPHAN' | 'TECH_DEBT' | 'CUSTOM' | 'ENV' | 'HALLUCINATION' | 'FAKE_LOGIC';
   file?: string;
   value?: number | string;
   limit?: number | string;
