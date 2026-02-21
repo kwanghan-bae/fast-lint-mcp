@@ -10,6 +10,7 @@ import { getDependencyMap, findOrphanFiles } from '../analysis/fd.js';
 import { countTechDebt } from '../analysis/rg.js';
 import { checkEnv } from '../checkers/env.js';
 import { checkHallucination, checkFakeLogic } from '../analysis/import-check.js';
+import { checkSecrets, checkPackageAudit } from '../checkers/security.js';
 import { Violation, QualityReport } from '../types/index.js';
 import { join } from 'path';
 
@@ -109,7 +110,11 @@ export class AnalysisService {
       files = await glob(['src/**/*.{ts,js}']);
     }
 
-    // 1. 병렬 파일 분석 (시맨틱 분석 및 환각 체크 통합)
+    // 0. 패키지 보안 감사 (npm audit)
+    const auditViolations = await checkPackageAudit();
+    violations.push(...auditViolations);
+
+    // 1. 병렬 파일 분석 (시맨틱 분석, 환각 체크, 시크릿 스캔 통합)
     const analysisResults = await pMap(files, async (file) => {
       try {
         const currentHash = this.getFileHash(file);
@@ -139,6 +144,7 @@ export class AnalysisService {
           fileViolations.push({
             type: 'COMPLEXITY',
             file,
+            file,
             value: metrics.complexity,
             limit: rules.maxComplexity,
             message: `함수/클래스 복잡도가 임계값(${rules.maxComplexity})을 초과했습니다.`,
@@ -164,6 +170,10 @@ export class AnalysisService {
             message: `[논리 의심] ${fv.message}`,
           });
         });
+
+        // 보안(Secret) 스캔
+        const secretViolations = await checkSecrets(file);
+        fileViolations.push(...secretViolations);
 
         metrics.customViolations?.forEach(cv => {
           fileViolations.push({
@@ -214,7 +224,7 @@ export class AnalysisService {
       });
     }
 
-    let currentCoverage = 80; // 기본값
+    let currentCoverage = 80; 
     const coveragePath = join(process.cwd(), 'coverage', 'coverage-summary.json');
     if (existsSync(coveragePath)) {
       try {
@@ -223,7 +233,6 @@ export class AnalysisService {
       } catch (e) {}
     }
 
-    // 커버리지 80% 하한선 강제
     if (currentCoverage < rules.minCoverage) {
       violations.push({
         type: 'COVERAGE',
@@ -236,7 +245,6 @@ export class AnalysisService {
     const lastSession = this.db.getLastSession();
     let pass = violations.length === 0;
 
-    // 커버리지 하락 방지 (No-Regression)
     if (lastSession && currentCoverage < lastSession.total_coverage) {
       violations.push({
         type: 'COVERAGE',
