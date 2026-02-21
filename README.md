@@ -8,7 +8,8 @@ Fast-Lint-MCP는 AI 에이전트(Claude, Gemini 등)가 작성한 코드의 품�
 
 ## ✨ 주요 기능 (Key Features)
 
-### 1. ⚡ 고성능 Native AST 분석
+### 1. ⚡ 다국어 고성능 Native AST 분석
+*   **JS/TS, Python** 등 다양한 언어를 하나의 인터페이스로 분석합니다.
 *   외부 CLI 호출 오버헤드를 제거하고 **`@ast-grep/napi`** 네이티브 바인딩을 사용하여 파일당 **10ms 이내**의 분석 속도를 보장합니다.
 *   단순 텍스트 매칭이 아닌 구문 구조(AST)를 분석하여 함수/클래스의 정확한 복잡도를 계산합니다.
 
@@ -20,9 +21,12 @@ Fast-Lint-MCP는 AI 에이전트(Claude, Gemini 등)가 작성한 코드의 품�
 *   **보안 감사 (Security Shield)**: `npm audit` 취약점 및 소스 코드 내 하드코딩된 Secret(API Key 등)을 자동으로 스캔합니다.
 *   **변이 테스트 (Mutation Integrity)**: 코드의 논리 기호를 일시적으로 변형하여, 테스트가 실제 로직을 제대로 검증하는지 확인합니다. (가짜 테스트 적발)
 *   **시니어 어드바이스 (Senior Advice)**: 코드의 가독성, 중첩도, 디자인 패턴을 분석하여 LLM 수준의 정성적 개선 가이드를 제공합니다.
-*   **자가 치유 (Self-Healing)**: ESLint 및 Prettier를 연동하여 사소한 스타일 위반 사항은 분석 과정에서 자동으로 수정합니다.
+*   **자가 치유 (Self-Healing)**: ESLint, Prettier, **Ruff**를 연동하여 사소한 스타일 위반 사항은 분석 과정에서 자동으로 수정합니다.
 
-### 3. 🔄 Git 기반 증분 분석 (Incremental Scan)
+### 3. 🔄 범용 및 증분 분석 (Universal & Incremental Scan)
+*   **Zero-Config**: 프로젝트에 설정 파일이 없어도 내장된 **Guardian Standard Rules**를 적용하여 즉시 작동합니다.
+*   **스마트 리졸버**: 프로젝트 로컬 린터가 없으면 MCP 내장 엔진을 자동으로 찾아 사용하는 Fail-proof 구조입니다.
+*   프로젝트 전체를 매번 스캔하는 대신, `git status` 및 `diff`를 활용하여 **변경된 파일만** 선별 분석합니다.
 *   프로젝트 전체를 매번 스캔하는 대신, `git status` 및 `diff`를 활용하여 **변경된 파일만** 선별 분석합니다.
 *   에이전트가 코드를 수정할 때마다 즉각적인 피드백을 'Zero-Latency'에 가깝게 제공합니다.
 
@@ -48,6 +52,7 @@ Fast-Lint-MCP는 최적의 성능을 위해 아래 도구들이 `PATH`에 설치
 *   **ripgrep (rg)**: 기술 부채 스캔용 (`brew install ripgrep`)
 *   **fd-find (fd)**: 파일 탐색 보조 (`brew install fd`)
 *   **ast-grep (sg)**: AST 분석 엔진 (`brew install ast-grep`)
+*   **Ruff (선택)**: Python 프로젝트 분석 및 자동 수정용 (`pip install ruff`)
 
 ---
 
@@ -65,13 +70,16 @@ npm run build
 ```json
 {
   "mcpServers": {
-    "fast-lint": {
+    "fast-lint-mcp": {
       "command": "node",
       "args": ["/절대경로/to/fast-lint-mcp/dist/index.js"]
     }
   }
 }
 ```
+
+또는 Gemini CLI 사용 시:
+`gemini mcp add -s user --trust fast-lint-mcp node /절대경로/to/fast-lint-mcp/dist/index.js`
 
 ---
 
@@ -87,15 +95,7 @@ npm run build
     "maxComplexity": 15,
     "minCoverage": 80,
     "techDebtLimit": 10
-  },
-  "customRules": [
-    {
-      "id": "no-console",
-      "pattern": "console.log($$$)",
-      "message": "프로덕션 코드에는 console.log를 남기지 마세요.",
-      "severity": "error"
-    }
-  ]
+  }
 }
 ```
 
@@ -103,26 +103,24 @@ npm run build
 
 ## 📊 응답 구조 (Response Schema)
 
-AI 에이전트는 서버의 `quality-check` 도구를 호출하여 아래와 같은 정량적 리포트를 수신합니다.
+AI 에이전트는 서버의 `quality-check` 도구를 호출하여 아래와 같은 통합 리포트를 수신합니다.
 
 ```json
 {
   "pass": false,
   "violations": [
     {
-      "type": "SIZE",
-      "file": "src/auth.ts",
-      "value": 420,
-      "limit": 300,
-      "message": "단일 파일 300줄 초과: 파일 분리 필요"
+      "type": "HALLUCINATION",
+      "file": "src/service.ts",
+      "message": "[환각 경고] 존재하지 않는 파일 참조: ./missing-file"
     },
     {
-      "type": "CUSTOM",
-      "file": "src/index.ts",
-      "message": "[no-console] 프로덕션 코드에는 console.log를 남기지 마세요."
+      "type": "SECURITY",
+      "file": "src/config.ts",
+      "message": "[AWS_KEY] AWS Access Key 발견! 민감 정보는 환경 변수로 관리하세요."
     }
   ],
-  "suggestion": "src/auth.ts 로직을 분리하고 console.log를 제거한 후 다시 시도하세요."
+  "suggestion": "위 위반 사항들을 수정한 후 다시 인증을 요청하세요.\n\n[Self-Healing Result]\nESLint를 통해 스타일 위반 사항을 자동으로 수정했습니다."
 }
 ```
 
@@ -130,12 +128,15 @@ AI 에이전트는 서버의 `quality-check` 도구를 호출하여 아래와 �
 
 ## 🏗️ 아키텍처 개요 (Architecture)
 
-본 프로젝트는 유지보수성과 확장성을 위해 레이어드 아키텍처를 따릅니다.
+본 프로젝트는 다국어 확장성과 유지보수성을 위해 **프로바이더 기반 아키텍처**를 따릅니다.
 
-*   **`AnalysisService`**: 증분 분석, 순환 참조 탐지, 품질 비교 로직을 통합 관리하는 핵심 서비스.
+*   **`QualityProvider`**: 언어별(JS, Python 등) 품질 검사 및 자동 수정 로직을 캡슐화한 인터페이스.
+    *   `JavascriptProvider`: ESLint, Prettier, AST-Grep 연동.
+    *   `PythonProvider`: Ruff 연동.
+*   **`AnalysisService`**: 등록된 프로바이더들을 관리하고 증분 분석 및 전체 품질 관문을 통제하는 핵심 서비스.
 *   **`ConfigService`**: `Zod`를 이용한 설정 파일 검증 및 로드.
 *   **`QualityDB`**: `better-sqlite3`를 활용한 품질 데이터 영속화.
-*   **`Checkers/Analysis`**: 각 도구별(ast-grep, ripgrep, glob) 분석 기능 모듈화.
+*   **`Checkers/Analysis`**: 각 도구별(ast-grep, ripgrep, glob, fixer) 분석 기능 모듈화.
 
 ---
 
