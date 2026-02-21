@@ -13,6 +13,7 @@ import { checkHallucination, checkFakeLogic } from '../analysis/import-check.js'
 import { checkSecrets, checkPackageAudit } from '../checkers/security.js';
 import { runMutationTest } from '../analysis/mutation.js';
 import { runSemanticReview } from '../analysis/reviewer.js';
+import { runSelfHealing } from '../checkers/fixer.js';
 import { Violation, QualityReport } from '../types/index.js';
 import { join } from 'path';
 
@@ -111,6 +112,9 @@ export class AnalysisService {
     } else {
       files = await glob(['src/**/*.{ts,js}']);
     }
+
+    // 0. 자가 치유 (Self-Healing) - 분석 전 자동 수정 시도
+    const healingResult = await runSelfHealing(files);
 
     // 0. 패키지 보안 감사 (npm audit)
     const auditViolations = await checkPackageAudit();
@@ -275,6 +279,11 @@ export class AnalysisService {
     let suggestion = pass 
       ? `모든 품질 인증 기준을 통과했습니다. (모드: ${incrementalMode ? '증분' : '전체'})` 
       : violations.map(v => v.message).join('\n') + '\n\n위 사항들을 수정한 후 다시 인증을 요청하세요.';
+
+    // 자가 치유 결과 추가
+    if (healingResult.fixedCount > 0) {
+      suggestion += `\n\n[Self-Healing Result]\n${healingResult.messages.join('\n')}`;
+    }
 
     this.db.saveSession(currentCoverage, violations.length, pass);
 
