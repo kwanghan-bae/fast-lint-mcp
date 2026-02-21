@@ -5,26 +5,28 @@ import pMap from 'p-map';
 import { simpleGit, SimpleGit } from 'simple-git';
 import { QualityDB } from '../db.js';
 import { ConfigService } from '../config.js';
-import { analyzeFile } from '../analysis/sg.js';
 import { getDependencyMap, findOrphanFiles } from '../analysis/fd.js';
 import { countTechDebt } from '../analysis/rg.js';
 import { checkEnv } from '../checkers/env.js';
-import { checkHallucination, checkFakeLogic } from '../analysis/import-check.js';
-import { checkSecrets, checkPackageAudit } from '../checkers/security.js';
-import { runMutationTest } from '../analysis/mutation.js';
-import { runSemanticReview } from '../analysis/reviewer.js';
-import { runSelfHealing } from '../checkers/fixer.js';
-import { Violation, QualityReport } from '../types/index.js';
-import { join } from 'path';
+import { checkPackageAudit } from '../checkers/security.js';
+import { JavascriptProvider } from '../providers/JavascriptProvider.js';
+import { PythonProvider } from '../providers/PythonProvider.js';
+import { Violation, QualityReport, QualityProvider } from '../types/index.js';
+import { join, extname } from 'path';
 
 export class AnalysisService {
   private git: SimpleGit;
+  private providers: QualityProvider[] = [];
 
   constructor(
     private db: QualityDB,
     private config: ConfigService
   ) {
     this.git = simpleGit();
+    
+    // 프로바이더 등록 (DI)
+    this.providers.push(new JavascriptProvider(this.config));
+    this.providers.push(new PythonProvider(this.config));
   }
 
   private getFileHash(filePath: string): string {
@@ -46,8 +48,10 @@ export class AnalysisService {
         ...status.renamed.map(r => r.to),
       ];
 
+      // 지원하는 확장자 필터링
+      const supportedExts = this.providers.flatMap(p => p.extensions);
       return [...new Set(changedFiles)]
-        .filter(f => (f.startsWith('src/') || f.startsWith('tests/')) && /\.(ts|js)$/.test(f));
+        .filter(f => (f.startsWith('src/') || f.startsWith('tests/')) && supportedExts.includes(extname(f)));
     } catch (error) {
       console.warn('Warning: Failed to get changed files from git, fallback to full scan.');
       return [];
@@ -97,7 +101,6 @@ export class AnalysisService {
 
     const violations: Violation[] = [];
     const rules = this.config.rules;
-    const customRules = this.config.customRules;
 
     let files: string[] = [];
     let incrementalMode = false;
@@ -107,114 +110,48 @@ export class AnalysisService {
       if (files.length > 0) {
         incrementalMode = true;
       } else {
-        files = await glob(['src/**/*.{ts,js}']);
+        const supportedExts = this.providers.flatMap(p => p.extensions);
+        files = await glob(supportedExts.map(ext => `src/**/*${ext}`));
       }
     } else {
-      files = await glob(['src/**/*.{ts,js}']);
+      const supportedExts = this.providers.flatMap(p => p.extensions);
+      files = await glob(supportedExts.map(ext => `src/**/*${ext}`));
     }
 
-    // 0. 자가 치유 (Self-Healing) - 분석 전 자동 수정 시도
-    const healingResult = await runSelfHealing(files);
+    // 0. 자가 치유 (Self-Healing) - 언어별 프로바이더에 위임
+    const healingMessages: string[] = [];
+    for (const provider of this.providers) {
+      const targetFiles = files.filter(f => provider.extensions.includes(extname(f)));
+      if (targetFiles.length > 0 && provider.fix) {
+        const res = await provider.fix(targetFiles, process.cwd());
+        healingMessages.push(...res.messages);
+      }
+    }
 
     // 0. 패키지 보안 감사 (npm audit)
     const auditViolations = await checkPackageAudit();
     violations.push(...auditViolations);
 
-    // 1. 병렬 파일 분석 (시맨틱 분석, 환각 체크, 시크릿 스캔, 변이 테스트, 정성 리뷰 통합)
+    // 1. 병렬 파일 분석 (프로바이더 기반)
     const analysisResults = await pMap(files, async (file) => {
       try {
-        const currentHash = this.getFileHash(file);
-        const cached = this.db.getFileMetric(file);
-
-        let metrics;
-        if (cached && cached.hash === currentHash && customRules.length === 0) {
-          metrics = { lineCount: cached.line_count, complexity: cached.complexity, customViolations: [] };
-        } else {
-          metrics = await analyzeFile(file, customRules);
-          this.db.updateFileMetric(file, currentHash, metrics.lineCount, metrics.complexity);
-        }
-
-        const fileViolations: Violation[] = [];
+        const ext = extname(file);
+        const provider = this.providers.find(p => p.extensions.includes(ext));
         
-        // 사이즈 및 복잡도 체크
-        if (metrics.lineCount > rules.maxLineCount) {
-          fileViolations.push({
-            type: 'SIZE',
-            file,
-            value: metrics.lineCount,
-            limit: rules.maxLineCount,
-            message: `단일 파일 ${rules.maxLineCount}줄 초과: 파일 분리 필요`,
-          });
-        }
-        if (metrics.complexity > rules.maxComplexity) {
-          fileViolations.push({
-            type: 'COMPLEXITY',
-            file,
-            value: metrics.complexity,
-            limit: rules.maxComplexity,
-            message: `함수/클래스 복잡도가 임계값(${rules.maxComplexity})을 초과했습니다.`,
-          });
-        }
+        if (!provider) return null;
 
-        // 환각(Hallucination) 체크
-        const hallucinationViolations = await checkHallucination(file);
-        hallucinationViolations.forEach(hv => {
-          fileViolations.push({
-            type: 'HALLUCINATION',
-            file,
-            message: `[환각 경고] ${hv.message}`,
-          });
-        });
-
-        // 가짜 구현(Fake Logic) 체크
-        const fakeLogicViolations = await checkFakeLogic(file);
-        fakeLogicViolations.forEach(fv => {
-          fileViolations.push({
-            type: 'FAKE_LOGIC',
-            file,
-            message: `[논리 의심] ${fv.message}`,
-          });
-        });
-
-        // 보안(Secret) 스캔
-        const secretViolations = await checkSecrets(file);
-        fileViolations.push(...secretViolations);
-
-        // 정성적 코드 리뷰 (READABILITY)
-        const reviewViolations = await runSemanticReview(file);
-        fileViolations.push(...reviewViolations);
-
-        // 변이 테스트 (증분 모드에서 핵심 소스 코드에만 적용)
-        if (incrementalMode && file.startsWith('src/') && !file.endsWith('.test.ts')) {
-          const mutationViolations = await runMutationTest(file);
-          mutationViolations.forEach(mv => {
-            fileViolations.push({
-              type: 'MUTATION_SURVIVED',
-              file,
-              message: `[가짜 테스트 의심] ${mv.message}`,
-            });
-          });
-        }
-
-        metrics.customViolations?.forEach(cv => {
-          fileViolations.push({
-            type: 'CUSTOM',
-            file,
-            message: `[${cv.id}] ${cv.message}`,
-          });
-        });
-
-        return { metrics, fileViolations };
+        const fileViolations = await provider.check(file);
+        return { fileViolations };
       } catch (e) {
         return null;
       }
-    }, { concurrency: 2 }); // 변이 테스트와 테스트 실행으로 인한 과부하 방지 위해 concurrency 낮춤
+    }, { concurrency: 2 });
 
     analysisResults.filter(Boolean).forEach((res: any) => {
       violations.push(...res.fileViolations);
     });
 
-    // 2. 의존성 및 순환 참조 분석
+    // 2. 의존성 및 순환 참조 분석 (JS 전용)
     const depMap = await getDependencyMap();
     const cycles = this.detectCycles(depMap);
     for (const cycle of cycles) {
@@ -224,7 +161,7 @@ export class AnalysisService {
       });
     }
 
-    // 3. Orphan File 분석
+    // 3. Orphan File 분석 (JS 전용)
     const orphans = await findOrphanFiles();
     for (const orphan of orphans) {
       violations.push({
@@ -281,8 +218,8 @@ export class AnalysisService {
       : violations.map(v => v.message).join('\n') + '\n\n위 사항들을 수정한 후 다시 인증을 요청하세요.';
 
     // 자가 치유 결과 추가
-    if (healingResult.fixedCount > 0) {
-      suggestion += `\n\n[Self-Healing Result]\n${healingResult.messages.join('\n')}`;
+    if (healingMessages.length > 0) {
+      suggestion += `\n\n[Self-Healing Result]\n${healingMessages.join('\n')}`;
     }
 
     this.db.saveSession(currentCoverage, violations.length, pass);
