@@ -12,6 +12,7 @@ import { checkEnv } from '../checkers/env.js';
 import { checkHallucination, checkFakeLogic } from '../analysis/import-check.js';
 import { checkSecrets, checkPackageAudit } from '../checkers/security.js';
 import { runMutationTest } from '../analysis/mutation.js';
+import { runSemanticReview } from '../analysis/reviewer.js';
 import { Violation, QualityReport } from '../types/index.js';
 import { join } from 'path';
 
@@ -115,7 +116,7 @@ export class AnalysisService {
     const auditViolations = await checkPackageAudit();
     violations.push(...auditViolations);
 
-    // 1. 병렬 파일 분석 (시맨틱 분석, 환각 체크, 시크릿 스캔, 변이 테스트 통합)
+    // 1. 병렬 파일 분석 (시맨틱 분석, 환각 체크, 시크릿 스캔, 변이 테스트, 정성 리뷰 통합)
     const analysisResults = await pMap(files, async (file) => {
       try {
         const currentHash = this.getFileHash(file);
@@ -175,6 +176,10 @@ export class AnalysisService {
         const secretViolations = await checkSecrets(file);
         fileViolations.push(...secretViolations);
 
+        // 정성적 코드 리뷰 (READABILITY)
+        const reviewViolations = await runSemanticReview(file);
+        fileViolations.push(...reviewViolations);
+
         // 변이 테스트 (증분 모드에서 핵심 소스 코드에만 적용)
         if (incrementalMode && file.startsWith('src/') && !file.endsWith('.test.ts')) {
           const mutationViolations = await runMutationTest(file);
@@ -199,7 +204,7 @@ export class AnalysisService {
       } catch (e) {
         return null;
       }
-    }, { concurrency: 4 }); // 테스트 실행을 포함하므로 병렬도를 낮춤
+    }, { concurrency: 2 }); // 변이 테스트와 테스트 실행으로 인한 과부하 방지 위해 concurrency 낮춤
 
     analysisResults.filter(Boolean).forEach((res: any) => {
       violations.push(...res.fileViolations);
