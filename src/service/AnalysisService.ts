@@ -11,6 +11,7 @@ import { countTechDebt } from '../analysis/rg.js';
 import { checkEnv } from '../checkers/env.js';
 import { checkHallucination, checkFakeLogic } from '../analysis/import-check.js';
 import { checkSecrets, checkPackageAudit } from '../checkers/security.js';
+import { runMutationTest } from '../analysis/mutation.js';
 import { Violation, QualityReport } from '../types/index.js';
 import { join } from 'path';
 
@@ -114,7 +115,7 @@ export class AnalysisService {
     const auditViolations = await checkPackageAudit();
     violations.push(...auditViolations);
 
-    // 1. 병렬 파일 분석 (시맨틱 분석, 환각 체크, 시크릿 스캔 통합)
+    // 1. 병렬 파일 분석 (시맨틱 분석, 환각 체크, 시크릿 스캔, 변이 테스트 통합)
     const analysisResults = await pMap(files, async (file) => {
       try {
         const currentHash = this.getFileHash(file);
@@ -143,7 +144,6 @@ export class AnalysisService {
         if (metrics.complexity > rules.maxComplexity) {
           fileViolations.push({
             type: 'COMPLEXITY',
-            file,
             file,
             value: metrics.complexity,
             limit: rules.maxComplexity,
@@ -175,6 +175,18 @@ export class AnalysisService {
         const secretViolations = await checkSecrets(file);
         fileViolations.push(...secretViolations);
 
+        // 변이 테스트 (증분 모드에서 핵심 소스 코드에만 적용)
+        if (incrementalMode && file.startsWith('src/') && !file.endsWith('.test.ts')) {
+          const mutationViolations = await runMutationTest(file);
+          mutationViolations.forEach(mv => {
+            fileViolations.push({
+              type: 'MUTATION_SURVIVED',
+              file,
+              message: `[가짜 테스트 의심] ${mv.message}`,
+            });
+          });
+        }
+
         metrics.customViolations?.forEach(cv => {
           fileViolations.push({
             type: 'CUSTOM',
@@ -187,7 +199,7 @@ export class AnalysisService {
       } catch (e) {
         return null;
       }
-    }, { concurrency: 8 });
+    }, { concurrency: 4 }); // 테스트 실행을 포함하므로 병렬도를 낮춤
 
     analysisResults.filter(Boolean).forEach((res: any) => {
       violations.push(...res.fileViolations);
