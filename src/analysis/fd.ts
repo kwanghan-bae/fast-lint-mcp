@@ -2,6 +2,7 @@ import glob from 'fast-glob';
 import { readFileSync } from 'fs';
 import { Lang, parse } from '@ast-grep/napi';
 import { join, dirname, normalize } from 'path';
+import { resolveModulePath } from '../utils/PathResolver.js';
 
 /**
  * 프로젝트 내의 모든 의존성 맵을 생성합니다.
@@ -60,41 +61,6 @@ export async function getDependencyMap(
   }
 
   return depMap;
-}
-
-/**
- * 상대 경로를 실제 파일 경로로 해석합니다.
- */
-function resolveModulePath(
-  currentDir: string,
-  importPath: string,
-  allFiles: string[]
-): string | null {
-  // TypeScript ESM 대응
-  let cleanPath = importPath;
-  if (importPath.endsWith('.js')) {
-    cleanPath = importPath.slice(0, -3);
-  } else if (importPath.endsWith('.jsx')) {
-    cleanPath = importPath.slice(0, -4);
-  }
-
-  const targetBase = normalize(join(currentDir, cleanPath));
-  const extensions = ['.ts', '.tsx', '.js', '.jsx'];
-
-  for (const ext of extensions) {
-    const withExt = targetBase + ext;
-    if (allFiles.includes(withExt)) return withExt;
-  }
-
-  const originalPath = normalize(join(currentDir, importPath));
-  if (allFiles.includes(originalPath)) return originalPath;
-
-  for (const ext of extensions) {
-    const withIndex = normalize(join(targetBase, 'index' + ext));
-    if (allFiles.includes(withIndex)) return withIndex;
-  }
-
-  return null;
 }
 
 /**

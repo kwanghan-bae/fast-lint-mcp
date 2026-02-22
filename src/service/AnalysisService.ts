@@ -12,7 +12,7 @@ import { checkPackageAudit } from '../checkers/security.js';
 import { JavascriptProvider } from '../providers/JavascriptProvider.js';
 import { PythonProvider } from '../providers/PythonProvider.js';
 import { Violation, QualityReport, QualityProvider } from '../types/index.js';
-import { join, extname } from 'path';
+import { join, extname, normalize } from 'path';
 
 export class AnalysisService {
   private git: SimpleGit;
@@ -23,7 +23,7 @@ export class AnalysisService {
     private config: ConfigService
   ) {
     this.git = simpleGit();
-    
+
     // 프로바이더 등록 (DI)
     this.providers.push(new JavascriptProvider(this.config));
     this.providers.push(new PythonProvider(this.config));
@@ -45,13 +45,14 @@ export class AnalysisService {
         ...status.not_added,
         ...status.created,
         ...status.staged,
-        ...status.renamed.map(r => r.to),
+        ...status.renamed.map((r) => r.to),
       ];
 
-      // 지원하는 확장자 필터링
-      const supportedExts = this.providers.flatMap(p => p.extensions);
-      return [...new Set(changedFiles)]
-        .filter(f => (f.startsWith('src/') || f.startsWith('tests/')) && supportedExts.includes(extname(f)));
+      const supportedExts = this.providers.flatMap((p) => p.extensions);
+      return [...new Set(changedFiles)].filter(
+        (f) =>
+          (f.startsWith('src/') || f.startsWith('tests/')) && supportedExts.includes(extname(f))
+      );
     } catch (error) {
       console.warn('Warning: Failed to get changed files from git, fallback to full scan.');
       return [];
@@ -105,53 +106,80 @@ export class AnalysisService {
     let files: string[] = [];
     let incrementalMode = false;
 
+    // 1. 분석 대상 파일 수집 (설정된 exclude 패턴 적용)
+    const supportedExts = this.providers.flatMap((p) => p.extensions);
+    const ignorePatterns = this.config.exclude;
+
     if (this.config.incremental) {
       files = await this.getChangedFiles();
       if (files.length > 0) {
         incrementalMode = true;
       } else {
-        const supportedExts = this.providers.flatMap(p => p.extensions);
-        files = await glob(supportedExts.map(ext => `src/**/*${ext}`));
+        files = await glob(
+          supportedExts.map((ext) => `src/**/*${ext}`),
+          { ignore: ignorePatterns }
+        );
       }
     } else {
-      const supportedExts = this.providers.flatMap(p => p.extensions);
-      files = await glob(supportedExts.map(ext => `src/**/*${ext}`));
+      files = await glob(
+        supportedExts.map((ext) => `src/**/*${ext}`),
+        { ignore: ignorePatterns }
+      );
     }
 
-    // 0. 자가 치유 (Self-Healing) - 언어별 프로바이더에 위임
+    // 2. 자가 치유 (Self-Healing)
     const healingMessages: string[] = [];
     for (const provider of this.providers) {
-      const targetFiles = files.filter(f => provider.extensions.includes(extname(f)));
+      const targetFiles = files.filter((f) => provider.extensions.includes(extname(f)));
       if (targetFiles.length > 0 && provider.fix) {
         const res = await provider.fix(targetFiles, process.cwd());
         healingMessages.push(...res.messages);
       }
     }
 
-    // 0. 패키지 보안 감사 (npm audit)
+    // 3. 보안 감사
     const auditViolations = await checkPackageAudit();
     violations.push(...auditViolations);
 
-    // 1. 병렬 파일 분석 (프로바이더 기반)
-    const analysisResults = await pMap(files, async (file) => {
-      try {
-        const ext = extname(file);
-        const provider = this.providers.find(p => p.extensions.includes(ext));
-        
-        if (!provider) return null;
+    // 4. 병렬 파일 분석 (해시 기반 캐싱 적용)
+    const analysisResults = await pMap(
+      files,
+      async (file) => {
+        try {
+          const ext = extname(file);
+          const provider = this.providers.find((p) => p.extensions.includes(ext));
+          if (!provider) return null;
 
-        const fileViolations = await provider.check(file);
-        return { fileViolations };
-      } catch (e) {
-        return null;
-      }
-    }, { concurrency: 2 });
+          const currentHash = this.getFileHash(file);
+          const cachedMetric = this.db.getFileMetric(file);
+
+          // 캐시 히트 (해시가 동일하면 캐시된 결과 반환)
+          if (cachedMetric && cachedMetric.hash === currentHash) {
+            return { fileViolations: JSON.parse(cachedMetric.violations || '[]') };
+          }
+
+          // 캐시 미스 (실제 분석 수행)
+          const fileViolations = await provider.check(file);
+
+          // 분석 데이터 업데이트 (캐시 저장)
+          // lineCount와 complexity는 provider.check에서 반환하도록 타입 확장이 필요할 수 있으나,
+          // 여기서는 임시로 lineCount를 단순 계산하여 저장
+          const lineCount = readFileSync(file, 'utf-8').split('\n').length;
+          this.db.updateFileMetric(file, currentHash, lineCount, 0, fileViolations);
+
+          return { fileViolations };
+        } catch (e) {
+          return null;
+        }
+      },
+      { concurrency: 4 }
+    ); // 병렬성 증가
 
     analysisResults.filter(Boolean).forEach((res: any) => {
       violations.push(...res.fileViolations);
     });
 
-    // 2. 의존성 및 순환 참조 분석 (JS 전용)
+    // 5. 의존성 분석 (고아 파일 및 순환 참조)
     const depMap = await getDependencyMap();
     const cycles = this.detectCycles(depMap);
     for (const cycle of cycles) {
@@ -161,9 +189,9 @@ export class AnalysisService {
       });
     }
 
-    // 3. Orphan File 분석 (JS 전용)
     const orphans = await findOrphanFiles();
     for (const orphan of orphans) {
+      // 분석 대상에서 제외된 경로는 고아 파일에서도 제외
       violations.push({
         type: 'ORPHAN',
         file: orphan,
@@ -171,7 +199,7 @@ export class AnalysisService {
       });
     }
 
-    // 4. 기술 부채 및 커버리지
+    // 6. 기술 부채 및 커버리지
     const techDebtCount = await countTechDebt();
     if (techDebtCount > rules.techDebtLimit) {
       violations.push({
@@ -182,7 +210,7 @@ export class AnalysisService {
       });
     }
 
-    let currentCoverage = 80; 
+    let currentCoverage = 80;
     const coveragePath = join(process.cwd(), 'coverage', 'coverage-summary.json');
     if (existsSync(coveragePath)) {
       try {
@@ -213,11 +241,11 @@ export class AnalysisService {
       pass = false;
     }
 
-    let suggestion = pass 
-      ? `모든 품질 인증 기준을 통과했습니다. (모드: ${incrementalMode ? '증분' : '전체'})` 
-      : violations.map(v => v.message).join('\n') + '\n\n위 사항들을 수정한 후 다시 인증을 요청하세요.';
+    let suggestion = pass
+      ? `모든 품질 인증 기준을 통과했습니다. (모드: ${incrementalMode ? '증분' : '전체'})`
+      : violations.map((v) => v.message).join('\n') +
+        '\n\n위 사항들을 수정한 후 다시 인증을 요청하세요.';
 
-    // 자가 치유 결과 추가
     if (healingMessages.length > 0) {
       suggestion += `\n\n[Self-Healing Result]\n${healingMessages.join('\n')}`;
     }

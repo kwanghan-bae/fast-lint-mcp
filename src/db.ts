@@ -25,6 +25,7 @@ export class QualityDB {
         hash TEXT NOT NULL,
         line_count INTEGER DEFAULT 0,
         complexity INTEGER DEFAULT 0,
+        violations TEXT DEFAULT '[]', -- 분석 결과 캐시 추가
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
 
@@ -36,6 +37,11 @@ export class QualityDB {
         pass_status BOOLEAN NOT NULL
       );
     `);
+
+    // 마이그레이션: violations 컬럼이 없으면 추가
+    try {
+      this.db.exec('ALTER TABLE file_metrics ADD COLUMN violations TEXT DEFAULT "[]"');
+    } catch (e) {}
   }
 
   getFileMetric(path: string) {
@@ -43,22 +49,33 @@ export class QualityDB {
     return stmt.get(path) as any;
   }
 
-  updateFileMetric(path: string, hash: string, lineCount: number, complexity: number) {
+  updateFileMetric(
+    path: string,
+    hash: string,
+    lineCount: number,
+    complexity: number,
+    violations: any = []
+  ) {
     const stmt = this.db.prepare(`
-      INSERT INTO file_metrics (path, hash, line_count, complexity, updated_at)
-      VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+      INSERT INTO file_metrics (path, hash, line_count, complexity, violations, updated_at)
+      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       ON CONFLICT(path) DO UPDATE SET
         hash = excluded.hash,
         line_count = excluded.line_count,
         complexity = excluded.complexity,
+        violations = excluded.violations,
         updated_at = CURRENT_TIMESTAMP
     `);
-    return stmt.run(path, hash, lineCount, complexity);
+    return stmt.run(path, hash, lineCount, complexity, JSON.stringify(violations));
   }
 
   getLastSession() {
     const stmt = this.db.prepare('SELECT * FROM session_stats ORDER BY timestamp DESC LIMIT 1');
-    return stmt.get() as any;
+    const res = stmt.get() as any;
+    if (res) {
+      return { ...res, total_coverage: res.total_coverage || 0 };
+    }
+    return null;
   }
 
   saveSession(totalCoverage: number, violationCount: number, passStatus: boolean) {

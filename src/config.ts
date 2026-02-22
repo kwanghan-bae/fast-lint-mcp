@@ -10,14 +10,17 @@ export const CustomRuleSchema = z.object({
 });
 
 export const ConfigSchema = z.object({
-  rules: z.object({
-    maxLineCount: z.number().default(300),
-    maxComplexity: z.number().default(15),
-    minCoverage: z.number().default(80),
-    techDebtLimit: z.number().default(10),
-  }).default({}),
+  rules: z
+    .object({
+      maxLineCount: z.number().default(300),
+      maxComplexity: z.number().default(15),
+      minCoverage: z.number().default(80),
+      techDebtLimit: z.number().default(10),
+    })
+    .default({}),
   incremental: z.boolean().default(true),
-  customRules: z.array(CustomRuleSchema).default([]), // 커스텀 룰 추가
+  exclude: z.array(z.string()).default(['node_modules/**', 'dist/**', 'tests/**']), // 제외 패턴 추가
+  customRules: z.array(CustomRuleSchema).default([]),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -27,18 +30,34 @@ export class ConfigService {
   private config: Config;
 
   constructor(workspacePath: string = process.cwd()) {
-    const configPath = join(workspacePath, '.fast-lintrc.json');
-    let userConfig = {};
+    let userConfig = this.loadConfig(workspacePath);
+    this.config = ConfigSchema.parse(userConfig);
+  }
 
-    if (existsSync(configPath)) {
-      try {
-        userConfig = JSON.parse(readFileSync(configPath, 'utf-8'));
-      } catch (e) {
-        console.warn('Warning: Failed to parse .fast-lintrc.json, using defaults.');
+  private loadConfig(workspacePath: string): any {
+    const configPaths = ['.fast-lintrc.json', '.fast-lintrc'];
+
+    for (const p of configPaths) {
+      const fullPath = join(workspacePath, p);
+      if (existsSync(fullPath)) {
+        try {
+          return JSON.parse(readFileSync(fullPath, 'utf-8'));
+        } catch (e) {
+          console.warn(`Warning: Failed to parse ${p}`);
+        }
       }
     }
 
-    this.config = ConfigSchema.parse(userConfig);
+    // package.json 체크
+    const pkgPath = join(workspacePath, 'package.json');
+    if (existsSync(pkgPath)) {
+      try {
+        const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+        if (pkg.fastLint) return pkg.fastLint;
+      } catch (e) {}
+    }
+
+    return {};
   }
 
   get rules() {
@@ -47,6 +66,10 @@ export class ConfigService {
 
   get incremental() {
     return this.config.incremental;
+  }
+
+  get exclude() {
+    return this.config.exclude;
   }
 
   get customRules() {

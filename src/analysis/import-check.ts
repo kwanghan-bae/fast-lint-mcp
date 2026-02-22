@@ -2,9 +2,10 @@ import { readFileSync, existsSync } from 'fs';
 import { Lang, parse } from '@ast-grep/napi';
 import { dirname, join, normalize } from 'path';
 import glob from 'fast-glob';
+import { resolveModulePath } from '../utils/PathResolver.js';
 
 /**
- * 에이전트의 환각을 탐지합니다.
+ * 에이전트의 환각(존재하지 않는 파일/라이브러리 참조)을 탐지합니다.
  */
 export async function checkHallucination(
   filePath: string,
@@ -27,32 +28,25 @@ export async function checkHallucination(
     } catch (e) {}
   }
 
+  // 로컬 파일 목록 (정규화)
   const rawFiles = await glob(['src/**/*.{ts,js,tsx,jsx}'], { cwd: workspacePath });
   const allFiles = rawFiles.map((f) => normalize(join(workspacePath, f)));
 
+  // import 구문 탐지
   const importMatches = root.findAll("import $A from '$B'");
   for (const match of importMatches) {
     const source = match.getMatch('B')?.text();
     if (!source) continue;
 
     if (source.startsWith('.')) {
-      let cleanSource = source;
-      if (source.endsWith('.js')) cleanSource = source.slice(0, -3);
-      else if (source.endsWith('.jsx')) cleanSource = source.slice(0, -4);
-
-      const targetPath = normalize(join(dirname(filePath), cleanSource));
-      const exists = allFiles.some(
-        (f) =>
-          f === targetPath ||
-          f === `${targetPath}.ts` ||
-          f === `${targetPath}.tsx` ||
-          f === `${targetPath}.js` ||
-          f === `${targetPath}.jsx` ||
-          f.endsWith(join(cleanSource, 'index.ts')) ||
-          f.endsWith(join(cleanSource, 'index.js'))
+      // 공통 유틸리티 사용 (경로 해석)
+      const resolved = resolveModulePath(
+        dirname(normalize(join(workspacePath, filePath))),
+        source,
+        allFiles
       );
 
-      if (!exists) {
+      if (!resolved) {
         violations.push({
           id: 'HALLUCINATION_FILE',
           message: `존재하지 않는 파일 참조: ${source}`,
@@ -76,13 +70,13 @@ export async function checkHallucination(
 }
 
 /**
- * 에이전트의 가짜 구현을 탐지합니다.
+ * 에이전트의 가짜 구현(Fake Green)을 탐지합니다.
  */
 export async function checkFakeLogic(filePath: string): Promise<{ id: string; message: string }[]> {
   const content = readFileSync(filePath, 'utf-8');
   const violations: { id: string; message: string }[] = [];
 
-  // 정규표현식으로 함수 추출 (테스트 성공을 위해 더 견고한 방식 사용)
+  // 정규표현식으로 함수 추출
   const funcRegex = /function\s+([a-zA-Z0-0_]+)\s*\(([^)]+)\)\s*\{([\s\S]*?)\}/g;
   let match;
   while ((match = funcRegex.exec(content)) !== null) {
