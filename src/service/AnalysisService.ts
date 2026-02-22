@@ -1,4 +1,4 @@
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, statSync } from 'fs';
 import { createHash } from 'crypto';
 import glob from 'fast-glob';
 import pMap from 'p-map';
@@ -10,9 +10,9 @@ import { countTechDebt } from '../analysis/rg.js';
 import { checkEnv } from '../checkers/env.js';
 import { checkPackageAudit } from '../checkers/security.js';
 import { JavascriptProvider } from '../providers/JavascriptProvider.js';
-import { PythonProvider } from '../providers/PythonProvider.js';
 import { Violation, QualityReport, QualityProvider } from '../types/index.js';
-import { join, extname, normalize } from 'path';
+import { join, extname } from 'path';
+import os from 'os';
 
 export class AnalysisService {
   private git: SimpleGit;
@@ -24,9 +24,9 @@ export class AnalysisService {
   ) {
     this.git = simpleGit();
 
-    // 프로바이더 등록 (DI)
+    // 프로바이더 등록 (TS/JS 중심)
     this.providers.push(new JavascriptProvider(this.config));
-    this.providers.push(new PythonProvider(this.config));
+    // 향후 다른 언어 추가 시 이곳에 동적으로 주입하거나 registry에서 로드 가능
   }
 
   private getFileHash(filePath: string): string {
@@ -106,7 +106,6 @@ export class AnalysisService {
     let files: string[] = [];
     let incrementalMode = false;
 
-    // 1. 분석 대상 파일 수집 (설정된 exclude 패턴 적용)
     const supportedExts = this.providers.flatMap((p) => p.extensions);
     const ignorePatterns = this.config.exclude;
 
@@ -127,7 +126,7 @@ export class AnalysisService {
       );
     }
 
-    // 2. 자가 치유 (Self-Healing)
+    // 자가 치유
     const healingMessages: string[] = [];
     for (const provider of this.providers) {
       const targetFiles = files.filter((f) => provider.extensions.includes(extname(f)));
@@ -137,11 +136,12 @@ export class AnalysisService {
       }
     }
 
-    // 3. 보안 감사
+    // 보안 감사
     const auditViolations = await checkPackageAudit();
     violations.push(...auditViolations);
 
-    // 4. 병렬 파일 분석 (해시 기반 캐싱 적용)
+    // 병렬 파일 분석 (mtimeMs 기반 초고속 1차 캐싱 + 해시 기반 2차 캐싱)
+    const cpuCount = os.cpus().length;
     const analysisResults = await pMap(
       files,
       async (file) => {
@@ -150,36 +150,49 @@ export class AnalysisService {
           const provider = this.providers.find((p) => p.extensions.includes(ext));
           if (!provider) return null;
 
-          const currentHash = this.getFileHash(file);
+          const stats = statSync(file);
           const cachedMetric = this.db.getFileMetric(file);
 
-          // 캐시 히트 (해시가 동일하면 캐시된 결과 반환)
-          if (cachedMetric && cachedMetric.hash === currentHash) {
+          // [최적화 1단계] 수정 시간(mtimeMs) 비교 (파일을 읽지 않음)
+          if (cachedMetric && cachedMetric.mtime_ms === stats.mtimeMs) {
             return { fileViolations: JSON.parse(cachedMetric.violations || '[]') };
           }
 
-          // 캐시 미스 (실제 분석 수행)
-          const fileViolations = await provider.check(file);
+          // [최적화 2단계] 파일 내용 해시 비교 (mtime은 변했으나 내용이 같은 경우)
+          const currentHash = this.getFileHash(file);
+          if (cachedMetric && cachedMetric.hash === currentHash) {
+            // mtime 정보만 업데이트하고 리턴
+            this.db.updateFileMetric(
+              file,
+              currentHash,
+              stats.mtimeMs,
+              cachedMetric.line_count,
+              cachedMetric.complexity,
+              JSON.parse(cachedMetric.violations)
+            );
+            return { fileViolations: JSON.parse(cachedMetric.violations || '[]') };
+          }
 
-          // 분석 데이터 업데이트 (캐시 저장)
-          // lineCount와 complexity는 provider.check에서 반환하도록 타입 확장이 필요할 수 있으나,
-          // 여기서는 임시로 lineCount를 단순 계산하여 저장
+          // 캐시 미스: 실제 분석 수행
+          const fileViolations = await provider.check(file);
           const lineCount = readFileSync(file, 'utf-8').split('\n').length;
-          this.db.updateFileMetric(file, currentHash, lineCount, 0, fileViolations);
+
+          // 분석 데이터 업데이트
+          this.db.updateFileMetric(file, currentHash, stats.mtimeMs, lineCount, 0, fileViolations);
 
           return { fileViolations };
         } catch (e) {
           return null;
         }
       },
-      { concurrency: 4 }
-    ); // 병렬성 증가
+      { concurrency: Math.max(1, cpuCount - 1) }
+    );
 
     analysisResults.filter(Boolean).forEach((res: any) => {
       violations.push(...res.fileViolations);
     });
 
-    // 5. 의존성 분석 (고아 파일 및 순환 참조)
+    // 의존성 분석
     const depMap = await getDependencyMap();
     const cycles = this.detectCycles(depMap);
     for (const cycle of cycles) {
@@ -191,7 +204,6 @@ export class AnalysisService {
 
     const orphans = await findOrphanFiles();
     for (const orphan of orphans) {
-      // 분석 대상에서 제외된 경로는 고아 파일에서도 제외
       violations.push({
         type: 'ORPHAN',
         file: orphan,
@@ -199,7 +211,7 @@ export class AnalysisService {
       });
     }
 
-    // 6. 기술 부채 및 커버리지
+    // 기술 부채 및 커버리지
     const techDebtCount = await countTechDebt();
     if (techDebtCount > rules.techDebtLimit) {
       violations.push({
@@ -210,7 +222,7 @@ export class AnalysisService {
       });
     }
 
-    let currentCoverage = 80;
+    let currentCoverage = 0;
     const coveragePath = join(process.cwd(), 'coverage', 'coverage-summary.json');
     if (existsSync(coveragePath)) {
       try {
@@ -219,19 +231,19 @@ export class AnalysisService {
       } catch (e) {}
     }
 
-    if (currentCoverage < rules.minCoverage) {
+    if (currentCoverage < rules.minCoverage && rules.minCoverage > 0) {
       violations.push({
         type: 'COVERAGE',
         value: `${currentCoverage}%`,
         limit: `${rules.minCoverage}%`,
-        message: `테스트 커버리지가 기준(${rules.minCoverage}%)에 미달합니다. 테스트 코드를 추가하세요!`,
+        message: `테스트 커버리지가 기준(${rules.minCoverage}%)에 미달합니다.`,
       });
     }
 
     const lastSession = this.db.getLastSession();
     let pass = violations.length === 0;
 
-    if (lastSession && currentCoverage < lastSession.total_coverage) {
+    if (lastSession && currentCoverage < lastSession.total_coverage && currentCoverage > 0) {
       violations.push({
         type: 'COVERAGE',
         value: `${currentCoverage}%`,

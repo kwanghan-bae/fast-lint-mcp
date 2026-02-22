@@ -23,9 +23,10 @@ export class QualityDB {
       CREATE TABLE IF NOT EXISTS file_metrics (
         path TEXT PRIMARY KEY,
         hash TEXT NOT NULL,
+        mtime_ms REAL DEFAULT 0, -- 수정 시간(mtime) 추가
         line_count INTEGER DEFAULT 0,
         complexity INTEGER DEFAULT 0,
-        violations TEXT DEFAULT '[]', -- 분석 결과 캐시 추가
+        violations TEXT DEFAULT '[]',
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
 
@@ -38,9 +39,9 @@ export class QualityDB {
       );
     `);
 
-    // 마이그레이션: violations 컬럼이 없으면 추가
+    // 마이그레이션: mtime_ms 컬럼이 없으면 추가
     try {
-      this.db.exec('ALTER TABLE file_metrics ADD COLUMN violations TEXT DEFAULT "[]"');
+      this.db.exec('ALTER TABLE file_metrics ADD COLUMN mtime_ms REAL DEFAULT 0');
     } catch (e) {}
   }
 
@@ -52,21 +53,23 @@ export class QualityDB {
   updateFileMetric(
     path: string,
     hash: string,
+    mtimeMs: number,
     lineCount: number,
     complexity: number,
     violations: any = []
   ) {
     const stmt = this.db.prepare(`
-      INSERT INTO file_metrics (path, hash, line_count, complexity, violations, updated_at)
-      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      INSERT INTO file_metrics (path, hash, mtime_ms, line_count, complexity, violations, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       ON CONFLICT(path) DO UPDATE SET
         hash = excluded.hash,
+        mtime_ms = excluded.mtime_ms,
         line_count = excluded.line_count,
         complexity = excluded.complexity,
         violations = excluded.violations,
         updated_at = CURRENT_TIMESTAMP
     `);
-    return stmt.run(path, hash, lineCount, complexity, JSON.stringify(violations));
+    return stmt.run(path, hash, mtimeMs, lineCount, complexity, JSON.stringify(violations));
   }
 
   getLastSession() {
