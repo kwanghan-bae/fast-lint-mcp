@@ -18,7 +18,7 @@ describe('Orphan File Analysis (fast-glob + sg Native)', () => {
   it('참조되지 않은 파일을 올바르게 식별해야 한다', async () => {
     // glob 모킹
     vi.mocked(glob).mockResolvedValue(['src/index.ts', 'src/used.ts', 'src/orphan.ts'] as any);
-    
+
     // readFileSync 모킹
     vi.mocked(readFileSync).mockReturnValue('mocked content');
 
@@ -27,8 +27,16 @@ describe('Orphan File Analysis (fast-glob + sg Native)', () => {
       // index.ts일 때만 used를 참조하는 상황 시뮬레이션
       const mockRoot = {
         findAll: vi.fn().mockImplementation((pattern) => {
+          // 어떤 import 패턴이든 content가 index_content면 used를 반환하도록 유연하게 대응
           if (pattern.includes('import') && content === 'index_content') {
-            return [{ getMatch: () => ({ text: () => './used' }) }];
+            return [
+              {
+                getMatch: (id: string) => {
+                  if (id === 'SOURCE') return { text: () => './used' };
+                  return null;
+                },
+              },
+            ];
           }
           return [];
         }),
@@ -43,7 +51,7 @@ describe('Orphan File Analysis (fast-glob + sg Native)', () => {
     });
 
     const orphans = await findOrphanFiles();
-    
+
     expect(orphans).toContain('src/orphan.ts');
     expect(orphans).not.toContain('src/index.ts');
     expect(orphans).not.toContain('src/used.ts');
