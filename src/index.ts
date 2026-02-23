@@ -4,13 +4,12 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 import { QualityDB } from './db.js';
 import { ConfigService } from './config.js';
 import { AnalysisService } from './service/AnalysisService.js';
-import chalk from 'chalk';
-import Table from 'cli-table3';
+import { formatReport } from './utils/AnalysisUtils.js';
 
 const server = new Server(
   {
     name: 'fast-lint-mcp',
-    version: '1.2.0', // 버전 상향
+    version: '1.2.0',
   },
   {
     capabilities: {
@@ -23,39 +22,6 @@ const server = new Server(
 const db = new QualityDB();
 const config = new ConfigService();
 const analyzer = new AnalysisService(db, config);
-
-/**
- * 분석 결과를 가독성 좋은 테이블 형식으로 변환합니다.
- */
-function formatReport(report: any): string {
-  let output = '';
-
-  const statusIcon = report.pass ? '✅' : '❌';
-  const statusText = report.pass ? chalk.green.bold('PASS') : chalk.red.bold('FAIL');
-
-  output += `\n${statusIcon} 프로젝트 품질 인증 결과: ${statusText}\n`;
-  output += `------------------------------------------\n`;
-
-  if (report.violations.length > 0) {
-    const table = new Table({
-      head: [chalk.cyan('Type'), chalk.cyan('File'), chalk.cyan('Message')],
-      colWidths: [15, 30, 50],
-      wordWrap: true,
-    });
-
-    report.violations.forEach((v: any) => {
-      table.push([chalk.yellow(v.type), v.file || '-', v.message]);
-    });
-
-    output += table.toString() + '\n';
-  } else {
-    output += chalk.green('\n🎉 발견된 위반 사항이 없습니다. 완벽합니다!\n');
-  }
-
-  output += `\n${chalk.blue.bold('💡 Suggestion:')}\n${report.suggestion}\n`;
-
-  return output;
-}
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
@@ -105,7 +71,11 @@ async function main() {
   console.error('Fast-Lint-MCP Server running on stdio (Performance Optimized v1.2.0)');
 }
 
-main().catch((error) => {
-  console.error('Fatal error in main():', error);
-  process.exit(1);
-});
+if (process.env.NODE_ENV !== 'test') {
+  main().catch((error) => {
+    console.error('Fatal error in main():', error);
+    process.exit(1);
+  });
+}
+
+export { formatReport };

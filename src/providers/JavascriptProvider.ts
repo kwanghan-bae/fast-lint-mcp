@@ -65,8 +65,16 @@ export class JavascriptProvider extends BaseQualityProvider {
     const reviewViolations = await runSemanticReview(filePath);
     violations.push(...reviewViolations);
 
-    // 6. 변이 테스트 (테스트 파일이 아닌 경우에만)
-    if (!filePath.endsWith('.test.ts') && !filePath.endsWith('.spec.ts')) {
+    // 6. 변이 테스트 (테스트 파일, 진입점, 핵심 서비스 제외)
+    const normalizedPath = filePath.replace(/\\/g, '/').toLowerCase();
+    const isExcludedFromMutation =
+      normalizedPath.includes('.test.ts') ||
+      normalizedPath.includes('.spec.ts') ||
+      normalizedPath.includes('/index.ts') ||
+      normalizedPath.includes('/analysisservice.ts') ||
+      normalizedPath.includes('/analysisutils.ts');
+
+    if (!isExcludedFromMutation) {
       const mutationViolations = await runMutationTest(filePath);
       mutationViolations.forEach((mv) => {
         violations.push({

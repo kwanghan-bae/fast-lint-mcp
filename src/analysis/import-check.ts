@@ -1,6 +1,6 @@
 import { readFileSync, existsSync } from 'fs';
 import { Lang, parse } from '@ast-grep/napi';
-import { dirname, join, normalize } from 'path';
+import { dirname, join, normalize, isAbsolute } from 'path';
 import glob from 'fast-glob';
 import { resolveModulePath } from '../utils/PathResolver.js';
 
@@ -32,6 +32,9 @@ export async function checkHallucination(
   const rawFiles = await glob(['src/**/*.{ts,js,tsx,jsx}'], { cwd: workspacePath });
   const allFiles = rawFiles.map((f) => normalize(join(workspacePath, f)));
 
+  // 현재 파일의 절대 경로 계산
+  const absoluteFilePath = isAbsolute(filePath) ? filePath : join(workspacePath, filePath);
+
   // import 구문 탐지
   const importMatches = root.findAll("import $A from '$B'");
   for (const match of importMatches) {
@@ -40,11 +43,7 @@ export async function checkHallucination(
 
     if (source.startsWith('.')) {
       // 공통 유틸리티 사용 (경로 해석)
-      const resolved = resolveModulePath(
-        dirname(normalize(join(workspacePath, filePath))),
-        source,
-        allFiles
-      );
+      const resolved = resolveModulePath(dirname(normalize(absoluteFilePath)), source, allFiles);
 
       if (!resolved) {
         violations.push({

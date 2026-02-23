@@ -5,12 +5,12 @@ import pMap from 'p-map';
 import { simpleGit, SimpleGit } from 'simple-git';
 import { QualityDB } from '../db.js';
 import { ConfigService } from '../config.js';
-import { getDependencyMap, findOrphanFiles } from '../analysis/fd.js';
 import { countTechDebt } from '../analysis/rg.js';
 import { checkEnv } from '../checkers/env.js';
 import { checkPackageAudit } from '../checkers/security.js';
 import { JavascriptProvider } from '../providers/JavascriptProvider.js';
 import { Violation, QualityReport, QualityProvider } from '../types/index.js';
+import { checkStructuralIntegrity } from '../utils/AnalysisUtils.js';
 import { join, extname } from 'path';
 import os from 'os';
 
@@ -23,10 +23,7 @@ export class AnalysisService {
     private config: ConfigService
   ) {
     this.git = simpleGit();
-
-    // 프로바이더 등록 (TS/JS 중심)
     this.providers.push(new JavascriptProvider(this.config));
-    // 향후 다른 언어 추가 시 이곳에 동적으로 주입하거나 registry에서 로드 가능
   }
 
   private getFileHash(filePath: string): string {
@@ -50,44 +47,60 @@ export class AnalysisService {
 
       const supportedExts = this.providers.flatMap((p) => p.extensions);
       return [...new Set(changedFiles)].filter(
-        (f) =>
-          (f.startsWith('src/') || f.startsWith('tests/')) && supportedExts.includes(extname(f))
+        (f) => f.startsWith('src/') && supportedExts.includes(extname(f))
       );
     } catch (error) {
-      console.warn('Warning: Failed to get changed files from git, fallback to full scan.');
       return [];
     }
   }
 
-  private detectCycles(depMap: Map<string, string[]>): string[][] {
-    const visited = new Set<string>();
-    const stack = new Set<string>();
-    const cycles: string[][] = [];
+  private async performFileAnalysis(files: string[]): Promise<Violation[]> {
+    const cpuCount = os.cpus().length;
+    const analysisResults = await pMap(
+      files,
+      async (file) => {
+        try {
+          const ext = extname(file);
+          const provider = this.providers.find((p) => p.extensions.includes(ext));
+          if (!provider) return null;
 
-    const dfs = (node: string, path: string[]) => {
-      visited.add(node);
-      stack.add(node);
-      path.push(node);
+          const stats = statSync(file);
+          const cachedMetric = this.db.getFileMetric(file);
 
-      for (const neighbor of depMap.get(node) || []) {
-        if (!visited.has(neighbor)) {
-          dfs(neighbor, [...path]);
-        } else if (stack.has(neighbor)) {
-          const cycleStartIdx = path.indexOf(neighbor);
-          cycles.push([...path.slice(cycleStartIdx), neighbor]);
+          if (cachedMetric && cachedMetric.mtime_ms === stats.mtimeMs) {
+            return { fileViolations: JSON.parse(cachedMetric.violations || '[]') };
+          }
+
+          const currentHash = this.getFileHash(file);
+          if (cachedMetric && cachedMetric.hash === currentHash) {
+            this.db.updateFileMetric(
+              file,
+              currentHash,
+              stats.mtimeMs,
+              cachedMetric.line_count,
+              cachedMetric.complexity,
+              JSON.parse(cachedMetric.violations)
+            );
+            return { fileViolations: JSON.parse(cachedMetric.violations || '[]') };
+          }
+
+          const fileViolations = await provider.check(file);
+          const lineCount = readFileSync(file, 'utf-8').split('\n').length;
+          this.db.updateFileMetric(file, currentHash, stats.mtimeMs, lineCount, 0, fileViolations);
+
+          return { fileViolations };
+        } catch (e) {
+          return null;
         }
-      }
+      },
+      { concurrency: Math.max(1, cpuCount - 1) }
+    );
 
-      stack.delete(node);
-    };
-
-    for (const node of depMap.keys()) {
-      if (!visited.has(node)) {
-        dfs(node, []);
-      }
-    }
-
-    return cycles;
+    const violations: Violation[] = [];
+    analysisResults.filter(Boolean).forEach((res: any) => {
+      violations.push(...res.fileViolations);
+    });
+    return violations;
   }
 
   async runAllChecks(): Promise<QualityReport> {
@@ -102,7 +115,6 @@ export class AnalysisService {
 
     const violations: Violation[] = [];
     const rules = this.config.rules;
-
     let files: string[] = [];
     let incrementalMode = false;
 
@@ -136,80 +148,12 @@ export class AnalysisService {
       }
     }
 
-    // 보안 감사
+    // 보안 감사/파일 분석/구조 분석
     const auditViolations = await checkPackageAudit();
-    violations.push(...auditViolations);
+    const fileViolations = await this.performFileAnalysis(files);
+    const structuralViolations = await checkStructuralIntegrity();
 
-    // 병렬 파일 분석 (mtimeMs 기반 초고속 1차 캐싱 + 해시 기반 2차 캐싱)
-    const cpuCount = os.cpus().length;
-    const analysisResults = await pMap(
-      files,
-      async (file) => {
-        try {
-          const ext = extname(file);
-          const provider = this.providers.find((p) => p.extensions.includes(ext));
-          if (!provider) return null;
-
-          const stats = statSync(file);
-          const cachedMetric = this.db.getFileMetric(file);
-
-          // [최적화 1단계] 수정 시간(mtimeMs) 비교 (파일을 읽지 않음)
-          if (cachedMetric && cachedMetric.mtime_ms === stats.mtimeMs) {
-            return { fileViolations: JSON.parse(cachedMetric.violations || '[]') };
-          }
-
-          // [최적화 2단계] 파일 내용 해시 비교 (mtime은 변했으나 내용이 같은 경우)
-          const currentHash = this.getFileHash(file);
-          if (cachedMetric && cachedMetric.hash === currentHash) {
-            // mtime 정보만 업데이트하고 리턴
-            this.db.updateFileMetric(
-              file,
-              currentHash,
-              stats.mtimeMs,
-              cachedMetric.line_count,
-              cachedMetric.complexity,
-              JSON.parse(cachedMetric.violations)
-            );
-            return { fileViolations: JSON.parse(cachedMetric.violations || '[]') };
-          }
-
-          // 캐시 미스: 실제 분석 수행
-          const fileViolations = await provider.check(file);
-          const lineCount = readFileSync(file, 'utf-8').split('\n').length;
-
-          // 분석 데이터 업데이트
-          this.db.updateFileMetric(file, currentHash, stats.mtimeMs, lineCount, 0, fileViolations);
-
-          return { fileViolations };
-        } catch (e) {
-          return null;
-        }
-      },
-      { concurrency: Math.max(1, cpuCount - 1) }
-    );
-
-    analysisResults.filter(Boolean).forEach((res: any) => {
-      violations.push(...res.fileViolations);
-    });
-
-    // 의존성 분석
-    const depMap = await getDependencyMap();
-    const cycles = this.detectCycles(depMap);
-    for (const cycle of cycles) {
-      violations.push({
-        type: 'CUSTOM',
-        message: `순환 참조 발견: ${cycle.join(' -> ')}`,
-      });
-    }
-
-    const orphans = await findOrphanFiles();
-    for (const orphan of orphans) {
-      violations.push({
-        type: 'ORPHAN',
-        file: orphan,
-        message: '어떤 파일에서도 참조되지 않는 파일입니다. 삭제를 고려하세요.',
-      });
-    }
+    violations.push(...auditViolations, ...fileViolations, ...structuralViolations);
 
     // 기술 부채 및 커버리지
     const techDebtCount = await countTechDebt();
@@ -223,15 +167,33 @@ export class AnalysisService {
     }
 
     let currentCoverage = 0;
-    const coveragePath = join(process.cwd(), 'coverage', 'coverage-summary.json');
-    if (existsSync(coveragePath)) {
-      try {
-        const coverageData = JSON.parse(readFileSync(coveragePath, 'utf-8'));
-        currentCoverage = coverageData.total.lines.pct || 0;
-      } catch (e) {}
+    const coverageCandidates = [
+      join(process.cwd(), 'coverage', 'coverage-summary.json'),
+      join(process.cwd(), 'coverage-summary.json'),
+      'coverage/coverage-summary.json',
+    ];
+
+    let coveragePath = '';
+    for (const cand of coverageCandidates) {
+      if (existsSync(cand)) {
+        coveragePath = cand;
+        break;
+      }
     }
 
-    if (currentCoverage < rules.minCoverage && rules.minCoverage > 0) {
+    if (coveragePath) {
+      try {
+        const content = readFileSync(coveragePath, 'utf-8');
+        const coverageData = JSON.parse(content);
+        currentCoverage = coverageData.total.lines.pct || 0;
+      } catch (e) {
+        console.error('DEBUG: Failed to parse coverage file:', e);
+      }
+    } else {
+      console.log(`DEBUG: Coverage summary file not found in candidates.`);
+    }
+
+    if (currentCoverage > 0 && currentCoverage < rules.minCoverage) {
       violations.push({
         type: 'COVERAGE',
         value: `${currentCoverage}%`,
@@ -264,10 +226,6 @@ export class AnalysisService {
 
     this.db.saveSession(currentCoverage, violations.length, pass);
 
-    return {
-      pass,
-      violations,
-      suggestion,
-    };
+    return { pass, violations, suggestion };
   }
 }

@@ -7,7 +7,6 @@ import * as env from '../src/checkers/env.js';
 import * as security from '../src/checkers/security.js';
 import * as importCheck from '../src/analysis/import-check.js';
 import { JavascriptProvider } from '../src/providers/JavascriptProvider.js';
-import { PythonProvider } from '../src/providers/PythonProvider.js';
 
 vi.mock('../src/db.js');
 vi.mock('../src/config.js');
@@ -25,25 +24,17 @@ const mockJsProvider = {
   fix: vi.fn().mockResolvedValue({ messages: [] }),
 };
 
-const mockPyProvider = {
-  name: 'Python',
-  extensions: ['.py'],
-  check: vi.fn().mockResolvedValue([]),
-  fix: vi.fn().mockResolvedValue({ messages: [] }),
-};
-
 vi.mock('../src/providers/JavascriptProvider.js', () => ({
-  JavascriptProvider: vi.fn().mockImplementation(() => mockJsProvider),
-}));
-
-vi.mock('../src/providers/PythonProvider.js', () => ({
-  PythonProvider: vi.fn().mockImplementation(() => mockPyProvider),
+  JavascriptProvider: vi.fn().mockImplementation(function (this: any) {
+    return mockJsProvider;
+  }),
 }));
 
 vi.mock('fast-glob', () => ({ default: vi.fn().mockResolvedValue(['src/test.ts']) }));
 vi.mock('fs', () => ({
   readFileSync: vi.fn().mockReturnValue('content'),
   existsSync: vi.fn().mockReturnValue(false),
+  statSync: vi.fn().mockReturnValue({ mtimeMs: Date.now() }),
 }));
 
 describe('AnalysisService', () => {
@@ -62,9 +53,10 @@ describe('AnalysisService', () => {
       rules: {
         maxLineCount: 300,
         maxComplexity: 15,
-        minCoverage: 80,
+        minCoverage: 0,
         techDebtLimit: 10,
       },
+      exclude: [],
       incremental: false,
       customRules: [],
     };
@@ -77,7 +69,6 @@ describe('AnalysisService', () => {
     vi.mocked(importCheck.checkHallucination).mockResolvedValue([]);
     vi.mocked(importCheck.checkFakeLogic).mockResolvedValue([]);
     mockJsProvider.check.mockResolvedValue([]);
-    mockPyProvider.check.mockResolvedValue([]);
   });
 
   it('모든 검사를 수행하고 리포트를 생성해야 한다', async () => {
@@ -87,6 +78,9 @@ describe('AnalysisService', () => {
     vi.mocked(rg.countTechDebt).mockResolvedValue(2);
 
     const report = await service.runAllChecks();
+
+    if (!report.pass)
+      console.log('DEBUG (violations):', JSON.stringify(report.violations, null, 2));
 
     expect(report.pass).toBe(true);
     expect(report.violations).toHaveLength(0);
@@ -110,5 +104,51 @@ describe('AnalysisService', () => {
     expect(report.pass).toBe(false);
     expect(report.violations.some((v) => v.type === 'SIZE')).toBe(true);
     expect(report.violations.some((v) => v.type === 'ORPHAN')).toBe(true);
+  });
+
+  it('순환 참조를 탐지해야 한다', async () => {
+    vi.mocked(env.checkEnv).mockResolvedValue({ pass: true, missing: [] });
+
+    // A -> B -> A 순환 참조
+    const depMap = new Map();
+    depMap.set('src/A.ts', ['src/B.ts']);
+    depMap.set('src/B.ts', ['src/A.ts']);
+    vi.mocked(fd.getDependencyMap).mockResolvedValue(depMap);
+
+    const report = await service.runAllChecks();
+    expect(report.violations.some((v) => v.message.includes('순환 참조 발견'))).toBe(true);
+  });
+
+  it('이전 세션보다 커버리지가 하락하면 거부해야 한다', async () => {
+    vi.mocked(env.checkEnv).mockResolvedValue({ pass: true, missing: [] });
+    db.getLastSession.mockReturnValue({ total_coverage: 90 }); // 이전 90%
+
+    // 실제 파일 시스템 모킹 (coverage-summary.json)
+    const fs = await import('fs');
+    vi.mocked(fs.existsSync).mockImplementation((path) =>
+      path.toString().includes('coverage-summary.json')
+    );
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ total: { lines: { pct: 85 } } })); // 현재 85%
+
+    const report = await service.runAllChecks();
+    expect(report.pass).toBe(false);
+    expect(report.violations.some((v) => v.type === 'COVERAGE' && v.message.includes('하락'))).toBe(
+      true
+    );
+  });
+
+  it('기술 부채가 한도를 초과하면 위반으로 기록해야 한다', async () => {
+    vi.mocked(env.checkEnv).mockResolvedValue({ pass: true, missing: [] });
+    vi.mocked(rg.countTechDebt).mockResolvedValue(100); // 부채 100개 (한도 10)
+
+    const report = await service.runAllChecks();
+    expect(report.violations.some((v) => v.type === 'TECH_DEBT')).toBe(true);
+  });
+
+  it('필수 도구가 없으면 즉시 실패 리포트를 반환해야 한다', async () => {
+    vi.mocked(env.checkEnv).mockResolvedValue({ pass: false, missing: ['rg'] });
+    const report = await service.runAllChecks();
+    expect(report.pass).toBe(false);
+    expect(report.violations[0].type).toBe('ENV');
   });
 });

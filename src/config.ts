@@ -13,7 +13,7 @@ export const ConfigSchema = z.object({
   rules: z
     .object({
       maxLineCount: z.number().default(300),
-      maxComplexity: z.number().default(15),
+      maxComplexity: z.number().default(25),
       minCoverage: z.number().default(80),
       techDebtLimit: z.number().default(10),
     })

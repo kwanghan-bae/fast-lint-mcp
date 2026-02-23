@@ -1,0 +1,16 @@
+{
+  "workspacePath": "/Users/joel/Desktop/git/fast-lint-mcp",
+  "allFiles": [
+    "src/config.ts",
+    "src/db.ts",
+    "src/index.ts",
+    "src/analysis/fd.ts",
+    "src/analysis/import-check.ts",
+    "src/analysis/mutation.ts",
+    "src/analysis/reviewer.ts",
+    "src/analysis/rg.ts",
+    "src/analysis/sg.ts",
+    "src/providers/JavascriptProvider.ts"
+  ],
+  "results": []
+}

@@ -29,12 +29,13 @@ describe('Quality Database', () => {
     const db = new QualityDB(testWorkspace);
     const path = 'src/index.ts';
     const hash = 'abc123hash';
-    
-    db.updateFileMetric(path, hash, 100, 5);
+
+    db.updateFileMetric(path, hash, 1000, 100, 5);
     const metric = db.getFileMetric(path);
-    
+
     expect(metric.path).toBe(path);
     expect(metric.hash).toBe(hash);
+    expect(metric.mtime_ms).toBe(1000);
     expect(metric.line_count).toBe(100);
     expect(metric.complexity).toBe(5);
     db.close();
@@ -42,10 +43,10 @@ describe('Quality Database', () => {
 
   it('세션 통계를 저장하고 마지막 세션을 조회할 수 있어야 한다', () => {
     const db = new QualityDB(testWorkspace);
-    
+
     db.saveSession(85.5, 2, true);
     const lastSession = db.getLastSession();
-    
+
     expect(lastSession.total_coverage).toBe(85.5);
     expect(lastSession.violation_count).toBe(2);
     expect(lastSession.pass_status).toBe(1);
