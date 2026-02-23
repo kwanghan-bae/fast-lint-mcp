@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import { mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
+import os from 'os';
 
 const DB_DIR = '.fast-lint';
 const DB_FILE = 'quality_history.db';
@@ -9,9 +10,23 @@ export class QualityDB {
   private db: Database.Database;
 
   constructor(workspacePath: string = process.cwd()) {
-    const dbPath = join(workspacePath, DB_DIR);
-    if (!existsSync(dbPath)) {
-      mkdirSync(dbPath, { recursive: true });
+    let dbPath = join(workspacePath, DB_DIR);
+
+    // 루트(/)에 .fast-lint를 만들려 하면 권한 오류가 날 수 있으므로 홈 디렉토리로 우회
+    if (workspacePath === '/' || workspacePath === '') {
+      dbPath = join(os.homedir(), '.fast-lint-mcp', DB_DIR);
+    }
+
+    try {
+      if (!existsSync(dbPath)) {
+        mkdirSync(dbPath, { recursive: true });
+      }
+    } catch (e) {
+      // 권한 문제 등으로 실패할 경우 임시 디렉토리 사용
+      dbPath = join(os.tmpdir(), 'fast-lint-mcp', DB_DIR);
+      if (!existsSync(dbPath)) {
+        mkdirSync(dbPath, { recursive: true });
+      }
     }
 
     this.db = new Database(join(dbPath, DB_FILE));
