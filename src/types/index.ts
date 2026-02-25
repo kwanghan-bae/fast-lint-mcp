@@ -21,7 +21,20 @@ export interface QualityReport {
 }
 
 export interface Violation {
-  type: 'SIZE' | 'COMPLEXITY' | 'COVERAGE' | 'ORPHAN' | 'TECH_DEBT' | 'CUSTOM' | 'ENV' | 'HALLUCINATION' | 'FAKE_LOGIC' | 'SECURITY' | 'MUTATION_SURVIVED' | 'READABILITY' | 'ARCHITECTURE';
+  type:
+    | 'SIZE'
+    | 'COMPLEXITY'
+    | 'COVERAGE'
+    | 'ORPHAN'
+    | 'TECH_DEBT'
+    | 'CUSTOM'
+    | 'ENV'
+    | 'HALLUCINATION'
+    | 'FAKE_LOGIC'
+    | 'SECURITY'
+    | 'MUTATION_SURVIVED'
+    | 'READABILITY'
+    | 'ARCHITECTURE';
   file?: string;
   value?: number | string;
   limit?: number | string;
@@ -35,5 +48,5 @@ export interface QualityProvider {
   name: string;
   extensions: string[];
   check(filePath: string): Promise<Violation[]>;
-  fix?(files: string[], workspacePath: string): Promise<{ fixedCount: number, messages: string[] }>;
+  fix?(files: string[], workspacePath: string): Promise<{ fixedCount: number; messages: string[] }>;
 }

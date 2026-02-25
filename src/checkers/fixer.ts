@@ -36,22 +36,34 @@ function resolveToolPath(toolName: string, workspacePath: string): string | null
 function getLinterConfig(toolName: string, workspacePath: string): string | null {
   const configs: Record<string, string[]> = {
     eslint: ['.eslintrc', '.eslintrc.json', '.eslintrc.js', '.eslintrc.cjs', '.eslintrc.yaml'],
-    prettier: ['.prettierrc', '.prettierrc.json', '.prettierrc.js', '.prettierrc.cjs', '.prettierrc.yaml'],
+    prettier: [
+      '.prettierrc',
+      '.prettierrc.json',
+      '.prettierrc.js',
+      '.prettierrc.cjs',
+      '.prettierrc.yaml',
+    ],
   };
 
   // 프로젝트에 설정 파일이 있는지 확인
-  const hasConfig = configs[toolName].some(f => existsSync(join(workspacePath, f)));
+  const hasConfig = configs[toolName].some((f) => existsSync(join(workspacePath, f)));
   if (hasConfig) return null; // 프로젝트 설정을 따름
 
   // 없으면 가디언 표준 설정 반환
-  const guardianConfig = join(mcpRootDir, toolName === 'eslint' ? '.eslintrc.guardian.json' : '.prettierrc.guardian');
+  const guardianConfig = join(
+    mcpRootDir,
+    toolName !== 'eslint' ? '.eslintrc.guardian.json' : '.prettierrc.guardian'
+  );
   return existsSync(guardianConfig) ? guardianConfig : null;
 }
 
 /**
  * ESLint 및 Prettier를 사용하여 범용적으로 사소한 오류를 자동 수정(Self-Healing)합니다.
  */
-export async function runSelfHealing(files: string[], workspacePath: string = process.cwd()): Promise<{ fixedCount: number, messages: string[] }> {
+export async function runSelfHealing(
+  files: string[],
+  workspacePath: string = process.cwd()
+): Promise<{ fixedCount: number; messages: string[] }> {
   const messages: string[] = [];
   let fixedCount = 0;
 
@@ -66,17 +78,23 @@ export async function runSelfHealing(files: string[], workspacePath: string = pr
     }
 
     const configPath = getLinterConfig(tool, workspacePath);
-    const configArg = configPath ? (tool === 'eslint' ? `-c ${configPath}` : `--config ${configPath}`) : '';
+    const configArg = configPath
+      ? tool === 'eslint'
+        ? `-c ${configPath}`
+        : `--config ${configPath}`
+      : '';
     const fixFlag = tool === 'eslint' ? '--fix' : '--write';
 
     try {
       const fileArgs = files.join(' ');
       // 프로젝트 루트 기준으로 실행하여 올바른 경로 인식 보장
-      execSync(`${toolPath} ${configArg} ${fixFlag} ${fileArgs}`, { 
+      execSync(`${toolPath} ${configArg} ${fixFlag} ${fileArgs}`, {
         cwd: workspacePath,
-        stdio: 'ignore' 
+        stdio: 'ignore',
       });
-      messages.push(`${tool} 엔진(${configPath ? '가디언 표준' : '프로젝트 설정'})으로 자동 수정을 완료했습니다.`);
+      messages.push(
+        `${tool} 엔진(${configPath ? '가디언 표준' : '프로젝트 설정'})으로 자동 수정을 완료했습니다.`
+      );
       fixedCount++;
     } catch (e) {
       // ESLint는 잔여 에러가 있으면 실패 코드를 반환하므로 정상 참작

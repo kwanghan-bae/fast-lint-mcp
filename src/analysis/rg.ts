@@ -1,24 +1,39 @@
-import { execa } from 'execa';
+import { readFileSync } from 'fs';
+import glob from 'fast-glob';
+import pMap from 'p-map';
+import os from 'os';
 
+/**
+ * 프로젝트 내의 기술 부채(TODO, FIXME 등)를 고속으로 스캔합니다.
+ */
 export async function countTechDebt(workspacePath: string = process.cwd()): Promise<number> {
   try {
-    // TODO, FIXME, HACK, XXX 태그 검색 (대소문자 구분 없이)
-    const { stdout } = await execa('rg', ['-i', 'TODO|FIXME|HACK|XXX', '--count-matches', 'src'], {
-      cwd: workspacePath,
-    });
+    const files = await glob(['src/**/*.{ts,js,tsx,jsx}'], { cwd: workspacePath, absolute: true });
+    const patterns = ['TODO', 'FIXME', 'HACK', 'XXX'];
 
-    // rg의 --count-matches 출력은 "file:count" 형식이거나 합계가 아닐 수 있으므로 파싱 필요
-    const total = stdout
-      .split('\n')
-      .filter(Boolean)
-      .reduce((sum, line) => {
-        const count = parseInt(line.split(':').pop() || '0', 10);
-        return sum + count;
-      }, 0);
+    const results = await pMap(
+      files,
+      async (file) => {
+        try {
+          const content = readFileSync(file, 'utf-8').toUpperCase();
+          let count = 0;
+          for (const p of patterns) {
+              let pos = content.indexOf(p);
+              while (pos !== -1) {
+                  count++;
+                  pos = content.indexOf(p, pos + 1);
+              }
+          }
+          return count;
+        } catch (e) {
+          return 0;
+        }
+      },
+      { concurrency: os.cpus().length }
+    );
 
-    return total;
+    return results.reduce((sum, count) => sum + count, 0);
   } catch (error) {
-    // 검색 결과가 없으면 rg는 에러를 뱉을 수 있음 (exit code 1)
     return 0;
   }
 }

@@ -7,7 +7,7 @@ describe('SemanticService Extra', () => {
     const testProjectRoot = join(process.cwd(), 'temp_semantic_extra');
     let service: SemanticService;
 
-    beforeEach(() => {
+    beforeEach(async () => {
         if (!existsSync(testProjectRoot)) mkdirSync(testProjectRoot, { recursive: true });
         if (!existsSync(join(testProjectRoot, 'src'))) mkdirSync(join(testProjectRoot, 'src'), { recursive: true });
         
@@ -15,6 +15,7 @@ describe('SemanticService Extra', () => {
         writeFileSync(join(testProjectRoot, 'src/methods.ts'), 'export class MyClass { myMethod() { return 1; } }');
         
         service = new SemanticService(testProjectRoot);
+        await service.ensureInitialized();
     });
 
     afterEach(() => {

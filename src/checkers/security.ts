@@ -7,7 +7,11 @@ import { Violation } from '../types/index.js';
  */
 const SECRET_PATTERNS = [
   { id: 'AWS_KEY', pattern: /AKIA[0-9A-Z]{16}/, message: 'AWS Access Key 발견!' },
-  { id: 'GENERIC_SECRET', pattern: /(password|secret|token|key|api_key|auth_token)\s*[:=]\s*["'][a-zA-Z0-9_\-]{16,}["']/i, message: '하드코딩된 비밀번호/토크 발견!' },
+  {
+    id: 'GENERIC_SECRET',
+    pattern: /(password|secret|token|key|api_key|auth_token)\s*[:=]\s*["'][a-zA-Z0-9_\-]{16,}["']/i,
+    message: '하드코딩된 비밀번호/토크 발견!',
+  },
   { id: 'JWT_TOKEN', pattern: /eyJ[a-zA-Z0-9._\-]{10,}/, message: 'JWT 토큰 발견!' },
 ];
 
@@ -36,7 +40,7 @@ export async function checkPackageAudit(): Promise<Violation[]> {
   try {
     const auditOutput = execSync('npm audit --json', { encoding: 'utf-8' });
     const auditData = JSON.parse(auditOutput);
-    
+
     const vulnerabilities = auditData.metadata?.vulnerabilities || {};
     const totalHigh = (vulnerabilities.high || 0) + (vulnerabilities.critical || 0);
 

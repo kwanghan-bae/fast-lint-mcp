@@ -14,7 +14,7 @@ describe('formatReport', () => {
     expect(output).toContain('✅');
     expect(output).toContain('PASS');
     expect(output).not.toContain('❌');
-    expect(output).toContain('🎉 발견된 위반 사항이 없습니다.');
+    expect(output).toContain('> 🎉 **발견된 위반 사항이 없습니다. 완벽합니다!**');
     expect(output).toContain('모든 품질 기준을 통과했습니다.');
   });
 

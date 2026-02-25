@@ -8,7 +8,8 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "test": "vitest run --coverage --coverage.reporter=text --coverage.reporter=json-summary --coverage.exclude=src/index.ts --coverage.exclude=src/db.ts"
+    "test": "vitest run --coverage --coverage.reporter=text --coverage.reporter=json-summary --coverage.exclude=src/index.ts --coverage.exclude=src/db.ts",
+    "quality-check": "node dist/index.js --check"
   },
   "dependencies": {
     "@ast-grep/napi": "^0.40.5",

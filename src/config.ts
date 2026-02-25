@@ -25,6 +25,7 @@ export const ConfigSchema = z.object({
     })
     .default({}),
   incremental: z.boolean().default(true),
+  enableMutationTest: z.boolean().default(false), // 변이 테스트 활성화 여부 (기본값 false)
   exclude: z.array(z.string()).default(['node_modules/**', 'dist/**', 'tests/**']),
   customRules: z.array(CustomRuleSchema).default([]),
   architectureRules: z.array(ArchitectureRuleSchema).default([]),
@@ -60,9 +61,12 @@ export class ConfigService {
     const pkgPath = join(workspacePath, 'package.json');
     if (existsSync(pkgPath)) {
       try {
-        const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+        const pkgContent = readFileSync(pkgPath, 'utf-8');
+        const pkg = JSON.parse(pkgContent);
         if (pkg.fastLint) return pkg.fastLint;
-      } catch (e) {}
+      } catch (e) {
+        // Ignore parsing errors
+      }
     }
 
     return {};
@@ -74,6 +78,10 @@ export class ConfigService {
 
   get incremental() {
     return this.config.incremental;
+  }
+
+  get enableMutationTest() {
+    return this.config.enableMutationTest;
   }
 
   get exclude() {

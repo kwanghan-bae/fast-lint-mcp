@@ -1,4 +1,4 @@
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { Lang, parse } from '@ast-grep/napi';
 import { Violation } from '../types/index.js';
 
@@ -6,6 +6,7 @@ import { Violation } from '../types/index.js';
  * 정성적 코드 품질 (가독성, 디자인 패턴, SRP)을 분석합니다.
  */
 export async function runSemanticReview(filePath: string): Promise<Violation[]> {
+  if (!existsSync(filePath)) return [];
   const content = readFileSync(filePath, 'utf-8');
   const lang = filePath.endsWith('.ts') ? Lang.TypeScript : Lang.JavaScript;
   const ast = parse(lang, content);
@@ -32,8 +33,7 @@ export async function runSemanticReview(filePath: string): Promise<Violation[]> 
     });
   }
 
-  // 3. Large Function (단순 줄 수 기반 체크로 보강)
-  // ast-grep 패턴보다 더 확실한 방법: 모든 함수 선언을 찾고 그 범위를 체크
+  // 3. Large Function
   const functionPatterns = ['function $F($$$) { $$$BODY }', 'const $F = ($$$) => { $$$BODY }'];
 
   for (const pattern of functionPatterns) {

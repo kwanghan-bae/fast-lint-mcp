@@ -7,7 +7,7 @@ describe('SemanticService (v2.0 Tools)', () => {
     const testProjectRoot = join(process.cwd(), '.test-semantic-project');
     let semantic: SemanticService;
 
-    beforeEach(() => {
+    beforeEach(async () => {
         if (existsSync(testProjectRoot)) {
             rmSync(testProjectRoot, { recursive: true, force: true });
         }
@@ -39,6 +39,7 @@ describe('SemanticService (v2.0 Tools)', () => {
         }));
 
         semantic = new SemanticService(testProjectRoot);
+        await semantic.ensureInitialized();
     });
 
     it('getSymbolMetrics는 파일 내 심볼과 복잡도를 추출해야 한다', () => {

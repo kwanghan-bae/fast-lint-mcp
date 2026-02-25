@@ -90,8 +90,9 @@ export class AnalysisService {
           }
 
           const fileViolations = await provider.check(file);
-          const lineCount = readFileSync(file, 'utf-8').split('\n').length;
-          this.db.updateFileMetric(file, currentHash, stats.mtimeMs, lineCount, 0, fileViolations);
+          const metrics = await analyzeFile(file); // 메트릭 재추출 (또는 provider.check 결과에 포함 권장)
+          const lineCount = metrics.lineCount;
+          this.db.updateFileMetric(file, currentHash, stats.mtimeMs, lineCount, metrics.complexity, fileViolations);
 
           return { fileViolations };
         } catch (e) {
@@ -134,21 +135,21 @@ export class AnalysisService {
       if (changedFiles.length > 0) {
         incrementalMode = true;
         const affectedFiles = new Set<string>(changedFiles);
-        
+
         // 역의존성 추적 (1단계 상위까지만 우선 추적하여 과도한 분석 방지)
         for (const file of changedFiles) {
-            try {
-                const fullPath = join(process.cwd(), file);
-                const dependents = this.depGraph.getDependents(fullPath);
-                dependents.forEach(dep => {
-                    const relativeDep = relative(process.cwd(), dep);
-                    if (relativeDep.startsWith('src/') && supportedExts.includes(extname(relativeDep))) {
-                        affectedFiles.add(relativeDep);
-                    }
-                });
-            } catch (e) {
-                // Ignore errors for individual files
-            }
+          try {
+            const fullPath = join(process.cwd(), file);
+            const dependents = this.depGraph.getDependents(fullPath);
+            dependents.forEach((dep) => {
+              const relativeDep = relative(process.cwd(), dep);
+              if (relativeDep.startsWith('src/') && supportedExts.includes(extname(relativeDep))) {
+                affectedFiles.add(relativeDep);
+              }
+            });
+          } catch (e) {
+            // Ignore errors for individual files
+          }
         }
         files = Array.from(affectedFiles);
       } else {
@@ -174,12 +175,13 @@ export class AnalysisService {
       }
     }
 
-    // 보안 감사/파일 분석/구조 분석
-    const auditViolations = await checkPackageAudit();
+    // 보안 감사 (너무 느려서 기본 제외)
     const fileViolations = await this.performFileAnalysis(files);
-    const structuralViolations = await checkStructuralIntegrity();
 
-    violations.push(...auditViolations, ...fileViolations, ...structuralViolations);
+    // 구조 분석 (통합된 depGraph 전달)
+    const structuralViolations = await checkStructuralIntegrity(this.depGraph);
+
+    violations.push(...fileViolations, ...structuralViolations);
 
     // 기술 부채 및 커버리지
     const techDebtCount = await countTechDebt();

@@ -1,3 +1,4 @@
+import { readFileSync, existsSync } from 'fs';
 import { analyzeFile } from '../analysis/sg.js';
 import { checkHallucination, checkFakeLogic, checkArchitecture } from '../analysis/import-check.js';
 import { checkSecrets } from '../checkers/security.js';
@@ -44,11 +45,7 @@ export class JavascriptProvider extends BaseQualityProvider {
     // 2. 환각(Hallucination) 체크
     const hallucinationViolations = await checkHallucination(filePath);
     hallucinationViolations.forEach((hv) => {
-      violations.push({
-        type: 'HALLUCINATION',
-        file: filePath,
-        message: `[환각 경고] ${hv.message}`,
-      });
+      violations.push({ type: 'HALLUCINATION', file: filePath, message: `[환각 경고] ${hv.message}` });
     });
 
     // 3. 가짜 구현(Fake Logic) 체크
@@ -60,14 +57,10 @@ export class JavascriptProvider extends BaseQualityProvider {
     // 4. 아키텍처 가드레일 체크 (의존성 방향)
     const architectureRules = this.config.architectureRules;
     if (architectureRules && architectureRules.length > 0) {
-        const archViolations = await checkArchitecture(filePath, architectureRules);
-        archViolations.forEach((av) => {
-            violations.push({
-                type: 'ARCHITECTURE',
-                file: filePath,
-                message: `[아키텍처 위반] ${av.message}`,
-            });
-        });
+      const archViolations = await checkArchitecture(filePath, architectureRules);
+      archViolations.forEach((av) => {
+        violations.push({ type: 'ARCHITECTURE', file: filePath, message: `[아키텍처 위반] ${av.message}` });
+      });
     }
 
     // 5. 보안(Secret) 스캔
@@ -78,24 +71,12 @@ export class JavascriptProvider extends BaseQualityProvider {
     const reviewViolations = await runSemanticReview(filePath);
     violations.push(...reviewViolations);
 
-    // 7. 변이 테스트 (테스트 파일, 진입점, 핵심 서비스 제외)
-    const normalizedPath = filePath.replace(/\\/g, '/').toLowerCase();
-    const isExcludedFromMutation =
-      normalizedPath.includes('.test.ts') ||
-      normalizedPath.includes('.spec.ts') ||
-      normalizedPath.includes('/index.ts') ||
-      normalizedPath.includes('/analysisservice.ts') ||
-      normalizedPath.includes('/analysisutils.ts');
-
-    if (!isExcludedFromMutation) {
-      const mutationViolations = await runMutationTest(filePath);
-      mutationViolations.forEach((mv) => {
-        violations.push({
-          type: 'MUTATION_SURVIVED',
-          file: filePath,
-          message: `[가짜 테스트 의심] ${mv.message}`,
+    // 7. 변이 테스트 (선택적 활성화)
+    if (this.config.enableMutationTest) {
+        const mutationViolations = await runMutationTest(filePath);
+        mutationViolations.forEach((mv) => {
+            violations.push({ type: 'MUTATION_SURVIVED', file: filePath, message: `[가짜 테스트 의심] ${mv.message}` });
         });
-      });
     }
 
     metrics.customViolations?.forEach((cv) => {
