@@ -1,8 +1,63 @@
 import { readFileSync, existsSync } from 'fs';
 import { Lang, parse } from '@ast-grep/napi';
-import { dirname, join, normalize, isAbsolute } from 'path';
+import { dirname, join, normalize, isAbsolute, relative } from 'path';
 import glob from 'fast-glob';
 import { resolveModulePath } from '../utils/PathResolver.js';
+import { ArchitectureRule } from '../config.js';
+
+/**
+ * 아키텍처 규칙(의존성 방향)을 검사합니다.
+ */
+export async function checkArchitecture(
+  filePath: string,
+  rules: ArchitectureRule[],
+  workspacePath: string = process.cwd()
+): Promise<{ id: string; message: string }[]> {
+  const violations: { id: string; message: string }[] = [];
+  const absoluteFilePath = isAbsolute(filePath) ? filePath : join(workspacePath, filePath);
+  const relativeFilePath = relative(workspacePath, absoluteFilePath);
+
+  // 현재 파일이 'from' 패턴에 매치되는 규칙들 필터링
+  const activeRules = rules.filter((rule: ArchitectureRule) => {
+      const fromPattern = rule.from;
+      const regex = new RegExp('^' + fromPattern.replace(/\*\*/g, '.*').replace(/\*/g, '[^/]*') + '$');
+      return regex.test(relativeFilePath);
+  });
+
+  if (activeRules.length === 0) return [];
+
+  const content = readFileSync(filePath, 'utf-8');
+  const lang = filePath.endsWith('.ts') ? Lang.TypeScript : Lang.JavaScript;
+  const ast = parse(lang, content);
+  const root = ast.root();
+
+  const rawFiles = await glob(['src/**/*.{ts,js,tsx,jsx}'], { cwd: workspacePath });
+  const allFiles = rawFiles.map(f => normalize(join(workspacePath, f)));
+
+  const importMatches = root.findAll("import $A from '$B'");
+  for (const match of importMatches) {
+    const source = match.getMatch('B')?.text();
+    if (!source || !source.startsWith('.')) continue;
+
+    const resolved = resolveModulePath(dirname(normalize(absoluteFilePath)), source, allFiles);
+    if (!resolved) continue;
+
+    const relativeResolved = relative(workspacePath, resolved);
+
+    for (const rule of activeRules) {
+        const toPattern = rule.to;
+        const targetRegex = new RegExp('^' + toPattern.replace(/\*\*/g, '.*').replace(/\*/g, '[^/]*') + '$');
+        if (targetRegex.test(relativeResolved)) {
+            violations.push({
+                id: 'ARCHITECTURE_VIOLATION',
+                message: rule.message,
+            });
+        }
+    }
+  }
+
+  return violations;
+}
 
 /**
  * 에이전트의 환각(존재하지 않는 파일/라이브러리 참조)을 탐지합니다.

@@ -9,6 +9,12 @@ export const CustomRuleSchema = z.object({
   severity: z.enum(['error', 'warning']).default('error'),
 });
 
+export const ArchitectureRuleSchema = z.object({
+  from: z.string(),
+  to: z.string(),
+  message: z.string(),
+});
+
 export const ConfigSchema = z.object({
   rules: z
     .object({
@@ -19,12 +25,14 @@ export const ConfigSchema = z.object({
     })
     .default({}),
   incremental: z.boolean().default(true),
-  exclude: z.array(z.string()).default(['node_modules/**', 'dist/**', 'tests/**']), // 제외 패턴 추가
+  exclude: z.array(z.string()).default(['node_modules/**', 'dist/**', 'tests/**']),
   customRules: z.array(CustomRuleSchema).default([]),
+  architectureRules: z.array(ArchitectureRuleSchema).default([]),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
 export type CustomRule = z.infer<typeof CustomRuleSchema>;
+export type ArchitectureRule = z.infer<typeof ArchitectureRuleSchema>;
 
 export class ConfigService {
   private config: Config;
@@ -74,5 +82,9 @@ export class ConfigService {
 
   get customRules() {
     return this.config.customRules;
+  }
+
+  get architectureRules() {
+    return this.config.architectureRules;
   }
 }

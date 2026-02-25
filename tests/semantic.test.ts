@@ -66,4 +66,18 @@ describe('SemanticService (v2.0 Tools)', () => {
         const impact = semantic.analyzeImpact(join(testProjectRoot, 'src/main.ts'), 'Calculator');
         expect(impact.referencingFiles.some(f => f.includes('caller.ts'))).toBe(true);
     });
+
+    it('findReferences는 특정 심볼의 모든 참조를 찾아야 한다', () => {
+        const mainPath = join(testProjectRoot, 'src/main.ts');
+        const refs = semantic.findReferences(mainPath, 'Calculator');
+        expect(refs.length).toBeGreaterThan(0);
+        expect(refs.some(r => r.file.includes('caller.ts'))).toBe(true);
+    });
+
+    it('goToDefinition은 특정 심볼의 정의 위치를 찾아야 한다', () => {
+        const callerPath = join(testProjectRoot, 'src/caller.ts');
+        const def = semantic.goToDefinition(callerPath, 'Calculator');
+        expect(def).not.toBeNull();
+        expect(def?.file).toContain('main.ts');
+    });
 });

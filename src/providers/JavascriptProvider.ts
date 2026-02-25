@@ -1,5 +1,5 @@
 import { analyzeFile } from '../analysis/sg.js';
-import { checkHallucination, checkFakeLogic } from '../analysis/import-check.js';
+import { checkHallucination, checkFakeLogic, checkArchitecture } from '../analysis/import-check.js';
 import { checkSecrets } from '../checkers/security.js';
 import { runMutationTest } from '../analysis/mutation.js';
 import { runSemanticReview } from '../analysis/reviewer.js';
@@ -57,15 +57,28 @@ export class JavascriptProvider extends BaseQualityProvider {
       violations.push({ type: 'FAKE_LOGIC', file: filePath, message: `[논리 의심] ${fv.message}` });
     });
 
-    // 4. 보안(Secret) 스캔
+    // 4. 아키텍처 가드레일 체크 (의존성 방향)
+    const architectureRules = this.config.architectureRules;
+    if (architectureRules && architectureRules.length > 0) {
+        const archViolations = await checkArchitecture(filePath, architectureRules);
+        archViolations.forEach((av) => {
+            violations.push({
+                type: 'ARCHITECTURE',
+                file: filePath,
+                message: `[아키텍처 위반] ${av.message}`,
+            });
+        });
+    }
+
+    // 5. 보안(Secret) 스캔
     const secretViolations = await checkSecrets(filePath);
     violations.push(...secretViolations);
 
-    // 5. 정성적 코드 리뷰 (READABILITY)
+    // 6. 정성적 코드 리뷰 (READABILITY)
     const reviewViolations = await runSemanticReview(filePath);
     violations.push(...reviewViolations);
 
-    // 6. 변이 테스트 (테스트 파일, 진입점, 핵심 서비스 제외)
+    // 7. 변이 테스트 (테스트 파일, 진입점, 핵심 서비스 제외)
     const normalizedPath = filePath.replace(/\\/g, '/').toLowerCase();
     const isExcludedFromMutation =
       normalizedPath.includes('.test.ts') ||

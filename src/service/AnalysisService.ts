@@ -5,25 +5,30 @@ import pMap from 'p-map';
 import { simpleGit, SimpleGit } from 'simple-git';
 import { QualityDB } from '../db.js';
 import { ConfigService } from '../config.js';
+import { SemanticService } from './SemanticService.js';
+import { DependencyGraph } from '../utils/DependencyGraph.js';
 import { countTechDebt } from '../analysis/rg.js';
 import { checkEnv } from '../checkers/env.js';
 import { checkPackageAudit } from '../checkers/security.js';
 import { JavascriptProvider } from '../providers/JavascriptProvider.js';
 import { Violation, QualityReport, QualityProvider } from '../types/index.js';
 import { checkStructuralIntegrity } from '../utils/AnalysisUtils.js';
-import { join, extname } from 'path';
+import { join, extname, relative } from 'path';
 import os from 'os';
 
 export class AnalysisService {
   private git: SimpleGit;
   private providers: QualityProvider[] = [];
+  private depGraph: DependencyGraph;
 
   constructor(
     private db: QualityDB,
-    private config: ConfigService
+    private config: ConfigService,
+    private semantic: SemanticService
   ) {
     this.git = simpleGit();
     this.providers.push(new JavascriptProvider(this.config));
+    this.depGraph = new DependencyGraph();
   }
 
   private getFileHash(filePath: string): string {
@@ -121,10 +126,31 @@ export class AnalysisService {
     const supportedExts = this.providers.flatMap((p) => p.extensions);
     const ignorePatterns = this.config.exclude;
 
+    // 고속 의존성 그래프 빌드 (Regex 기반, 1초 미만 소요)
+    await this.depGraph.build();
+
     if (this.config.incremental) {
-      files = await this.getChangedFiles();
-      if (files.length > 0) {
+      const changedFiles = await this.getChangedFiles();
+      if (changedFiles.length > 0) {
         incrementalMode = true;
+        const affectedFiles = new Set<string>(changedFiles);
+        
+        // 역의존성 추적 (1단계 상위까지만 우선 추적하여 과도한 분석 방지)
+        for (const file of changedFiles) {
+            try {
+                const fullPath = join(process.cwd(), file);
+                const dependents = this.depGraph.getDependents(fullPath);
+                dependents.forEach(dep => {
+                    const relativeDep = relative(process.cwd(), dep);
+                    if (relativeDep.startsWith('src/') && supportedExts.includes(extname(relativeDep))) {
+                        affectedFiles.add(relativeDep);
+                    }
+                });
+            } catch (e) {
+                // Ignore errors for individual files
+            }
+        }
+        files = Array.from(affectedFiles);
       } else {
         files = await glob(
           supportedExts.map((ext) => `src/**/*${ext}`),

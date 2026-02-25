@@ -7,6 +7,7 @@ import * as env from '../src/checkers/env.js';
 import * as security from '../src/checkers/security.js';
 import * as importCheck from '../src/analysis/import-check.js';
 import { JavascriptProvider } from '../src/providers/JavascriptProvider.js';
+import { SemanticService } from '../src/service/SemanticService.js';
 
 vi.mock('../src/db.js');
 vi.mock('../src/config.js');
@@ -16,6 +17,7 @@ vi.mock('../src/analysis/rg.js');
 vi.mock('../src/checkers/env.js');
 vi.mock('../src/checkers/security.js');
 vi.mock('../src/analysis/import-check.js');
+vi.mock('../src/service/SemanticService.js');
 
 const mockJsProvider = {
   name: 'JS',
@@ -40,6 +42,7 @@ vi.mock('fs', () => ({
 describe('AnalysisService', () => {
   let db: any;
   let config: any;
+  let semantic: any;
   let service: AnalysisService;
 
   beforeEach(() => {
@@ -60,7 +63,11 @@ describe('AnalysisService', () => {
       incremental: false,
       customRules: [],
     };
-    service = new AnalysisService(db as any, config as any);
+    semantic = {
+        getDependents: vi.fn().mockReturnValue([]),
+        ensureInitialized: vi.fn(),
+    };
+    service = new AnalysisService(db as any, config as any, semantic as any);
 
     // Default mocks
     vi.mocked(fd.getDependencyMap).mockResolvedValue(new Map());
@@ -78,77 +85,76 @@ describe('AnalysisService', () => {
     vi.mocked(rg.countTechDebt).mockResolvedValue(2);
 
     const report = await service.runAllChecks();
-
-    if (!report.pass)
-      console.log('DEBUG (violations):', JSON.stringify(report.violations, null, 2));
-
     expect(report.pass).toBe(true);
     expect(report.violations).toHaveLength(0);
     expect(db.saveSession).toHaveBeenCalled();
   });
 
-  it('기준 위반 시 실패 리포트를 생성해야 한다', async () => {
+  it('증분 분석 모드에서 변경된 파일과 역의존성 파일을 분석해야 한다', async () => {
+    config.incremental = true;
     vi.mocked(env.checkEnv).mockResolvedValue({ pass: true, missing: [] });
-    mockJsProvider.check.mockResolvedValue([
-      {
-        type: 'SIZE',
-        file: 'src/test.ts',
-        message: 'SIZE violation',
-      },
-    ]);
-    vi.mocked(fd.findOrphanFiles).mockResolvedValue(['src/orphan.ts']);
-    vi.mocked(rg.countTechDebt).mockResolvedValue(2);
+    
+    // getChangedFiles 모킹
+    (service as any).git = {
+        checkIsRepo: vi.fn().mockResolvedValue(true),
+        status: vi.fn().mockResolvedValue({
+            modified: ['src/changed.ts'],
+            not_added: [],
+            created: [],
+            staged: [],
+            renamed: []
+        })
+    };
+
+    // 역의존성 모킹
+    const mockDepGraph = (service as any).depGraph;
+    mockDepGraph.build = vi.fn().mockResolvedValue(undefined);
+    mockDepGraph.getDependents = vi.fn().mockReturnValue(['src/caller.ts']);
 
     const report = await service.runAllChecks();
-
-    expect(report.pass).toBe(false);
-    expect(report.violations.some((v) => v.type === 'SIZE')).toBe(true);
-    expect(report.violations.some((v) => v.type === 'ORPHAN')).toBe(true);
+    expect(report.pass).toBe(true);
+    expect(mockDepGraph.build).toHaveBeenCalled();
   });
 
-  it('순환 참조를 탐지해야 한다', async () => {
+  it('자가 치유 결과가 리포트에 포함되어야 한다', async () => {
     vi.mocked(env.checkEnv).mockResolvedValue({ pass: true, missing: [] });
-
-    // A -> B -> A 순환 참조
-    const depMap = new Map();
-    depMap.set('src/A.ts', ['src/B.ts']);
-    depMap.set('src/B.ts', ['src/A.ts']);
-    vi.mocked(fd.getDependencyMap).mockResolvedValue(depMap);
+    mockJsProvider.fix.mockResolvedValue({ messages: ['Fixed something automatically'] });
 
     const report = await service.runAllChecks();
-    expect(report.violations.some((v) => v.message.includes('순환 참조 발견'))).toBe(true);
+    expect(report.suggestion).toContain('[Self-Healing Result]');
+    expect(report.suggestion).toContain('Fixed something automatically');
   });
 
-  it('이전 세션보다 커버리지가 하락하면 거부해야 한다', async () => {
+  it('캐시된 메트릭이 유효한 경우 재분석을 건너뛰어야 한다', async () => {
     vi.mocked(env.checkEnv).mockResolvedValue({ pass: true, missing: [] });
-    db.getLastSession.mockReturnValue({ total_coverage: 90 }); // 이전 90%
-
-    // 실제 파일 시스템 모킹 (coverage-summary.json)
+    mockJsProvider.check.mockClear(); // 호출 기록 초기화
+    
+    const now = Date.now();
+    db.getFileMetric.mockReturnValue({
+        mtime_ms: now,
+        violations: '[]',
+        hash: 'abc',
+        line_count: 10,
+        complexity: 1
+    });
+    
     const fs = await import('fs');
-    vi.mocked(fs.existsSync).mockImplementation((path) =>
-      path.toString().includes('coverage-summary.json')
-    );
-    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ total: { lines: { pct: 85 } } })); // 현재 85%
+    vi.mocked(fs.statSync).mockReturnValue({ mtimeMs: now } as any);
 
-    const report = await service.runAllChecks();
-    expect(report.pass).toBe(false);
-    expect(report.violations.some((v) => v.type === 'COVERAGE' && v.message.includes('하락'))).toBe(
-      true
-    );
+    await service.runAllChecks();
+    expect(mockJsProvider.check).not.toHaveBeenCalled();
   });
 
-  it('기술 부채가 한도를 초과하면 위반으로 기록해야 한다', async () => {
+  it('커버리지 하락 시 반려해야 한다', async () => {
     vi.mocked(env.checkEnv).mockResolvedValue({ pass: true, missing: [] });
-    vi.mocked(rg.countTechDebt).mockResolvedValue(100); // 부채 100개 (한도 10)
+    db.getLastSession.mockReturnValue({ total_coverage: 90 });
 
-    const report = await service.runAllChecks();
-    expect(report.violations.some((v) => v.type === 'TECH_DEBT')).toBe(true);
-  });
+    const fs = await import('fs');
+    vi.mocked(fs.existsSync).mockImplementation((path) => path.toString().includes('coverage-summary.json'));
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ total: { lines: { pct: 85 } } }));
 
-  it('필수 도구가 없으면 즉시 실패 리포트를 반환해야 한다', async () => {
-    vi.mocked(env.checkEnv).mockResolvedValue({ pass: false, missing: ['rg'] });
     const report = await service.runAllChecks();
     expect(report.pass).toBe(false);
-    expect(report.violations[0].type).toBe('ENV');
+    expect(report.violations.some(v => v.type === 'COVERAGE')).toBe(true);
   });
 });

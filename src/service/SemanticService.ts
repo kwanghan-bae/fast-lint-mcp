@@ -245,4 +245,107 @@ export class SemanticService {
 
       return targetNode ? targetNode.getText() : null;
   }
+
+  /**
+   * [Feature 5] 심볼 참조 찾기 (Find References)
+   */
+  findReferences(filePath: string, symbolName: string): { file: string; line: number; text: string }[] {
+    this.ensureInitialized();
+    const sourceFile = this.project!.getSourceFile(filePath);
+    if (!sourceFile) return [];
+
+    let targetNode: Node | undefined;
+    targetNode = sourceFile.getFunction(symbolName) || sourceFile.getClass(symbolName) || sourceFile.getVariableStatement(symbolName);
+
+    if (!targetNode && symbolName.includes('.')) {
+      const [clsName, methodName] = symbolName.split('.');
+      const cls = sourceFile.getClass(clsName);
+      if (cls) targetNode = cls.getMethod(methodName);
+    }
+
+    if (!targetNode || !Node.isReferenceFindable(targetNode)) return [];
+
+    const results: { file: string; line: number; text: string }[] = [];
+    const references = targetNode.findReferencesAsNodes();
+
+    for (const ref of references) {
+      results.push({
+        file: ref.getSourceFile().getFilePath(),
+        line: ref.getStartLineNumber(),
+        text: ref.getParent()?.getText().slice(0, 100).trim() || '',
+      });
+    }
+
+    return results;
+  }
+
+  /**
+   * [Feature 6] 정의로 이동 (Go to Definition)
+   */
+  goToDefinition(filePath: string, symbolName: string): { file: string; line: number } | null {
+    this.ensureInitialized();
+    const sourceFile = this.project!.getSourceFile(filePath);
+    if (!sourceFile) return null;
+
+    // 현재 파일 내에서 심볼 찾기 또는 프로젝트 전체에서 찾기 (임시로 이름 기반 검색)
+    // 실제 구현은 Symbol 기반으로 확장 가능
+    let targetNode: Node | undefined;
+    targetNode = sourceFile.getFunction(symbolName) || sourceFile.getClass(symbolName);
+
+    if (!targetNode && symbolName.includes('.')) {
+      const [clsName, methodName] = symbolName.split('.');
+      const cls = sourceFile.getClass(clsName);
+      if (cls) targetNode = cls.getMethod(methodName);
+    }
+
+    if (!targetNode) {
+        // 만약 현재 파일에 없다면 프로젝트 전체 소스 파일에서 검색
+        for (const file of this.project!.getSourceFiles()) {
+            const node = file.getFunction(symbolName) || file.getClass(symbolName);
+            if (node) {
+                targetNode = node;
+                break;
+            }
+        }
+    }
+
+    if (targetNode) {
+      return {
+        file: targetNode.getSourceFile().getFilePath(),
+        line: targetNode.getStartLineNumber(),
+      };
+    }
+
+    return null;
+  }
+
+  /**
+   * [Feature 7] 역의존성 탐지 (Find Dependents)
+   * 특정 파일을 import 하고 있는 파일 목록을 찾습니다.
+   */
+  getDependents(filePath: string): string[] {
+    this.ensureInitialized();
+    const sourceFile = this.project!.getSourceFile(filePath);
+    if (!sourceFile) return [];
+
+    const dependents = new Set<string>();
+    const referencedSymbols = sourceFile.getExportSymbols();
+
+    for (const symbol of referencedSymbols) {
+        const declarations = symbol.getDeclarations();
+        for (const decl of declarations) {
+            if (Node.isReferenceFindable(decl)) {
+                const refs = decl.findReferencesAsNodes();
+                for (const ref of refs) {
+                    const refFile = ref.getSourceFile();
+                    if (refFile.getFilePath() !== sourceFile.getFilePath()) {
+                        dependents.add(refFile.getFilePath());
+                    }
+                }
+            }
+        }
+    }
+
+    return Array.from(dependents);
+  }
 }
