@@ -319,10 +319,22 @@ export class AnalysisService {
     }
 
     // 최종 결과 메시지 구성
-    let suggestion = pass
-      ? `모든 품질 인증 기준을 통과했습니다. (대상 파일: ${files.length}개, 모드: ${incrementalMode ? '증분' : '전체'})`
-      : violations.map((v) => v.message).join('\n') +
-        `\n\n(총 ${files.length}개 파일 분석됨) 위 사항들을 수정한 후 다시 인증을 요청하세요.`;
+    let suggestion = '';
+
+    if (files.length === 0) {
+      pass = false;
+      violations.push({
+        type: 'ENV',
+        message: '분석할 소스 파일을 찾지 못했습니다. 프로젝트 구조를 확인하세요.',
+      });
+      suggestion =
+        '분석 대상 파일이 없습니다. .fast-lintrc의 exclude 설정이나 디렉토리 구조를 확인하세요.';
+    } else {
+      suggestion = pass
+        ? `모든 품질 인증 기준을 통과했습니다. (대상 파일: ${files.length}개, 모드: ${incrementalMode ? '증분' : '전체'})`
+        : violations.map((v) => v.message).join('\n') +
+          `\n\n(총 ${files.length}개 파일 분석됨) 위 사항들을 수정한 후 다시 인증을 요청하세요.`;
+    }
 
     if (healingMessages.length > 0) {
       suggestion += `\n\n[Self-Healing Result]\n${healingMessages.join('\n')}`;

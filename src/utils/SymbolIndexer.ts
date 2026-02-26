@@ -36,16 +36,15 @@ export class SymbolIndexer {
   async index() {
     this.symbolMap.clear();
     const pattern = isAbsolute(this.workspacePath)
-      ? join(this.workspacePath, 'src/**/*.{ts,js,tsx,jsx}')
-      : 'src/**/*.{ts,js,tsx,jsx}';
+      ? join(this.workspacePath, '**/*.{ts,js,tsx,jsx}')
+      : '**/*.{ts,js,tsx,jsx}';
 
     // 분석 대상 파일 목록 획득 (라이브러리 및 빌드 결과물 제외)
     const files = await glob([pattern], {
       cwd: this.workspacePath,
       absolute: true,
-      ignore: ['**/node_modules/**', '**/dist/**'],
+      ignore: ['**/node_modules/**', '**/dist/**', '**/tests/**'],
     });
-
     for (const file of files) {
       try {
         const content = readFileSync(file, 'utf-8');

@@ -82,7 +82,7 @@ export async function runSemanticReview(filePath: string): Promise<Violation[]> 
   /**
    * 특정 AST 노드 바로 위에 한글 주석이 존재하는지 검사하는 헬퍼 함수입니다.
    */
-  const hasKoreanCommentAbove = (node: any, depth = 2): boolean => {
+  const hasKoreanCommentAbove = (node: any, depth = 5): boolean => {
     // export 문, decorator 등을 포함한 실제 시작 위치를 찾기 위해 부모 노드들 탐색
     let targetNode = node;
     let parent = node.parent();
@@ -90,7 +90,9 @@ export async function runSemanticReview(filePath: string): Promise<Violation[]> 
       parent &&
       (parent.kind() === 'export_statement' ||
         parent.kind() === 'decorator' ||
-        parent.kind() === 'export_item')
+        parent.kind() === 'export_item' ||
+        parent.kind() === 'lexical_declaration' ||
+        parent.kind() === 'variable_declaration')
     ) {
       targetNode = parent;
       parent = parent.parent();
@@ -98,15 +100,30 @@ export async function runSemanticReview(filePath: string): Promise<Violation[]> 
 
     const startLine = targetNode.range().start.line;
 
-    for (let i = 1; i <= depth; i++) {
-      const prevLineIdx = startLine - i;
-      if (prevLineIdx < 0) break;
-      const prevLine = allLines[prevLineIdx];
-      if (
-        /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(prevLine) &&
-        (prevLine.includes('//') || prevLine.includes('*'))
-      ) {
-        return true;
+    let checkedLines = 0;
+    let currentLineIdx = startLine - 1;
+
+    while (currentLineIdx >= 0 && checkedLines < depth) {
+      const line = allLines[currentLineIdx].trim();
+
+      // 빈 줄은 무시하고 더 위를 탐색
+      if (line === '') {
+        currentLineIdx--;
+        continue;
+      }
+
+      // 주석 기호(// 또는 *)가 포함되어 있는지 확인
+      if (line.includes('//') || line.includes('*') || line.includes('/*')) {
+        // 한글이 포함되어 있는지 확인
+        if (/[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(line)) {
+          return true;
+        }
+        // 주석은 발견했지만 한글이 없는 경우 -> 계속해서 위쪽 탐색 (멀티라인 주석 대응)
+        currentLineIdx--;
+        checkedLines++;
+      } else {
+        // 주석이 아닌 일반 코드가 나오면 탐색 중단
+        break;
       }
     }
     return false;
