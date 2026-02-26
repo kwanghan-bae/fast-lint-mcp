@@ -42,4 +42,30 @@ describe('runSemanticReview', () => {
       violations.some((v) => v.type === 'READABILITY' && v.message.includes('길이가 너무 깁니다'))
     ).toBe(true);
   });
+
+  it('20줄 이상의 긴 함수에서 한글 주석이 없으면 READABILITY 위반을 반환해야 한다', async () => {
+    const lines = ['function englishComments() {'];
+    for (let i = 0; i < 25; i++) lines.push('  // Logic step ' + i);
+    lines.push('  return true;');
+    lines.push('}');
+    writeFileSync(testFile, lines.join('\n'));
+
+    const violations = await runSemanticReview(testFile);
+    expect(
+      violations.some((v) => v.type === 'READABILITY' && v.message.includes('한글 주석이 없습니다'))
+    ).toBe(true);
+  });
+
+  it('30줄 이상의 긴 함수에서 주석이 아예 없으면 READABILITY 위반을 반환해야 한다', async () => {
+    const lines = ['function noComments() {'];
+    for (let i = 0; i < 35; i++) lines.push('  console.log(' + i + ');');
+    lines.push('  return true;');
+    lines.push('}');
+    writeFileSync(testFile, lines.join('\n'));
+
+    const violations = await runSemanticReview(testFile);
+    expect(
+      violations.some((v) => v.type === 'READABILITY' && v.message.includes('주석이 없습니다'))
+    ).toBe(true);
+  });
 });
