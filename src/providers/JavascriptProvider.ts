@@ -45,7 +45,11 @@ export class JavascriptProvider extends BaseQualityProvider {
     // 2. 환각(Hallucination) 체크
     const hallucinationViolations = await checkHallucination(filePath);
     hallucinationViolations.forEach((hv) => {
-      violations.push({ type: 'HALLUCINATION', file: filePath, message: `[환각 경고] ${hv.message}` });
+      violations.push({
+        type: 'HALLUCINATION',
+        file: filePath,
+        message: `[환각 경고] ${hv.message}`,
+      });
     });
 
     // 3. 가짜 구현(Fake Logic) 체크
@@ -59,7 +63,11 @@ export class JavascriptProvider extends BaseQualityProvider {
     if (architectureRules && architectureRules.length > 0) {
       const archViolations = await checkArchitecture(filePath, architectureRules);
       archViolations.forEach((av) => {
-        violations.push({ type: 'ARCHITECTURE', file: filePath, message: `[아키텍처 위반] ${av.message}` });
+        violations.push({
+          type: 'ARCHITECTURE',
+          file: filePath,
+          message: `[아키텍처 위반] ${av.message}`,
+        });
       });
     }
 
@@ -73,10 +81,14 @@ export class JavascriptProvider extends BaseQualityProvider {
 
     // 7. 변이 테스트 (선택적 활성화)
     if (this.config.enableMutationTest) {
-        const mutationViolations = await runMutationTest(filePath);
-        mutationViolations.forEach((mv) => {
-            violations.push({ type: 'MUTATION_SURVIVED', file: filePath, message: `[가짜 테스트 의심] ${mv.message}` });
+      const mutationViolations = await runMutationTest(filePath);
+      mutationViolations.forEach((mv) => {
+        violations.push({
+          type: 'MUTATION_SURVIVED',
+          file: filePath,
+          message: `[가짜 테스트 의심] ${mv.message}`,
         });
+      });
     }
 
     metrics.customViolations?.forEach((cv) => {

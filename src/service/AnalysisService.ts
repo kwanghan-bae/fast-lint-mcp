@@ -8,6 +8,7 @@ import { ConfigService } from '../config.js';
 import { SemanticService } from './SemanticService.js';
 import { DependencyGraph } from '../utils/DependencyGraph.js';
 import { countTechDebt } from '../analysis/rg.js';
+import { analyzeFile } from '../analysis/sg.js';
 import { checkEnv } from '../checkers/env.js';
 import { checkPackageAudit } from '../checkers/security.js';
 import { JavascriptProvider } from '../providers/JavascriptProvider.js';
@@ -92,7 +93,14 @@ export class AnalysisService {
           const fileViolations = await provider.check(file);
           const metrics = await analyzeFile(file); // 메트릭 재추출 (또는 provider.check 결과에 포함 권장)
           const lineCount = metrics.lineCount;
-          this.db.updateFileMetric(file, currentHash, stats.mtimeMs, lineCount, metrics.complexity, fileViolations);
+          this.db.updateFileMetric(
+            file,
+            currentHash,
+            stats.mtimeMs,
+            lineCount,
+            metrics.complexity,
+            fileViolations
+          );
 
           return { fileViolations };
         } catch (e) {

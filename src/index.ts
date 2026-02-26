@@ -6,7 +6,7 @@ import { ConfigService } from './config.js';
 import { AnalysisService } from './service/AnalysisService.js';
 import { SemanticService } from './service/SemanticService.js';
 import { AgentWorkflow } from './agent/workflow.js';
-import { formatReport } from './utils/AnalysisUtils.js';
+import { formatReport, formatCLITable } from './utils/AnalysisUtils.js';
 import { join } from 'path';
 
 const server = new Server(

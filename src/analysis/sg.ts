@@ -6,7 +6,7 @@ export interface FileAnalysis {
   path: string;
   lineCount: number;
   complexity: number;
-  customViolations: { id: string, message: string }[];
+  customViolations: { id: string; message: string }[];
 }
 
 const COMPLEXITY_PATTERNS = [
@@ -18,20 +18,20 @@ const COMPLEXITY_PATTERNS = [
 ];
 
 export async function analyzeFile(
-  filePath: string, 
+  filePath: string,
   customRules: CustomRule[] = [],
   providedRoot?: SgNode
 ): Promise<FileAnalysis> {
   try {
     // 실제 파일이 없으면 테스트용 가짜 데이터 반환
     if (!existsSync(filePath) && !providedRoot) {
-        return { path: filePath, lineCount: 5, complexity: 2, customViolations: [] };
+      return { path: filePath, lineCount: 5, complexity: 2, customViolations: [] };
     }
 
     const content = providedRoot ? '' : readFileSync(filePath, 'utf-8');
     const lang = filePath.endsWith('.ts') ? Lang.TypeScript : Lang.JavaScript;
     const root = providedRoot || parse(lang, content).root();
-    
+
     // 라인 수 계산 (본문 텍스트 기준)
     const text = providedRoot ? root.text() : content;
     const lineCount = text.split('\n').length;
@@ -44,7 +44,7 @@ export async function analyzeFile(
       } catch (e) {}
     }
 
-    const customViolations: { id: string, message: string }[] = [];
+    const customViolations: { id: string; message: string }[] = [];
     for (const rule of customRules) {
       try {
         const matches = root.findAll(rule.pattern);

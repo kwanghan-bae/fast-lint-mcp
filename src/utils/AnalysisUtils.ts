@@ -12,23 +12,24 @@ export function formatReport(report: any): string {
   const statusIcon = report.pass ? '✅' : '❌';
   const statusText = report.pass ? 'PASS' : 'FAIL';
 
-  output += `### ${statusIcon} 프로젝트 품질 인증 결과: ${statusText}\n\n`;
+  output += `## ${statusIcon} 프로젝트 품질 인증 결과: **${statusText}**\n\n`;
 
   if (report.violations.length > 0) {
-    output += `| Type | File | Message |\n`;
+    output += `### 🚨 발견된 위반 사항 (${report.violations.length}건)\n\n`;
+    output += `| 구분(Type) | 대상 파일(File) | 위반 내용(Message) |\n`;
     output += `| :--- | :--- | :--- |\n`;
 
     report.violations.forEach((v: Violation) => {
       const safeMessage = v.message.replace(/\|/g, '\\|');
-      const fileName = v.file || '-';
-      output += `| **${v.type}** | \`${fileName}\` | ${safeMessage} |\n`;
+      const fileName = v.file ? `\`${v.file}\`` : '`-`';
+      output += `| **${v.type}** | ${fileName} | ${safeMessage} |\n`;
     });
   } else {
-    output += `\n> 🎉 **발견된 위반 사항이 없습니다. 완벽합니다!**\n`;
+    output += `\n> 🎉 **발견된 위반 사항이 없습니다. 완벽한 코드 품질을 유지하고 있습니다!**\n`;
   }
 
   if (report.suggestion) {
-    output += `\n#### 💡 Suggestions\n${report.suggestion}\n`;
+    output += `\n### 💡 리팩토링 조치 가이드\n\n${report.suggestion}\n`;
   }
 
   return output;
@@ -72,5 +73,15 @@ export function formatCLITable(report: any): string {
 export async function checkStructuralIntegrity(depGraph?: DependencyGraph): Promise<Violation[]> {
   const violations: Violation[] = [];
   if (!depGraph) return [];
+
+  // 순환 참조 탐지 (실제 로직 구현하여 FAKE_LOGIC 방지)
+  const cycles = depGraph.detectCycles();
+  cycles.forEach((cycle) => {
+    violations.push({
+      type: 'ARCHITECTURE',
+      message: `[순환 참조] ${cycle.map((c) => c.split('/').pop()).join(' -> ')}`,
+    });
+  });
+
   return violations;
 }

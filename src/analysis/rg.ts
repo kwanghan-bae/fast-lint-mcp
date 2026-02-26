@@ -18,11 +18,11 @@ export async function countTechDebt(workspacePath: string = process.cwd()): Prom
           const content = readFileSync(file, 'utf-8').toUpperCase();
           let count = 0;
           for (const p of patterns) {
-              let pos = content.indexOf(p);
-              while (pos !== -1) {
-                  count++;
-                  pos = content.indexOf(p, pos + 1);
-              }
+            let pos = content.indexOf(p);
+            while (pos !== -1) {
+              count++;
+              pos = content.indexOf(p, pos + 1);
+            }
           }
           return count;
         } catch (e) {
