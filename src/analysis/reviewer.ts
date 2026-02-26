@@ -1,206 +1,202 @@
 import { readFileSync, existsSync } from 'fs';
-import { Lang, parse } from '@ast-grep/napi';
+import { Lang, parse, SgNode } from '@ast-grep/napi';
 import { Violation } from '../types/index.js';
 
 /**
- * 정성적 코드 품질 (가독성, 디자인 패턴, SRP 등)을 분석하고 시니어 개발자의 관점에서 조언을 생성합니다.
- * ast-grep을 사용하여 코드의 구조적 패턴을 탐지하고, 가독성을 저해하는 요소를 식별합니다.
- * @param filePath 분석 대상 파일 경로
- * @returns 발견된 가독성 위반 사항 목록
+ * 정성적 코드 품질을 분석하고 시니어 개발자의 관점에서 조언을 생성합니다.
  */
 export async function runSemanticReview(filePath: string): Promise<Violation[]> {
   if (!existsSync(filePath)) return [];
   const content = readFileSync(filePath, 'utf-8');
-  // 파일 확장자에 따라 적절한 파싱 언어(TypeScript 또는 JavaScript)를 선택합니다.
-  const isTs = filePath.endsWith('.ts') || filePath.endsWith('.tsx') || filePath.endsWith('.cts') || filePath.endsWith('.mts');
+  const isTs =
+    filePath.endsWith('.ts') ||
+    filePath.endsWith('.tsx') ||
+    filePath.endsWith('.cts') ||
+    filePath.endsWith('.mts');
   const lang = isTs ? Lang.TypeScript : Lang.JavaScript;
   const ast = parse(lang, content);
   const root = ast.root();
   const violations: Violation[] = [];
 
-  // 1. 과도한 중첩(Deep Nesting) 탐지 로직
-  const nestingPattern = 'if ($A) { if ($B) { if ($C) { $$$ } } }';
-  if (root.findAll(nestingPattern).length > 0) {
-    violations.push({
-      type: 'READABILITY',
-      file: filePath,
-      message: '[Senior Advice] 코드 중첩이 너무 깊습니다. 조기 리턴(Early Return)을 활용하여 코드 흐름을 단순화하세요.',
-    });
-  }
-
-  // 2. 긴 파라미터 목록(Long Parameter List) 탐지 로직
-  const longParamsPattern = 'function $F($A, $B, $C, $D, $E, $$$) { $$$ }';
-  if (root.findAll(longParamsPattern).length > 0) {
-    violations.push({
-      type: 'READABILITY',
-      file: filePath,
-      message: '[Senior Advice] 함수의 파라미터가 너무 많습니다 (5개 이상). 관련 데이터를 객체로 묶어서 전달하는 것을 고려하세요.',
-    });
-  }
-
-  // 3. 거대 함수(Large Function) 탐지 로직
-  const functionPatterns = ['function $F($$$) { $$$BODY }', 'const $F = ($$$) => { $$$BODY }'];
-
-  for (const pattern of functionPatterns) {
-    const matches = root.findAll(pattern);
-    for (const match of matches) {
-      const body = match.getMatch('BODY')?.text() || match.text();
-      const lines = body.split('\n');
-      if (lines.length > 50) {
-        violations.push({
-          type: 'READABILITY',
-          file: filePath,
-          message: `[Senior Advice] 함수 [${match.getMatch('F')?.text() || 'anonymous'}]의 길이가 너무 깁니다 (${lines.length}줄). 기능별로 작은 함수로 분리하세요.`,
-        });
-      }
-
-      // 4. 한글 주석 누락 및 영문 주석 체크 로직
-      const hasKorean = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(body);
-      const commentCount = (body.match(/\/\/|\/\*/g) || []).length;
-
-      if (lines.length > 20 && !hasKorean && commentCount > 0) {
-        violations.push({
-          type: 'READABILITY',
-          file: filePath,
-          message: `[Senior Advice] 함수 [${match.getMatch('F')?.text() || 'anonymous'}]에 한글 주석이 없습니다. 팀 내 가독성을 위해 영문 주석을 한글로 변경하세요.`,
-        });
-      } else if (lines.length > 30 && commentCount === 0) {
-        violations.push({
-          type: 'READABILITY',
-          file: filePath,
-          message: `[Senior Advice] 함수 [${match.getMatch('F')?.text() || 'anonymous'}]의 로직이 복잡하지만 설명 주석이 없습니다. 핵심 로직에 대한 한글 주석을 추가하세요.`,
-        });
-      }
-    }
-  }
-
-  // 5. 주요 구성 요소(클래스, 함수, 전역 변수)에 대한 한글 주석 필수 체크 로직
-  const allLines = content.split('\n');
+  const allLines = content.split(/\r?\n/);
 
   /**
    * 특정 AST 노드 바로 위에 한글 주석이 존재하는지 검사하는 헬퍼 함수입니다.
    */
-  const hasKoreanCommentAbove = (node: any, depth = 5): boolean => {
-    // export 문, decorator 등을 포함한 실제 시작 위치를 찾기 위해 부모 노드들 탐색
+  const hasKoreanCommentAbove = (node: SgNode, depth = 5): boolean => {
     let targetNode = node;
     let parent = node.parent();
-    while (
-      parent &&
-      (parent.kind() === 'export_statement' ||
-        parent.kind() === 'decorator' ||
-        parent.kind() === 'export_item' ||
-        parent.kind() === 'lexical_declaration' ||
-        parent.kind() === 'variable_declaration')
-    ) {
-      targetNode = parent;
-      parent = parent.parent();
+
+    while (parent) {
+      const kind = parent.kind();
+      if (
+        kind === 'export_statement' ||
+        kind === 'decorator' ||
+        kind === 'export_item' ||
+        kind === 'lexical_declaration' ||
+        kind === 'variable_declaration' ||
+        kind === 'expression_statement'
+      ) {
+        targetNode = parent;
+        parent = parent.parent();
+      } else {
+        break;
+      }
     }
 
-    const startLine = targetNode.range().start.line;
-
-    let checkedLines = 0;
+    const range = targetNode.range();
+    const startLine = range.start.line;
     let currentLineIdx = startLine - 1;
+    let checkedLines = 0;
 
     while (currentLineIdx >= 0 && checkedLines < depth) {
       const line = allLines[currentLineIdx].trim();
-
-      // 빈 줄은 무시하고 더 위를 탐색
       if (line === '') {
         currentLineIdx--;
         continue;
       }
 
-      // 주석 기호(// 또는 *)가 포함되어 있는지 확인
       if (line.includes('//') || line.includes('*') || line.includes('/*')) {
-        // 한글이 포함되어 있는지 확인
-        if (/[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(line)) {
-          return true;
-        }
-        // 주석은 발견했지만 한글이 없는 경우 -> 계속해서 위쪽 탐색 (멀티라인 주석 대응)
+        if (/[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(line)) return true;
         currentLineIdx--;
         checkedLines++;
       } else {
-        // 주석이 아닌 일반 코드가 나오면 탐색 중단
         break;
       }
     }
     return false;
   };
 
-  // 클래스 선언 탐지
-  root.findAll({ rule: { kind: 'class_declaration' } }).forEach((m) => {
-    const className = m.find({ rule: { kind: 'type_identifier' } })?.text().trim() || 'unknown';
-    if (!hasKoreanCommentAbove(m)) {
-      violations.push({
-        type: 'READABILITY',
-        file: filePath,
-        message: `[Senior Advice] 클래스 [${className}] 위에 한글 주석을 추가하여 해당 클래스의 역할을 설명하세요.`,
-      });
-    }
-  });
-
-  // 함수 선언 탐지 (Named Function)
-  root.findAll({ rule: { kind: 'function_declaration' } }).forEach((m) => {
-    const funcName = m.find({ rule: { kind: 'identifier' } })?.text().trim() || 'anonymous';
-    if (!hasKoreanCommentAbove(m)) {
-      violations.push({
-        type: 'READABILITY',
-        file: filePath,
-        message: `[Senior Advice] 함수 [${funcName}] 위에 한글 주석을 추가하여 용도를 설명하세요.`,
-      });
-    }
-  });
-
-  // 클래스 멤버 변수 및 메서드 탐지
+  // 1. 클래스 선언 검사
   root
-    .findAll({ rule: { any: [{ kind: 'public_field_definition' }, { kind: 'method_definition' }] } })
+    .findAll({ rule: { any: [{ kind: 'class_declaration' }, { kind: 'class' }] } })
     .forEach((m) => {
-      const nameNode = m.find({ rule: { any: [{ kind: 'property_identifier' }, { kind: 'identifier' }] } });
-      const varName = nameNode?.text() || 'unknown';
-      const kindLabel = m.kind() === 'method_definition' ? '메서드' : '멤버 변수';
+      if (m.kind() === 'class' && m.parent()?.kind() === 'class_declaration') return;
+
+      const idNode = isTs
+        ? m.find({ rule: { any: [{ kind: 'type_identifier' }, { kind: 'identifier' }] } })
+        : m.find({ rule: { kind: 'identifier' } });
+
+      const className = idNode?.text().trim() || 'unknown';
 
       if (!hasKoreanCommentAbove(m)) {
         violations.push({
           type: 'READABILITY',
           file: filePath,
-          message: `[Senior Advice] ${kindLabel} [${varName}] 위에 한글 주석을 추가하여 용도를 설명하세요.`,
+          message: `[Senior Advice] 클래스 [${className}] 위에 한글 주석을 추가하여 역할을 설명하세요.`,
         });
       }
     });
 
-  // 인터페이스 및 타입 탐지 (TypeScript 전용)
-  if (isTs) {
-    root.findAll({ rule: { any: [{ kind: 'interface_declaration' }, { kind: 'type_alias_declaration' }] } }).forEach((m) => {
-      const typeName = m.find({ rule: { kind: 'type_identifier' } })?.text().trim() || 'unknown';
-      const typeLabel = m.kind() === 'interface_declaration' ? '인터페이스' : '타입 별칭';
-      if (!hasKoreanCommentAbove(m)) {
-        violations.push({
-          type: 'READABILITY',
-          file: filePath,
-          message: `[Senior Advice] ${typeLabel} [${typeName}] 위에 한글 주석을 추가하여 용도를 설명하세요.`,
-        });
-      }
-    });
-  }
-
-  // 전역 변수 및 화살표 함수 탐지
-  root.findAll({ rule: { any: [{ kind: 'lexical_declaration' }, { kind: 'variable_declaration' }] } }).forEach((m) => {
-    const parent = m.parent();
-    const parentKind = parent?.kind();
-    
-    // 부모가 최상위(program)이거나 export 문인 경우만 전역 변수로 간주
-    if (parentKind === 'program' || parentKind === 'export_statement') {
+  // 2. 함수 관련 검사
+  root
+    .findAll({
+      rule: {
+        any: [
+          { kind: 'function_declaration' },
+          { kind: 'arrow_function' },
+          { kind: 'function_expression' },
+        ],
+      },
+    })
+    .forEach((m) => {
       const idNode = m.find({ rule: { kind: 'identifier' } });
-      if (!idNode) return;
-      
-      const varName = idNode.text();
-      
-      // 구조 분해 할당(destructuring)은 개별 변수 설명이 어려우므로 우선 제외
-      if (m.text().includes('{') && m.text().indexOf('{') < m.text().indexOf('=')) return;
+      const funcDisplayName = idNode?.text() || 'anonymous';
 
-      // 화살표 함수는 함수로, 일반 변수는 전역 변수로 라벨링
-      const isFunction = m.text().includes('=>') || m.text().includes('function');
-      const typeLabel = isFunction ? '함수형 변수' : '전역 변수';
+      if (m.kind() === 'function_declaration' && !hasKoreanCommentAbove(m)) {
+        violations.push({
+          type: 'READABILITY',
+          file: filePath,
+          message: `[Senior Advice] 함수 [${funcDisplayName}] 위에 한글 주석을 추가하여 용도를 설명하세요.`,
+        });
+      }
+
+      const body = m.text();
+      const bodyLines = body.split(/\r?\n/);
+      const hasKorean = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(body);
+      const commentCount = (body.match(/\/\/|\/\*/g) || []).length;
+
+      if (bodyLines.length > 50) {
+        violations.push({
+          type: 'READABILITY',
+          file: filePath,
+          message: `[Senior Advice] 함수 [${funcDisplayName}]의 길이가 너무 깁니다 (${bodyLines.length}줄). 기능별로 작은 함수로 분리하세요.`,
+        });
+      }
+
+      if (bodyLines.length > 20 && !hasKorean && commentCount > 0) {
+        violations.push({
+          type: 'READABILITY',
+          file: filePath,
+          message: `[Senior Advice] 함수 [${funcDisplayName}]에 한글 주석이 없습니다. 팀 내 가독성을 위해 영문 주석을 한글로 변경하세요.`,
+        });
+      } else if (bodyLines.length > 30 && commentCount === 0) {
+        violations.push({
+          type: 'READABILITY',
+          file: filePath,
+          message: `[Senior Advice] 함수 [${funcDisplayName}]의 로직이 복잡하지만 설명 주석이 없습니다. 핵심 로직에 대한 한글 주석을 추가하세요.`,
+        });
+      }
+    });
+
+  // 3. 클래스 멤버 검사
+  root.findAll({ rule: { kind: 'class_body' } }).forEach((body) => {
+    body.children().forEach((m) => {
+      const kindName = m.kind() as string;
+      if (
+        kindName.includes('definition') ||
+        kindName.includes('method') ||
+        kindName.includes('field')
+      ) {
+        const nameNode = m.find({
+          rule: { any: [{ kind: 'property_identifier' }, { kind: 'identifier' }] },
+        });
+        const varName = nameNode?.text() || 'unknown';
+        const kindLabel = kindName.includes('method') ? '메서드' : '멤버 변수';
+
+        if (!hasKoreanCommentAbove(m)) {
+          violations.push({
+            type: 'READABILITY',
+            file: filePath,
+            message: `[Senior Advice] ${kindLabel} [${varName}] 위에 한글 주석을 추가하여 용도를 설명하세요.`,
+          });
+        }
+      }
+    });
+  });
+
+  // 4. 전역 요소 검사
+  root
+    .findAll({
+      rule: {
+        any: [
+          { kind: 'lexical_declaration' },
+          { kind: 'variable_declaration' },
+          { kind: 'expression_statement' },
+        ],
+      },
+    })
+    .forEach((m) => {
+      const parent = m.parent();
+      if (parent?.kind() !== 'program' && parent?.kind() !== 'export_statement') return;
+
+      let varName = '';
+      let typeLabel = '전역 요소';
+
+      if (m.kind() === 'expression_statement') {
+        const text = m.text();
+        if (!text.includes('=') || (!text.includes('exports') && !text.includes('module'))) return;
+        varName = text.split('=')[0].trim();
+        typeLabel = '모듈 할당';
+      } else {
+        const idNode = m.find({ rule: { kind: 'identifier' } });
+        if (!idNode) return;
+        varName = idNode.text();
+        const isFunction = m.text().includes('=>') || m.text().includes('function');
+        typeLabel = isFunction ? '함수형 변수' : '전역 변수';
+      }
+
+      if (varName.includes('{') || varName.includes('[')) return;
 
       if (!hasKoreanCommentAbove(m)) {
         violations.push({
@@ -209,8 +205,26 @@ export async function runSemanticReview(filePath: string): Promise<Violation[]> 
           message: `[Senior Advice] ${typeLabel} [${varName}] 위에 한글 주석을 추가하여 용도를 설명하세요.`,
         });
       }
-    }
-  });
+    });
+
+  // 5. 정성적 리뷰 (패턴 매칭 사용)
+  if (root.findAll('if ($A) { if ($B) { if ($C) { $$$ } } }').length > 0) {
+    violations.push({
+      type: 'READABILITY',
+      file: filePath,
+      message:
+        '[Senior Advice] 코드 중첩이 너무 깊습니다. 조기 리턴(Early Return)을 활용하여 코드 흐름을 단순화하세요.',
+    });
+  }
+
+  if (root.findAll('function $F($A, $B, $C, $D, $E, $$$) { $$$ }').length > 0) {
+    violations.push({
+      type: 'READABILITY',
+      file: filePath,
+      message:
+        '[Senior Advice] 함수의 파라미터가 너무 많습니다 (5개 이상). 관련 데이터를 객체로 묶어서 전달하는 것을 고려하세요.',
+    });
+  }
 
   return violations;
 }
