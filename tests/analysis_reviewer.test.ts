@@ -95,4 +95,31 @@ describe('runSemanticReview', () => {
       violations.some((v) => v.type === 'READABILITY' && v.message.includes('전역 변수 [globalVar]'))
     ).toBe(true);
   });
+
+  it('한글 주석이 없는 클래스 선언이 발견되면 READABILITY 위반을 반환해야 한다', async () => {
+    const code = 'class MyClass {}';
+    writeFileSync(testFile, code);
+    const violations = await runSemanticReview(testFile);
+    expect(
+      violations.some((v) => v.type === 'READABILITY' && v.message.includes('클래스 [MyClass]'))
+    ).toBe(true);
+  });
+
+  it('한글 주석이 없는 함수 선언이 발견되면 READABILITY 위반을 반환해야 한다', async () => {
+    const code = 'function myFunc() {}';
+    writeFileSync(testFile, code);
+    const violations = await runSemanticReview(testFile);
+    expect(
+      violations.some((v) => v.type === 'READABILITY' && v.message.includes('함수 [myFunc]'))
+    ).toBe(true);
+  });
+
+  it('export 문이 있어도 상단에 한글 주석이 있으면 통과해야 한다', async () => {
+    const code = '// 테스트 클래스\nexport class ExportedClass {}';
+    writeFileSync(testFile, code);
+    const violations = await runSemanticReview(testFile);
+    expect(
+      violations.some((v) => v.type === 'READABILITY' && v.message.includes('ExportedClass'))
+    ).toBe(false);
+  });
 });

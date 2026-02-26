@@ -71,8 +71,61 @@ export async function runSemanticReview(filePath: string): Promise<Violation[]> 
     }
   }
 
-  // 5. [New] 지역변수가 아닌 변수(클래스 필드, 전역 변수)에 대한 한글 주석 체크
+  // 5. [New] 주요 구성 요소(클래스, 함수, 전역 변수)에 대한 한글 주석 체크
   const allLines = content.split('\n');
+
+  // 한글 주석 존재 여부 확인 헬퍼 함수
+  const hasKoreanCommentAbove = (node: any, depth = 2): boolean => {
+    // 만약 export 문으로 감싸져 있다면 export 문의 위치를 기준으로 함
+    const targetNode = node.parent()?.kind() === 'export_statement' ? node.parent() : node;
+    const startLine = targetNode.range().start.line;
+
+    for (let i = 1; i <= depth; i++) {
+      const prevLineIdx = startLine - i;
+      if (prevLineIdx < 0) break;
+      const prevLine = allLines[prevLineIdx];
+      // 한글이 포함되어 있고, 주석 기호(// 또는 *)가 포함되어 있는지 확인
+      if (
+        /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(prevLine) &&
+        (prevLine.includes('//') || prevLine.includes('*'))
+      ) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  // 클래스 선언 탐지
+  root.findAll({ rule: { kind: 'class_declaration' } }).forEach((m) => {
+    const className =
+      m
+        .find({ rule: { kind: 'type_identifier' } })
+        ?.text()
+        .trim() || 'unknown';
+    if (!hasKoreanCommentAbove(m)) {
+      violations.push({
+        type: 'READABILITY',
+        file: filePath,
+        message: `[Senior Advice] 클래스 [${className}] 위에 한글 주석을 추가하여 역할을 설명하세요.`,
+      });
+    }
+  });
+
+  // 함수 선언 탐지
+  root.findAll({ rule: { kind: 'function_declaration' } }).forEach((m) => {
+    const funcName =
+      m
+        .find({ rule: { kind: 'identifier' } })
+        ?.text()
+        .trim() || 'anonymous';
+    if (!hasKoreanCommentAbove(m)) {
+      violations.push({
+        type: 'READABILITY',
+        file: filePath,
+        message: `[Senior Advice] 함수 [${funcName}] 위에 한글 주석을 추가하여 용도를 설명하세요.`,
+      });
+    }
+  });
 
   // 클래스 멤버 변수 탐지
   root
@@ -80,24 +133,9 @@ export async function runSemanticReview(filePath: string): Promise<Violation[]> 
       rule: { kind: 'public_field_definition' },
     })
     .forEach((m) => {
-      const startLine = m.range().start.line;
       const varName = m.find({ rule: { kind: 'property_identifier' } })?.text() || 'unknown';
 
-      let hasKoreanComment = false;
-      for (let i = 1; i <= 2; i++) {
-        const prevLineIdx = startLine - i;
-        if (prevLineIdx < 0) break;
-        const prevLine = allLines[prevLineIdx];
-        if (
-          /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(prevLine) &&
-          (prevLine.includes('//') || prevLine.includes('*'))
-        ) {
-          hasKoreanComment = true;
-          break;
-        }
-      }
-
-      if (!hasKoreanComment) {
+      if (!hasKoreanCommentAbove(m)) {
         violations.push({
           type: 'READABILITY',
           file: filePath,
@@ -113,31 +151,20 @@ export async function runSemanticReview(filePath: string): Promise<Violation[]> 
       // 부모가 program이거나, export_statement의 자식인 경우 (최상위 변수)
       const parentKind = m.parent()?.kind();
       if (parentKind === 'program' || parentKind === 'export_statement') {
-        const startLine = m.range().start.line;
         const varName = m.find({ rule: { kind: 'identifier' } })?.text() || 'unknown';
 
         // 'const { x } = ...' 같은 구조 분해 할당은 제외 (단순 변수만)
         if (m.text().includes('{') && m.text().indexOf('{') < m.text().indexOf('=')) return;
 
-        let hasKoreanComment = false;
-        for (let i = 1; i <= 2; i++) {
-          const prevLineIdx = startLine - i;
-          if (prevLineIdx < 0) break;
-          const prevLine = allLines[prevLineIdx];
-          if (
-            /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(prevLine) &&
-            (prevLine.includes('//') || prevLine.includes('*'))
-          ) {
-            hasKoreanComment = true;
-            break;
-          }
-        }
+        // 만약 화살표 함수라면 '함수'로 취급하여 메시지 조정 가능
+        const isFunction = m.text().includes('=>') || m.text().includes('function');
+        const typeLabel = isFunction ? '함수형 변수' : '전역 변수';
 
-        if (!hasKoreanComment) {
+        if (!hasKoreanCommentAbove(m)) {
           violations.push({
             type: 'READABILITY',
             file: filePath,
-            message: `[Senior Advice] 전역 변수 [${varName}] 위에 한글 주석을 추가하여 용도를 설명하세요.`,
+            message: `[Senior Advice] ${typeLabel} [${varName}] 위에 한글 주석을 추가하여 용도를 설명하세요.`,
           });
         }
       }
