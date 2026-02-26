@@ -9,31 +9,42 @@ import { AgentWorkflow } from './agent/workflow.js';
 import { formatReport, formatCLITable } from './utils/AnalysisUtils.js';
 import { join } from 'path';
 
-// MCP 서버 인스턴스
+/**
+ * Fast-Lint-MCP 서버의 엔트리 포인트입니다.
+ * Model Context Protocol(MCP)을 통해 외부 AI 에이전트에게 코드 분석 및 품질 관리 도구를 제공합니다.
+ */
+
+// MCP 서버 인스턴스 초기화
 const server = new Server(
   {
     name: 'fast-lint-mcp',
-    version: '2.0.0', // Major Update
+    version: '2.1.0',
   },
   {
     capabilities: {
-      tools: {},
+      tools: {}, // 도구 기능 활성화
     },
   }
 );
 
-// 의존성 초기화 (지연 로딩)
-// 데이터베이스 인스턴스
+/**
+ * 의존성 주입을 위한 서비스 인스턴스들입니다.
+ * 필요한 시점에 초기화되는 지연 로딩(Lazy Loading) 방식을 사용합니다.
+ */
+// 품질 이력 및 캐시를 관리하는 SQLite 데이터베이스
 let db: QualityDB;
-// 설정 서비스 인스턴스
+// 프로젝트 설정(.fast-lintrc 등)을 로드하는 서비스
 let config: ConfigService;
-// 메인 분석 서비스
+// 메인 분석 로직을 수행하는 서비스
 let analyzer: AnalysisService;
-// 시맨틱 분석 서비스
+// 시맨틱 분석(심볼 추적 등)을 담당하는 서비스
 let semantic: SemanticService;
-// 자가 치유 에이전트
+// 코드 수정을 시도하는 자율형 에이전트 워크플로우
 let agent: AgentWorkflow;
 
+/**
+ * AnalysisService 인스턴스를 싱글톤 패턴으로 가져옵니다.
+ */
 function getAnalyzer() {
   if (!analyzer) {
     db = new QualityDB();
@@ -43,6 +54,9 @@ function getAnalyzer() {
   return analyzer;
 }
 
+/**
+ * SemanticService 인스턴스를 싱글톤 패턴으로 가져옵니다.
+ */
 function getSemantic() {
   if (!semantic) {
     semantic = new SemanticService();
@@ -50,6 +64,9 @@ function getSemantic() {
   return semantic;
 }
 
+/**
+ * AgentWorkflow 인스턴스를 싱글톤 패턴으로 가져옵니다.
+ */
 function getAgent() {
   if (!agent) {
     agent = new AgentWorkflow();
@@ -57,6 +74,9 @@ function getAgent() {
   return agent;
 }
 
+/**
+ * MCP 클라이언트(예: Claude Desktop, Gemini CLI)에게 제공할 도구 목록을 정의합니다.
+ */
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
@@ -64,7 +84,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         name: 'quality-check',
         /* [한글 설명] 프로젝트 전체 코드 품질을 검사하고 기준 미달 시 리팩토링 가이드를 제공합니다. */
         description:
-          'Performs a comprehensive code quality check across the entire project and provides a refactoring guide if standards are not met. (High-Performance v2.0)',
+          'Performs a comprehensive code quality check across the entire project and provides a refactoring guide if standards are not met. (High-Performance v2.1)',
         inputSchema: {
           type: 'object',
           properties: {},
@@ -154,7 +174,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         name: 'verify-fix',
         /* [한글 설명] 수정한 코드가 정상인지 테스트 명령어를 실행하여 검증합니다. 실패 시 에러 로그를 반환합니다. */
         description:
-          'Verifies if the modified code works correctly by executing a test command. Returns error logs on failure for self-healing.',
+          'Verifies if the modified code correctly passes tests. Returns error logs on failure for iterative self-healing.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -170,24 +190,30 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   };
 });
 
+/**
+ * 도구 호출 요청을 처리하는 핸들러입니다.
+ */
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     const { name, arguments: args } = request.params;
 
     switch (name) {
       case 'quality-check': {
+        // 전체 품질 검사 실행 및 Markdown 포맷 리포트 반환
         const report = await getAnalyzer().runAllChecks();
         const formattedText = formatReport(report);
         return { content: [{ type: 'text', text: formattedText }] };
       }
 
       case 'get-symbol-metrics': {
+        // 특정 파일의 심볼별 메트릭(라인수, 복잡도) 분석
         const filePath = join(process.cwd(), String(args?.filePath));
         const metrics = getSemantic().getSymbolMetrics(filePath);
         return { content: [{ type: 'text', text: JSON.stringify(metrics, null, 2) }] };
       }
 
       case 'get-symbol-content': {
+        // 특정 심볼의 코드 본문만 추출
         const filePath = join(process.cwd(), String(args?.filePath));
         const content = getSemantic().getSymbolContent(filePath, String(args?.symbolName));
         if (!content) {
@@ -202,6 +228,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'find-dead-code': {
+        // 미사용 코드 탐지
         const deadCodes = getSemantic().findDeadCode();
         if (deadCodes.length === 0) {
           return {
@@ -212,18 +239,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'analyze-impact': {
+        // 수정 시 파급 효과 분석
         const filePath = join(process.cwd(), String(args?.filePath));
         const impact = getSemantic().analyzeImpact(filePath, String(args?.symbolName));
         return { content: [{ type: 'text', text: JSON.stringify(impact, null, 2) }] };
       }
 
       case 'find-references': {
+        // 전체 프로젝트 내 참조 검색
         const filePath = join(process.cwd(), String(args?.filePath));
         const refs = getSemantic().findReferences(filePath, String(args?.symbolName));
         return { content: [{ type: 'text', text: JSON.stringify(refs, null, 2) }] };
       }
 
       case 'go-to-definition': {
+        // 심볼 정의 위치 찾기
         const filePath = join(process.cwd(), String(args?.filePath));
         const def = getSemantic().goToDefinition(filePath, String(args?.symbolName));
         if (!def) {
@@ -236,6 +266,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'verify-fix': {
+        // 수정 사항 검증 (테스트 실행)
         const testCommand = String(args?.testCommand || 'npm test');
         const result = getAgent().verify(testCommand);
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
@@ -245,6 +276,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         throw new Error(`Unknown tool: ${name}`);
     }
   } catch (error) {
+    // 예외 발생 시 에러 메시지 반환
     console.error(`Error during tool execution (${request.params.name}):`, error);
     return {
       content: [
@@ -258,8 +290,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 });
 
+/**
+ * 서버를 시작합니다. CLI 실행 시 --check 플래그를 지원합니다.
+ */
 async function main() {
-  // CLI 인자 체크 (--check 플래그 지원)
+  // CLI 직접 실행 시 품질 검사만 수행하고 종료하는 모드
   if (process.argv.includes('--check')) {
     const analyzer = getAnalyzer();
     console.error('Running quality check via CLI...');
@@ -268,11 +303,13 @@ async function main() {
     process.exit(report.pass ? 0 : 1);
   }
 
+  // MCP 표준 입출력(stdio) 전송 방식 사용
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error('Fast-Lint-MCP Server running on stdio (High-Performance v2.0.0)');
+  console.error('Fast-Lint-MCP Server running on stdio (High-Performance v2.1.0)');
 }
 
+// 메인 함수 실행
 if (process.env.NODE_ENV !== 'test') {
   main().catch((error) => {
     console.error('Fatal error in main():', error);

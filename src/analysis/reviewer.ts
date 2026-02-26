@@ -3,37 +3,46 @@ import { Lang, parse } from '@ast-grep/napi';
 import { Violation } from '../types/index.js';
 
 /**
- * 정성적 코드 품질 (가독성, 디자인 패턴, SRP)을 분석합니다.
+ * 정성적 코드 품질 (가독성, 디자인 패턴, SRP 등)을 분석하고 시니어 개발자의 관점에서 조언을 생성합니다.
+ * ast-grep을 사용하여 코드의 구조적 패턴을 탐지하고, 가독성을 저해하는 요소를 식별합니다.
+ * @param filePath 분석 대상 파일 경로
+ * @returns 발견된 가독성 위반 사항 목록
  */
 export async function runSemanticReview(filePath: string): Promise<Violation[]> {
   if (!existsSync(filePath)) return [];
   const content = readFileSync(filePath, 'utf-8');
+  // 파일 확장자에 따라 적절한 파싱 언어(TypeScript 또는 JavaScript)를 선택합니다.
   const lang = filePath.endsWith('.ts') ? Lang.TypeScript : Lang.JavaScript;
   const ast = parse(lang, content);
   const root = ast.root();
   const violations: Violation[] = [];
 
-  // 1. Deep Nesting 탐지
+  // 1. 과도한 중첩(Deep Nesting) 탐지 로직
+  // 3단계 이상의 if 문 중첩이 발견되면 조기 리턴(Early Return) 패턴 사용을 권장합니다.
   const nestingPattern = 'if ($A) { if ($B) { if ($C) { $$$ } } }';
   if (root.findAll(nestingPattern).length > 0) {
     violations.push({
       type: 'READABILITY',
       file: filePath,
-      message: '[Senior Advice] 코드 중첩이 너무 깊습니다. 조기 리턴을 활용하세요.',
+      message:
+        '[Senior Advice] 코드 중첩이 너무 깊습니다. 조기 리턴(Early Return)을 활용하여 코드 흐름을 단순화하세요.',
     });
   }
 
-  // 2. Long Parameter List
+  // 2. 긴 파라미터 목록(Long Parameter List) 탐지 로직
+  // 함수의 파라미터가 5개 이상인 경우, 객체로 묶어 전달(Parameter Object)하는 것을 권장합니다.
   const longParamsPattern = 'function $F($A, $B, $C, $D, $E, $$$) { $$$ }';
   if (root.findAll(longParamsPattern).length > 0) {
     violations.push({
       type: 'READABILITY',
       file: filePath,
-      message: '[Senior Advice] 함수의 파라미터가 너무 많습니다 (5개 이상).',
+      message:
+        '[Senior Advice] 함수의 파라미터가 너무 많습니다 (5개 이상). 관련 데이터를 객체로 묶어서 전달하는 것을 고려하세요.',
     });
   }
 
-  // 3. Large Function
+  // 3. 거대 함수(Large Function) 탐지 로직
+  // 함수 본문의 길이가 50줄을 초과하는 경우, 단일 책임 원칙(SRP)에 따라 함수 분리를 권장합니다.
   const functionPatterns = ['function $F($$$) { $$$BODY }', 'const $F = ($$$) => { $$$BODY }'];
 
   for (const pattern of functionPatterns) {
@@ -45,12 +54,14 @@ export async function runSemanticReview(filePath: string): Promise<Violation[]> 
         violations.push({
           type: 'READABILITY',
           file: filePath,
-          message: `[Senior Advice] 함수 [${match.getMatch('F')?.text() || 'anonymous'}]의 길이가 너무 깁니다.`,
+          message: `[Senior Advice] 함수 [${match.getMatch('F')?.text() || 'anonymous'}]의 길이가 너무 깁니다 (${lines.length}줄). 기능별로 작은 함수로 분리하세요.`,
         });
       }
 
-      // 4. [New] 한글 주석 누락 및 영문 주석 체크
+      // 4. 한글 주석 누락 및 영문 주석 체크 로직 (v2.1)
+      // 20라인 이상의 로직에서 한글 주석이 없고 영문 주석만 있는 경우 한글화를 유도합니다.
       const hasKorean = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(body);
+      // 영문 문자가 포함된 주석 기호 탐지
       const hasEnglishComment =
         /\/\/.*[a-zA-Z]/.test(body) || /\/\*[\s\S]*?[a-zA-Z][\s\S]*?\*\//.test(body);
       const commentCount = (body.match(/\/\/|\/\*/g) || []).length;
@@ -59,24 +70,28 @@ export async function runSemanticReview(filePath: string): Promise<Violation[]> 
         violations.push({
           type: 'READABILITY',
           file: filePath,
-          message: `[Senior Advice] 함수 [${match.getMatch('F')?.text() || 'anonymous'}]에 한글 주석이 없습니다. 영문 주석을 한글로 변경하세요.`,
+          message: `[Senior Advice] 함수 [${match.getMatch('F')?.text() || 'anonymous'}]에 한글 주석이 없습니다. 팀 내 가독성을 위해 영문 주석을 한글로 변경하세요.`,
         });
       } else if (lines.length > 30 && commentCount === 0) {
         violations.push({
           type: 'READABILITY',
           file: filePath,
-          message: `[Senior Advice] 함수 [${match.getMatch('F')?.text() || 'anonymous'}]의 로직이 복잡하지만 주석이 없습니다. 한글 주석을 추가하세요.`,
+          message: `[Senior Advice] 함수 [${match.getMatch('F')?.text() || 'anonymous'}]의 로직이 복잡하지만 설명 주석이 없습니다. 핵심 로직에 대한 한글 주석을 추가하세요.`,
         });
       }
     }
   }
 
-  // 5. [New] 주요 구성 요소(클래스, 함수, 전역 변수)에 대한 한글 주석 체크
+  // 5. 주요 구성 요소(클래스, 함수, 전역 변수)에 대한 한글 주석 필수 체크 로직
   const allLines = content.split('\n');
 
-  // 한글 주석 존재 여부 확인 헬퍼 함수
+  /**
+   * 특정 AST 노드 바로 위에 한글 주석이 존재하는지 검사하는 헬퍼 함수입니다.
+   * @param node 검사할 AST 노드
+   * @param depth 위로 검색할 최대 라인 수 (기본 2라인)
+   */
   const hasKoreanCommentAbove = (node: any, depth = 2): boolean => {
-    // 만약 export 문으로 감싸져 있다면 export 문의 위치를 기준으로 함
+    // 만약 export 문으로 감싸져 있다면 export 문의 위치를 기준으로 상단 주석을 찾습니다.
     const targetNode = node.parent()?.kind() === 'export_statement' ? node.parent() : node;
     const startLine = targetNode.range().start.line;
 
@@ -84,7 +99,7 @@ export async function runSemanticReview(filePath: string): Promise<Violation[]> 
       const prevLineIdx = startLine - i;
       if (prevLineIdx < 0) break;
       const prevLine = allLines[prevLineIdx];
-      // 한글이 포함되어 있고, 주석 기호(// 또는 *)가 포함되어 있는지 확인
+      // 한글 문자가 포함되어 있고, 주석 기호(// 또는 *)가 포함되어 있는지 확인
       if (
         /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(prevLine) &&
         (prevLine.includes('//') || prevLine.includes('*'))
@@ -95,7 +110,7 @@ export async function runSemanticReview(filePath: string): Promise<Violation[]> 
     return false;
   };
 
-  // 클래스 선언 탐지
+  // 클래스 선언 상단 주석 검사
   root.findAll({ rule: { kind: 'class_declaration' } }).forEach((m) => {
     const className =
       m
@@ -106,12 +121,12 @@ export async function runSemanticReview(filePath: string): Promise<Violation[]> 
       violations.push({
         type: 'READABILITY',
         file: filePath,
-        message: `[Senior Advice] 클래스 [${className}] 위에 한글 주석을 추가하여 역할을 설명하세요.`,
+        message: `[Senior Advice] 클래스 [${className}] 위에 한글 주석을 추가하여 해당 클래스의 역할을 설명하세요.`,
       });
     }
   });
 
-  // 함수 선언 탐지
+  // 함수 선언 상단 주석 검사
   root.findAll({ rule: { kind: 'function_declaration' } }).forEach((m) => {
     const funcName =
       m
@@ -127,7 +142,7 @@ export async function runSemanticReview(filePath: string): Promise<Violation[]> 
     }
   });
 
-  // 클래스 멤버 변수 탐지
+  // 클래스 멤버 변수(Field) 상단 주석 검사
   root
     .findAll({
       rule: { kind: 'public_field_definition' },
@@ -144,19 +159,19 @@ export async function runSemanticReview(filePath: string): Promise<Violation[]> 
       }
     });
 
-  // 전역 변수 탐지 (lexical_declaration: const/let, variable_declaration: var)
+  // 전역 변수(상수 포함) 상단 주석 검사
   root
     .findAll({ rule: { any: [{ kind: 'lexical_declaration' }, { kind: 'variable_declaration' }] } })
     .forEach((m) => {
-      // 부모가 program이거나, export_statement의 자식인 경우 (최상위 변수)
+      // 부모가 최상위(program)이거나 export 문인 경우만 전역 변수로 간주
       const parentKind = m.parent()?.kind();
       if (parentKind === 'program' || parentKind === 'export_statement') {
         const varName = m.find({ rule: { kind: 'identifier' } })?.text() || 'unknown';
 
-        // 'const { x } = ...' 같은 구조 분해 할당은 제외 (단순 변수만)
+        // 구조 분해 할당(destructuring)은 개별 변수 설명이 어려우므로 우선 제외
         if (m.text().includes('{') && m.text().indexOf('{') < m.text().indexOf('=')) return;
 
-        // 만약 화살표 함수라면 '함수'로 취급하여 메시지 조정 가능
+        // 화살표 함수는 함수로, 일반 변수는 전역 변수로 라벨링
         const isFunction = m.text().includes('=>') || m.text().includes('function');
         const typeLabel = isFunction ? '함수형 변수' : '전역 변수';
 
