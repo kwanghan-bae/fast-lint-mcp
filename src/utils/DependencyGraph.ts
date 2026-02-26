@@ -5,7 +5,9 @@ import { Lang, parse } from '@ast-grep/napi';
 import { resolveModulePath } from './PathResolver.js';
 
 export class DependencyGraph {
+  // 파일이 무엇을 임포트하는지 기록하는 맵
   private importMap: Map<string, string[]> = new Map(); // file -> what it imports
+  // 특정 파일이 어디서 임포트되는지 기록하는 맵
   private dependentMap: Map<string, string[]> = new Map(); // file -> what imports it
 
   constructor(private workspacePath: string = process.cwd()) {}
@@ -121,7 +123,7 @@ export class DependencyGraph {
             }
           }
         } catch (e) {
-          // Ignore invalid patterns
+          // 잘못된 패턴 무시
         }
       }
       return [...new Set(imports)];

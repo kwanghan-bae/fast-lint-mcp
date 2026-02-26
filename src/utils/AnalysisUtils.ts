@@ -70,12 +70,15 @@ export function formatCLITable(report: QualityReport): string {
   return output;
 }
 
-export async function checkStructuralIntegrity(depGraph?: DependencyGraph): Promise<Violation[]> {
+/**
+ * 프로젝트의 구조적 무결성(순환 참조 등)을 검사합니다.
+ */
+export function checkStructuralIntegrity(dg?: DependencyGraph): Violation[] {
   const violations: Violation[] = [];
-  if (!depGraph) return [];
+  if (!dg) return [];
 
   // 순환 참조 탐지 (실제 로직 구현하여 FAKE_LOGIC 방지)
-  const cycles = depGraph.detectCycles();
+  const cycles = dg.detectCycles();
   cycles.forEach((cycle) => {
     violations.push({
       type: 'ARCHITECTURE',

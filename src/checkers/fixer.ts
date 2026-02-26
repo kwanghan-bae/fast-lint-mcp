@@ -3,8 +3,11 @@ import { existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
+// 현재 파일의 URL 경로
 const __filename = fileURLToPath(import.meta.url);
+// 현재 파일의 디렉토리 경로
 const __dirname = dirname(__filename);
+// MCP 서버의 루트 디렉토리 경로
 const mcpRootDir = join(__dirname, '..', '..');
 
 /**
@@ -26,7 +29,7 @@ function resolveToolPath(toolName: string, workspacePath: string): string | null
     const globalPath = execSync(`which ${toolName}`, { encoding: 'utf-8' }).trim();
     if (globalPath) return globalPath;
   } catch (e) {
-    // Tool not found in PATH
+    // PATH에서 도구를 찾을 수 없음
   }
 
   return null;

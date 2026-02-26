@@ -2,6 +2,7 @@ import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { z } from 'zod';
 
+// 사용자 정의 규칙 검증 스키마
 export const CustomRuleSchema = z.object({
   id: z.string(),
   pattern: z.string(),
@@ -9,12 +10,14 @@ export const CustomRuleSchema = z.object({
   severity: z.enum(['error', 'warning']).default('error'),
 });
 
+// 아키텍처 규칙 검증 스키마
 export const ArchitectureRuleSchema = z.object({
   from: z.string(),
   to: z.string(),
   message: z.string(),
 });
 
+// 전체 설정 검증 스키마
 export const ConfigSchema = z.object({
   rules: z
     .object({
@@ -36,6 +39,7 @@ export type CustomRule = z.infer<typeof CustomRuleSchema>;
 export type ArchitectureRule = z.infer<typeof ArchitectureRuleSchema>;
 
 export class ConfigService {
+  // 최종 파싱된 설정 정보
   private config: Config;
 
   constructor(workspacePath: string = process.cwd()) {
@@ -65,7 +69,7 @@ export class ConfigService {
         const pkg = JSON.parse(pkgContent);
         if (pkg.fastLint) return pkg.fastLint;
       } catch (e) {
-        // Ignore parsing errors
+        // 파싱 오류 무시
       }
     }
 

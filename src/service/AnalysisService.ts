@@ -22,8 +22,11 @@ interface AnalysisResult {
 }
 
 export class AnalysisService {
+  // Git 연동을 위한 인스턴스
   private git: SimpleGit;
+  // 각 언어별 분석 프로바이더 목록
   private providers: QualityProvider[] = [];
+  // 프로젝트 의존성 그래프
   private depGraph: DependencyGraph;
 
   constructor(
@@ -166,7 +169,7 @@ export class AnalysisService {
               }
             });
           } catch (e) {
-            // Ignore errors for individual files
+            // 개별 파일 오류 무시
           }
         }
         files = Array.from(affectedFiles);
@@ -197,7 +200,7 @@ export class AnalysisService {
     const fileViolations = await this.performFileAnalysis(files);
 
     // 구조 분석 (통합된 depGraph 전달)
-    const structuralViolations = await checkStructuralIntegrity(this.depGraph);
+    const structuralViolations = checkStructuralIntegrity(this.depGraph);
 
     violations.push(...fileViolations, ...structuralViolations);
 
@@ -233,7 +236,7 @@ export class AnalysisService {
         const coverageData = JSON.parse(content);
         currentCoverage = coverageData.total.lines.pct || 0;
       } catch (e) {
-        // Skip parsing errors but record as 0%
+        // 파싱 에러 시 0%로 기록
       }
     } else if (rules.minCoverage > 0) {
       violations.push({

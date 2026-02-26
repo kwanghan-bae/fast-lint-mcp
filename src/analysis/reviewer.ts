@@ -71,5 +71,77 @@ export async function runSemanticReview(filePath: string): Promise<Violation[]> 
     }
   }
 
+  // 5. [New] 지역변수가 아닌 변수(클래스 필드, 전역 변수)에 대한 한글 주석 체크
+  const allLines = content.split('\n');
+
+  // 클래스 멤버 변수 탐지
+  root
+    .findAll({
+      rule: { kind: 'public_field_definition' },
+    })
+    .forEach((m) => {
+      const startLine = m.range().start.line;
+      const varName = m.find({ rule: { kind: 'property_identifier' } })?.text() || 'unknown';
+
+      let hasKoreanComment = false;
+      for (let i = 1; i <= 2; i++) {
+        const prevLineIdx = startLine - i;
+        if (prevLineIdx < 0) break;
+        const prevLine = allLines[prevLineIdx];
+        if (
+          /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(prevLine) &&
+          (prevLine.includes('//') || prevLine.includes('*'))
+        ) {
+          hasKoreanComment = true;
+          break;
+        }
+      }
+
+      if (!hasKoreanComment) {
+        violations.push({
+          type: 'READABILITY',
+          file: filePath,
+          message: `[Senior Advice] 멤버 변수 [${varName}] 위에 한글 주석을 추가하여 용도를 설명하세요.`,
+        });
+      }
+    });
+
+  // 전역 변수 탐지 (lexical_declaration: const/let, variable_declaration: var)
+  root
+    .findAll({ rule: { any: [{ kind: 'lexical_declaration' }, { kind: 'variable_declaration' }] } })
+    .forEach((m) => {
+      // 부모가 program이거나, export_statement의 자식인 경우 (최상위 변수)
+      const parentKind = m.parent()?.kind();
+      if (parentKind === 'program' || parentKind === 'export_statement') {
+        const startLine = m.range().start.line;
+        const varName = m.find({ rule: { kind: 'identifier' } })?.text() || 'unknown';
+
+        // 'const { x } = ...' 같은 구조 분해 할당은 제외 (단순 변수만)
+        if (m.text().includes('{') && m.text().indexOf('{') < m.text().indexOf('=')) return;
+
+        let hasKoreanComment = false;
+        for (let i = 1; i <= 2; i++) {
+          const prevLineIdx = startLine - i;
+          if (prevLineIdx < 0) break;
+          const prevLine = allLines[prevLineIdx];
+          if (
+            /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(prevLine) &&
+            (prevLine.includes('//') || prevLine.includes('*'))
+          ) {
+            hasKoreanComment = true;
+            break;
+          }
+        }
+
+        if (!hasKoreanComment) {
+          violations.push({
+            type: 'READABILITY',
+            file: filePath,
+            message: `[Senior Advice] 전역 변수 [${varName}] 위에 한글 주석을 추가하여 용도를 설명하세요.`,
+          });
+        }
+      }
+    });
+
   return violations;
 }

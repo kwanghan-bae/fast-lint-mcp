@@ -13,6 +13,7 @@ export interface SymbolInfo {
 }
 
 export class SymbolIndexer {
+  // 전역 심볼명과 해당 위치 정보를 담은 맵
   public symbolMap: Map<string, SymbolInfo[]> = new Map();
 
   constructor(private workspacePath: string = process.cwd()) {}
@@ -40,7 +41,7 @@ export class SymbolIndexer {
         const root = parse(lang, content).root();
         this.traverse(root, normalize(file));
       } catch (e) {
-        // Skip files that fail to parse
+        // 파싱 실패한 파일 건너뛰기
       }
     }
   }

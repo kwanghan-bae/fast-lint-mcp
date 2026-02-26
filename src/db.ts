@@ -4,7 +4,9 @@ import { join } from 'path';
 import os from 'os';
 import { Violation } from './types/index.js';
 
+// 데이터베이스 저장 디렉토리명
 const DB_DIR = '.fast-lint';
+// 데이터베이스 파일명
 const DB_FILE = 'quality_history.db';
 
 export interface FileMetric {
@@ -26,6 +28,7 @@ export interface SessionStats {
 }
 
 export class QualityDB {
+  // SQLite 데이터베이스 연결 객체
   private db: Database.Database;
 
   constructor(workspacePath: string = process.cwd()) {
@@ -77,7 +80,7 @@ export class QualityDB {
     try {
       this.db.exec('ALTER TABLE file_metrics ADD COLUMN mtime_ms REAL DEFAULT 0');
     } catch (e) {
-      // Column might already exist
+      // 컬럼이 이미 존재할 수 있음
     }
   }
 

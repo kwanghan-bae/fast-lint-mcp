@@ -95,7 +95,7 @@ export async function checkHallucination(
         Object.keys(pkg.devDependencies || {})
       );
     } catch (e) {
-      // Fallback to empty dependencies
+      // 의존성 목록을 가져오지 못함 (빈 목록 사용)
     }
   }
 
@@ -162,7 +162,7 @@ export async function checkFakeLogic(filePath: string): Promise<{ id: string; me
       const pList = params
         .replace(/[()]/g, '')
         .split(',')
-        .map((p) => p.trim().split(':')[0].trim());
+        .map((p) => p.trim().split(':')[0].replace(/\?$/, '').trim());
       const isUnused = pList.every((p) => !body.includes(p));
       if (isUnused) {
         violations.push({

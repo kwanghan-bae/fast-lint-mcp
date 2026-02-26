@@ -9,6 +9,7 @@ export interface FileAnalysis {
   customViolations: { id: string; message: string }[];
 }
 
+// 복잡도 측정을 위한 AST 패턴 목록
 const COMPLEXITY_PATTERNS = [
   'if ($A) { $$$ }',
   'for ($A) { $$$ }',
@@ -42,7 +43,7 @@ export async function analyzeFile(
         const matches = root.findAll(pattern);
         complexity += matches.length;
       } catch (e) {
-        // Skip invalid patterns
+        // 잘못된 패턴 건너뛰기
       }
     }
 
@@ -54,7 +55,7 @@ export async function analyzeFile(
           customViolations.push({ id: rule.id, message: rule.message });
         }
       } catch (e) {
-        // Skip invalid custom rules
+        // 잘못된 커스텀 규칙 건너뛰기
       }
     }
 

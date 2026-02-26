@@ -9,6 +9,7 @@ import { AgentWorkflow } from './agent/workflow.js';
 import { formatReport, formatCLITable } from './utils/AnalysisUtils.js';
 import { join } from 'path';
 
+// MCP 서버 인스턴스
 const server = new Server(
   {
     name: 'fast-lint-mcp',
@@ -22,10 +23,15 @@ const server = new Server(
 );
 
 // 의존성 초기화 (지연 로딩)
+// 데이터베이스 인스턴스
 let db: QualityDB;
+// 설정 서비스 인스턴스
 let config: ConfigService;
+// 메인 분석 서비스
 let analyzer: AnalysisService;
+// 시맨틱 분석 서비스
 let semantic: SemanticService;
+// 자가 치유 에이전트
 let agent: AgentWorkflow;
 
 function getAnalyzer() {

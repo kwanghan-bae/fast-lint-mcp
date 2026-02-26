@@ -55,7 +55,7 @@ export async function getDependencyMap(
           }
         }
       } catch (e) {
-        // Skip invalid patterns
+        // 잘못된 패턴 건너뛰기
       }
     }
 

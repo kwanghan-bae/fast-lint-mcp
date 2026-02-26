@@ -68,4 +68,31 @@ describe('runSemanticReview', () => {
       violations.some((v) => v.type === 'READABILITY' && v.message.includes('주석이 없습니다'))
     ).toBe(true);
   });
+
+  it('한글 주석이 없는 클래스 멤버 변수가 발견되면 READABILITY 위반을 반환해야 한다', async () => {
+    const code = 'class Test { private myVar = 1; }';
+    writeFileSync(testFile, code);
+    const violations = await runSemanticReview(testFile);
+    expect(
+      violations.some((v) => v.type === 'READABILITY' && v.message.includes('멤버 변수 [myVar]'))
+    ).toBe(true);
+  });
+
+  it('한글 주석이 있는 클래스 멤버 변수는 위반을 반환하지 않아야 한다', async () => {
+    const code = 'class Test {\n  // 한글 주석입니다\n  private myVar = 1;\n}';
+    writeFileSync(testFile, code);
+    const violations = await runSemanticReview(testFile);
+    expect(
+      violations.some((v) => v.type === 'READABILITY' && v.message.includes('멤버 변수 [myVar]'))
+    ).toBe(false);
+  });
+
+  it('한글 주석이 없는 전역 변수가 발견되면 READABILITY 위반을 반환해야 한다', async () => {
+    const code = 'export const globalVar = 1;';
+    writeFileSync(testFile, code);
+    const violations = await runSemanticReview(testFile);
+    expect(
+      violations.some((v) => v.type === 'READABILITY' && v.message.includes('전역 변수 [globalVar]'))
+    ).toBe(true);
+  });
 });
