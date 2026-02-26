@@ -79,9 +79,7 @@ export class AnalysisService {
       ];
 
       const supportedExts = this.providers.flatMap((p) => p.extensions);
-      return [...new Set(changedFiles)].filter(
-        (f) => f.startsWith('src/') && supportedExts.includes(extname(f))
-      );
+      return [...new Set(changedFiles)].filter((f) => supportedExts.includes(extname(f)));
     } catch (error) {
       // Git 명령 실패 시 빈 목록 반환 (안전한 폴백)
       return [];
@@ -209,7 +207,7 @@ export class AnalysisService {
             const dependents = this.depGraph.getDependents(fullPath);
             dependents.forEach((dep) => {
               const relativeDep = relative(process.cwd(), dep);
-              if (relativeDep.startsWith('src/') && supportedExts.includes(extname(relativeDep))) {
+              if (supportedExts.includes(extname(relativeDep))) {
                 affectedFiles.add(relativeDep);
               }
             });
@@ -221,14 +219,14 @@ export class AnalysisService {
       } else {
         // 변경 사항이 없으면 전체 파일 대상으로 검사
         files = await glob(
-          supportedExts.map((ext) => `src/**/*${ext}`),
+          supportedExts.map((ext) => `**/*${ext}`),
           { ignore: ignorePatterns }
         );
       }
     } else {
       // 전체 분석 모드
       files = await glob(
-        supportedExts.map((ext) => `src/**/*${ext}`),
+        supportedExts.map((ext) => `**/*${ext}`),
         { ignore: ignorePatterns }
       );
     }
@@ -322,9 +320,9 @@ export class AnalysisService {
 
     // 최종 결과 메시지 구성
     let suggestion = pass
-      ? `모든 품질 인증 기준을 통과했습니다. (모드: ${incrementalMode ? '증분' : '전체'})`
+      ? `모든 품질 인증 기준을 통과했습니다. (대상 파일: ${files.length}개, 모드: ${incrementalMode ? '증분' : '전체'})`
       : violations.map((v) => v.message).join('\n') +
-        '\n\n위 사항들을 수정한 후 다시 인증을 요청하세요.';
+        `\n\n(총 ${files.length}개 파일 분석됨) 위 사항들을 수정한 후 다시 인증을 요청하세요.`;
 
     if (healingMessages.length > 0) {
       suggestion += `\n\n[Self-Healing Result]\n${healingMessages.join('\n')}`;
