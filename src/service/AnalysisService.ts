@@ -272,9 +272,9 @@ export class AnalysisService {
         '분석 대상 파일이 없습니다. .fast-lintrc의 exclude 설정이나 디렉토리 구조를 확인하세요.';
     } else {
       suggestion = pass
-        ? `모든 품질 인증 기준을 통과했습니다. (대상 파일: ${files.length}개, 모드: ${incrementalMode ? '증분' : '전체'})`
+        ? `모든 품질 인증 기준을 통과했습니다. (v2.1.0 / 대상 파일: ${files.length}개, 모드: ${incrementalMode ? '증분' : '전체'})`
         : violations.map((v) => v.message).join('\n') +
-          `\n\n(총 ${files.length}개 파일 분석됨) 위 사항들을 수정한 후 다시 인증을 요청하세요.`;
+          `\n\n(v2.1.0 / 총 ${files.length}개 파일 분석됨) 위 사항들을 수정한 후 다시 인증을 요청하세요.`;
     }
 
     if (healingMessages.length > 0) {

@@ -190,7 +190,10 @@ export async function runSemanticReview(filePath: string): Promise<Violation[]> 
     
     // 부모가 최상위(program)이거나 export 문인 경우만 전역 변수로 간주
     if (parentKind === 'program' || parentKind === 'export_statement') {
-      const varName = m.find({ rule: { kind: 'identifier' } })?.text() || 'unknown';
+      const idNode = m.find({ rule: { kind: 'identifier' } });
+      if (!idNode) return;
+      
+      const varName = idNode.text();
       
       // 구조 분해 할당(destructuring)은 개별 변수 설명이 어려우므로 우선 제외
       if (m.text().includes('{') && m.text().indexOf('{') < m.text().indexOf('=')) return;
