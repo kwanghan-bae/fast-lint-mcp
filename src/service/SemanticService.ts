@@ -179,7 +179,7 @@ export class SemanticService {
    */
   findDeadCode(): { file: string; symbol: string }[] {
     const deadCodes: { file: string; symbol: string }[] = [];
-    const allSymbolsMap = (this.indexer as any).symbolMap as Map<string, SymbolInfo[]>;
+    const allSymbolsMap = this.indexer.symbolMap;
 
     for (const [name, infos] of allSymbolsMap.entries()) {
       for (const info of infos) {

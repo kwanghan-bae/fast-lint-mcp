@@ -54,7 +54,9 @@ export async function getDependencyMap(
             }
           }
         }
-      } catch (e) {}
+      } catch (e) {
+        // Skip invalid patterns
+      }
     }
 
     depMap.set(filePath, [...new Set(deps)]);

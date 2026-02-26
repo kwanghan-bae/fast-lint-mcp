@@ -44,9 +44,10 @@ export class AgentWorkflow {
         execSync(testCommand, { cwd: this.workspacePath, stdio: 'pipe' });
         // 테스트 통과 시 성공 반환
         return { success: true, iterations };
-      } catch (error: any) {
+      } catch (error: unknown) {
         // 테스트 실패 시 에러 로그 캡처 및 재시도
-        lastError = error.stderr?.toString() || error.stdout?.toString() || error.message;
+        const err = error as { stderr?: Buffer; stdout?: Buffer; message?: string };
+        lastError = err.stderr?.toString() || err.stdout?.toString() || err.message;
         console.error(`[Iteration ${iterations}] Test failed:`, lastError);
       }
     }
@@ -61,10 +62,11 @@ export class AgentWorkflow {
     try {
       execSync(testCommand, { cwd: this.workspacePath, stdio: 'pipe' });
       return { success: true };
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error as { stderr?: Buffer; stdout?: Buffer; message?: string };
       return {
         success: false,
-        error: error.stderr?.toString() || error.stdout?.toString() || error.message,
+        error: err.stderr?.toString() || err.stdout?.toString() || err.message,
       };
     }
   }

@@ -1,4 +1,4 @@
-import { Violation } from '../types/index.js';
+import { Violation, QualityReport } from '../types/index.js';
 import chalk from 'chalk';
 import { DependencyGraph } from './DependencyGraph.js';
 import Table from 'cli-table3';
@@ -6,7 +6,7 @@ import Table from 'cli-table3';
 /**
  * 분석 결과를 가독성 좋은 Markdown 형식으로 변환합니다. (MCP/AI 친화적)
  */
-export function formatReport(report: any): string {
+export function formatReport(report: QualityReport): string {
   let output = '';
 
   const statusIcon = report.pass ? '✅' : '❌';
@@ -38,7 +38,7 @@ export function formatReport(report: any): string {
 /**
  * 기존 CLI용 테이블 출력 (개발자 직접 실행용)
  */
-export function formatCLITable(report: any): string {
+export function formatCLITable(report: QualityReport): string {
   let output = '';
 
   const statusIcon = report.pass ? '✅' : '❌';
@@ -54,7 +54,7 @@ export function formatCLITable(report: any): string {
       wordWrap: true,
     });
 
-    report.violations.forEach((v: any) => {
+    report.violations.forEach((v: Violation) => {
       table.push([chalk.yellow(v.type), v.file || '-', v.message]);
     });
 

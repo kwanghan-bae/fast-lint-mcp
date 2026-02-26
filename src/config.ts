@@ -43,7 +43,7 @@ export class ConfigService {
     this.config = ConfigSchema.parse(userConfig);
   }
 
-  private loadConfig(workspacePath: string): any {
+  private loadConfig(workspacePath: string): Record<string, unknown> {
     const configPaths = ['.fast-lintrc.json', '.fast-lintrc'];
 
     for (const p of configPaths) {

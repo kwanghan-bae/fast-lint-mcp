@@ -39,7 +39,9 @@ export class SymbolIndexer {
               : Lang.JavaScript;
         const root = parse(lang, content).root();
         this.traverse(root, normalize(file));
-      } catch (e) {}
+      } catch (e) {
+        // Skip files that fail to parse
+      }
     }
   }
 
@@ -90,7 +92,12 @@ export class SymbolIndexer {
     return this.symbolMap.get(name) || [];
   }
 
-  private addSymbol(name: string, filePath: string, kind: any, node: SgNode) {
+  private addSymbol(
+    name: string,
+    filePath: string,
+    kind: 'function' | 'class' | 'method' | 'variable',
+    node: SgNode
+  ) {
     const info: SymbolInfo = {
       name,
       filePath,

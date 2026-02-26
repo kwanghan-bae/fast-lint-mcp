@@ -2,9 +2,28 @@ import Database from 'better-sqlite3';
 import { mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import os from 'os';
+import { Violation } from './types/index.js';
 
 const DB_DIR = '.fast-lint';
 const DB_FILE = 'quality_history.db';
+
+export interface FileMetric {
+  path: string;
+  hash: string;
+  mtime_ms: number;
+  line_count: number;
+  complexity: number;
+  violations: string;
+  updated_at: string;
+}
+
+export interface SessionStats {
+  id: number;
+  timestamp: string;
+  total_coverage: number;
+  violation_count: number;
+  pass_status: number;
+}
 
 export class QualityDB {
   private db: Database.Database;
@@ -57,12 +76,14 @@ export class QualityDB {
     // 마이그레이션: mtime_ms 컬럼이 없으면 추가
     try {
       this.db.exec('ALTER TABLE file_metrics ADD COLUMN mtime_ms REAL DEFAULT 0');
-    } catch (e) {}
+    } catch (e) {
+      // Column might already exist
+    }
   }
 
-  getFileMetric(path: string) {
+  getFileMetric(path: string): FileMetric | undefined {
     const stmt = this.db.prepare('SELECT * FROM file_metrics WHERE path = ?');
-    return stmt.get(path) as any;
+    return stmt.get(path) as FileMetric | undefined;
   }
 
   updateFileMetric(
@@ -71,7 +92,7 @@ export class QualityDB {
     mtimeMs: number,
     lineCount: number,
     complexity: number,
-    violations: any = []
+    violations: Violation[] = []
   ) {
     const stmt = this.db.prepare(`
       INSERT INTO file_metrics (path, hash, mtime_ms, line_count, complexity, violations, updated_at)
@@ -87,9 +108,9 @@ export class QualityDB {
     return stmt.run(path, hash, mtimeMs, lineCount, complexity, JSON.stringify(violations));
   }
 
-  getLastSession() {
+  getLastSession(): SessionStats | null {
     const stmt = this.db.prepare('SELECT * FROM session_stats ORDER BY timestamp DESC LIMIT 1');
-    const res = stmt.get() as any;
+    const res = stmt.get() as SessionStats | undefined;
     if (res) {
       return { ...res, total_coverage: res.total_coverage || 0 };
     }

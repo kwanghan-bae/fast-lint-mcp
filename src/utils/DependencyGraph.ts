@@ -120,7 +120,9 @@ export class DependencyGraph {
               if (resolved) imports.push(resolved);
             }
           }
-        } catch (e) {}
+        } catch (e) {
+          // Ignore invalid patterns
+        }
       }
       return [...new Set(imports)];
     } catch (e) {

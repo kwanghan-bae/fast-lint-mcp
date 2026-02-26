@@ -94,7 +94,9 @@ export async function checkHallucination(
       dependencies = Object.keys(pkg.dependencies || {}).concat(
         Object.keys(pkg.devDependencies || {})
       );
-    } catch (e) {}
+    } catch (e) {
+      // Fallback to empty dependencies
+    }
   }
 
   const allFiles = await getProjectFiles(workspacePath);

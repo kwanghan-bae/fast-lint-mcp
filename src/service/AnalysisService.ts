@@ -17,6 +17,10 @@ import { checkStructuralIntegrity } from '../utils/AnalysisUtils.js';
 import { join, extname, relative } from 'path';
 import os from 'os';
 
+interface AnalysisResult {
+  fileViolations: Violation[];
+}
+
 export class AnalysisService {
   private git: SimpleGit;
   private providers: QualityProvider[] = [];
@@ -74,7 +78,9 @@ export class AnalysisService {
           const cachedMetric = this.db.getFileMetric(file);
 
           if (cachedMetric && cachedMetric.mtime_ms === stats.mtimeMs) {
-            return { fileViolations: JSON.parse(cachedMetric.violations || '[]') };
+            return {
+              fileViolations: JSON.parse(cachedMetric.violations || '[]'),
+            } as AnalysisResult;
           }
 
           const currentHash = this.getFileHash(file);
@@ -87,11 +93,13 @@ export class AnalysisService {
               cachedMetric.complexity,
               JSON.parse(cachedMetric.violations)
             );
-            return { fileViolations: JSON.parse(cachedMetric.violations || '[]') };
+            return {
+              fileViolations: JSON.parse(cachedMetric.violations || '[]'),
+            } as AnalysisResult;
           }
 
           const fileViolations = await provider.check(file);
-          const metrics = await analyzeFile(file); // 메트릭 재추출 (또는 provider.check 결과에 포함 권장)
+          const metrics = await analyzeFile(file);
           const lineCount = metrics.lineCount;
           this.db.updateFileMetric(
             file,
@@ -102,7 +110,7 @@ export class AnalysisService {
             fileViolations
           );
 
-          return { fileViolations };
+          return { fileViolations } as AnalysisResult;
         } catch (e) {
           return null;
         }
@@ -111,8 +119,10 @@ export class AnalysisService {
     );
 
     const violations: Violation[] = [];
-    analysisResults.filter(Boolean).forEach((res: any) => {
-      violations.push(...res.fileViolations);
+    analysisResults.forEach((res) => {
+      if (res) {
+        violations.push(...res.fileViolations);
+      }
     });
     return violations;
   }
@@ -223,13 +233,16 @@ export class AnalysisService {
         const coverageData = JSON.parse(content);
         currentCoverage = coverageData.total.lines.pct || 0;
       } catch (e) {
-        console.error('DEBUG: Failed to parse coverage file:', e);
+        // Skip parsing errors but record as 0%
       }
-    } else {
-      console.log(`DEBUG: Coverage summary file not found in candidates.`);
+    } else if (rules.minCoverage > 0) {
+      violations.push({
+        type: 'COVERAGE',
+        message: '테스트 커버리지 리포트를 찾을 수 없습니다. 테스트를 먼저 실행하세요.',
+      });
     }
 
-    if (currentCoverage > 0 && currentCoverage < rules.minCoverage) {
+    if (currentCoverage < rules.minCoverage && coveragePath !== '') {
       violations.push({
         type: 'COVERAGE',
         value: `${currentCoverage}%`,
@@ -241,7 +254,7 @@ export class AnalysisService {
     const lastSession = this.db.getLastSession();
     let pass = violations.length === 0;
 
-    if (lastSession && currentCoverage < lastSession.total_coverage && currentCoverage > 0) {
+    if (lastSession && currentCoverage < lastSession.total_coverage) {
       violations.push({
         type: 'COVERAGE',
         value: `${currentCoverage}%`,

@@ -25,7 +25,9 @@ function resolveToolPath(toolName: string, workspacePath: string): string | null
   try {
     const globalPath = execSync(`which ${toolName}`, { encoding: 'utf-8' }).trim();
     if (globalPath) return globalPath;
-  } catch (e) {}
+  } catch (e) {
+    // Tool not found in PATH
+  }
 
   return null;
 }

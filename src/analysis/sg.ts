@@ -41,7 +41,9 @@ export async function analyzeFile(
       try {
         const matches = root.findAll(pattern);
         complexity += matches.length;
-      } catch (e) {}
+      } catch (e) {
+        // Skip invalid patterns
+      }
     }
 
     const customViolations: { id: string; message: string }[] = [];
@@ -51,7 +53,9 @@ export async function analyzeFile(
         if (matches.length > 0) {
           customViolations.push({ id: rule.id, message: rule.message });
         }
-      } catch (e) {}
+      } catch (e) {
+        // Skip invalid custom rules
+      }
     }
 
     return {
