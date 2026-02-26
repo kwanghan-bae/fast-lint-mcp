@@ -40,11 +40,32 @@ export async function runSemanticReview(filePath: string): Promise<Violation[]> 
     const matches = root.findAll(pattern);
     for (const match of matches) {
       const body = match.getMatch('BODY')?.text() || match.text();
-      if (body.split('\n').length > 50) {
+      const lines = body.split('\n');
+      if (lines.length > 50) {
         violations.push({
           type: 'READABILITY',
           file: filePath,
           message: `[Senior Advice] 함수 [${match.getMatch('F')?.text() || 'anonymous'}]의 길이가 너무 깁니다.`,
+        });
+      }
+
+      // 4. [New] 한글 주석 누락 및 영문 주석 체크
+      const hasKorean = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(body);
+      const hasEnglishComment =
+        /\/\/.*[a-zA-Z]/.test(body) || /\/\*[\s\S]*?[a-zA-Z][\s\S]*?\*\//.test(body);
+      const commentCount = (body.match(/\/\/|\/\*/g) || []).length;
+
+      if (lines.length > 20 && !hasKorean && commentCount > 0) {
+        violations.push({
+          type: 'READABILITY',
+          file: filePath,
+          message: `[Senior Advice] 함수 [${match.getMatch('F')?.text() || 'anonymous'}]에 한글 주석이 없습니다. 영문 주석을 한글로 변경하세요.`,
+        });
+      } else if (lines.length > 30 && commentCount === 0) {
+        violations.push({
+          type: 'READABILITY',
+          file: filePath,
+          message: `[Senior Advice] 함수 [${match.getMatch('F')?.text() || 'anonymous'}]의 로직이 복잡하지만 주석이 없습니다. 한글 주석을 추가하세요.`,
         });
       }
     }
