@@ -1,7 +1,7 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { QualityDB } from './db.js';
+import { StateManager } from './state.js';
 import { ConfigService } from './config.js';
 import { AnalysisService } from './service/AnalysisService.js';
 import { SemanticService } from './service/SemanticService.js';
@@ -31,8 +31,8 @@ const server = new Server(
  * 의존성 주입을 위한 서비스 인스턴스들입니다.
  * 필요한 시점에 초기화되는 지연 로딩(Lazy Loading) 방식을 사용합니다.
  */
-// 품질 이력 및 캐시를 관리하는 SQLite 데이터베이스
-let db: QualityDB;
+// 품질 검사 세션 간의 상태(커버리지 등)를 관리하는 매니저
+let stateManager: StateManager;
 // 프로젝트 설정(.fast-lintrc 등)을 로드하는 서비스
 let config: ConfigService;
 // 메인 분석 로직을 수행하는 서비스
@@ -47,9 +47,9 @@ let agent: AgentWorkflow;
  */
 function getAnalyzer() {
   if (!analyzer) {
-    db = new QualityDB();
+    stateManager = new StateManager();
     config = new ConfigService();
-    analyzer = new AnalysisService(db, config, getSemantic());
+    analyzer = new AnalysisService(stateManager, config, getSemantic());
   }
   return analyzer;
 }

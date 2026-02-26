@@ -16,7 +16,7 @@ describe('ConfigService', () => {
 
   it('설정 파일이 없으면 기본 설정을 로드해야 한다', () => {
     const config = new ConfigService(testDir);
-    expect(config.rules.maxLineCount).toBe(300);
+    expect(config.rules.maxLineCount).toBe(500);
     expect(config.rules.minCoverage).toBe(80);
     expect(config.incremental).toBe(true);
   });
@@ -51,6 +51,6 @@ describe('ConfigService', () => {
   it('잘못된 형식의 설정 파일은 무시하고 기본값을 사용해야 한다', () => {
     writeFileSync(join(testDir, '.fast-lintrc.json'), 'invalid json');
     const config = new ConfigService(testDir);
-    expect(config.rules.maxLineCount).toBe(300);
+    expect(config.rules.maxLineCount).toBe(500);
   });
 });

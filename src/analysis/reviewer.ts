@@ -12,8 +12,8 @@ export async function runSemanticReview(filePath: string): Promise<Violation[]> 
   if (!existsSync(filePath)) return [];
   const content = readFileSync(filePath, 'utf-8');
   // 파일 확장자에 따라 적절한 파싱 언어(TypeScript 또는 JavaScript)를 선택합니다.
-  const lang =
-    filePath.endsWith('.ts') || filePath.endsWith('.tsx') ? Lang.TypeScript : Lang.JavaScript;
+  const isTs = filePath.endsWith('.ts') || filePath.endsWith('.tsx') || filePath.endsWith('.cts') || filePath.endsWith('.mts');
+  const lang = isTs ? Lang.TypeScript : Lang.JavaScript;
   const ast = parse(lang, content);
   const root = ast.root();
   const violations: Violation[] = [];
@@ -24,8 +24,7 @@ export async function runSemanticReview(filePath: string): Promise<Violation[]> 
     violations.push({
       type: 'READABILITY',
       file: filePath,
-      message:
-        '[Senior Advice] 코드 중첩이 너무 깊습니다. 조기 리턴(Early Return)을 활용하여 코드 흐름을 단순화하세요.',
+      message: '[Senior Advice] 코드 중첩이 너무 깊습니다. 조기 리턴(Early Return)을 활용하여 코드 흐름을 단순화하세요.',
     });
   }
 
@@ -35,8 +34,7 @@ export async function runSemanticReview(filePath: string): Promise<Violation[]> 
     violations.push({
       type: 'READABILITY',
       file: filePath,
-      message:
-        '[Senior Advice] 함수의 파라미터가 너무 많습니다 (5개 이상). 관련 데이터를 객체로 묶어서 전달하는 것을 고려하세요.',
+      message: '[Senior Advice] 함수의 파라미터가 너무 많습니다 (5개 이상). 관련 데이터를 객체로 묶어서 전달하는 것을 고려하세요.',
     });
   }
 
@@ -130,81 +128,86 @@ export async function runSemanticReview(filePath: string): Promise<Violation[]> 
   };
 
   // 클래스 선언 탐지
+  root.findAll({ rule: { kind: 'class_declaration' } }).forEach((m) => {
+    const className = m.find({ rule: { kind: 'type_identifier' } })?.text().trim() || 'unknown';
+    if (!hasKoreanCommentAbove(m)) {
+      violations.push({
+        type: 'READABILITY',
+        file: filePath,
+        message: `[Senior Advice] 클래스 [${className}] 위에 한글 주석을 추가하여 해당 클래스의 역할을 설명하세요.`,
+      });
+    }
+  });
+
+  // 함수 선언 탐지 (Named Function)
+  root.findAll({ rule: { kind: 'function_declaration' } }).forEach((m) => {
+    const funcName = m.find({ rule: { kind: 'identifier' } })?.text().trim() || 'anonymous';
+    if (!hasKoreanCommentAbove(m)) {
+      violations.push({
+        type: 'READABILITY',
+        file: filePath,
+        message: `[Senior Advice] 함수 [${funcName}] 위에 한글 주석을 추가하여 용도를 설명하세요.`,
+      });
+    }
+  });
+
+  // 클래스 멤버 변수 및 메서드 탐지
   root
-    .findAll({ rule: { any: [{ kind: 'class_declaration' }, { kind: 'class' }] } })
+    .findAll({ rule: { any: [{ kind: 'public_field_definition' }, { kind: 'method_definition' }] } })
     .forEach((m) => {
-      const className =
-        m
-          .find({ rule: { kind: 'type_identifier' } })
-          ?.text()
-          .trim() || 'unknown';
+      const nameNode = m.find({ rule: { any: [{ kind: 'property_identifier' }, { kind: 'identifier' }] } });
+      const varName = nameNode?.text() || 'unknown';
+      const kindLabel = m.kind() === 'method_definition' ? '메서드' : '멤버 변수';
+
       if (!hasKoreanCommentAbove(m)) {
         violations.push({
           type: 'READABILITY',
           file: filePath,
-          message: `[Senior Advice] 클래스 [${className}] 위에 한글 주석을 추가하여 해당 클래스의 역할을 설명하세요.`,
+          message: `[Senior Advice] ${kindLabel} [${varName}] 위에 한글 주석을 추가하여 용도를 설명하세요.`,
         });
       }
     });
 
-  // 함수 선언 탐지
-  root
-    .findAll({ rule: { any: [{ kind: 'function_declaration' }, { kind: 'function' }] } })
-    .forEach((m) => {
-      const funcName =
-        m
-          .find({ rule: { kind: 'identifier' } })
-          ?.text()
-          .trim() || 'anonymous';
+  // 인터페이스 및 타입 탐지 (TypeScript 전용)
+  if (isTs) {
+    root.findAll({ rule: { any: [{ kind: 'interface_declaration' }, { kind: 'type_alias_declaration' }] } }).forEach((m) => {
+      const typeName = m.find({ rule: { kind: 'type_identifier' } })?.text().trim() || 'unknown';
+      const typeLabel = m.kind() === 'interface_declaration' ? '인터페이스' : '타입 별칭';
       if (!hasKoreanCommentAbove(m)) {
         violations.push({
           type: 'READABILITY',
           file: filePath,
-          message: `[Senior Advice] 함수 [${funcName}] 위에 한글 주석을 추가하여 용도를 설명하세요.`,
+          message: `[Senior Advice] ${typeLabel} [${typeName}] 위에 한글 주석을 추가하여 용도를 설명하세요.`,
         });
       }
     });
+  }
 
-  // 클래스 멤버 변수(Field) 탐지
-  root
-    .findAll({ rule: { any: [{ kind: 'public_field_definition' }, { kind: 'field_definition' }] } })
-    .forEach((m) => {
-      const varName =
-        m
-          .find({ rule: { any: [{ kind: 'property_identifier' }, { kind: 'identifier' }] } })
-          ?.text() || 'unknown';
+  // 전역 변수 및 화살표 함수 탐지
+  root.findAll({ rule: { any: [{ kind: 'lexical_declaration' }, { kind: 'variable_declaration' }] } }).forEach((m) => {
+    const parent = m.parent();
+    const parentKind = parent?.kind();
+    
+    // 부모가 최상위(program)이거나 export 문인 경우만 전역 변수로 간주
+    if (parentKind === 'program' || parentKind === 'export_statement') {
+      const varName = m.find({ rule: { kind: 'identifier' } })?.text() || 'unknown';
+      
+      // 구조 분해 할당(destructuring)은 개별 변수 설명이 어려우므로 우선 제외
+      if (m.text().includes('{') && m.text().indexOf('{') < m.text().indexOf('=')) return;
+
+      // 화살표 함수는 함수로, 일반 변수는 전역 변수로 라벨링
+      const isFunction = m.text().includes('=>') || m.text().includes('function');
+      const typeLabel = isFunction ? '함수형 변수' : '전역 변수';
+
       if (!hasKoreanCommentAbove(m)) {
         violations.push({
           type: 'READABILITY',
           file: filePath,
-          message: `[Senior Advice] 멤버 변수 [${varName}] 위에 한글 주석을 추가하여 용도를 설명하세요.`,
+          message: `[Senior Advice] ${typeLabel} [${varName}] 위에 한글 주석을 추가하여 용도를 설명하세요.`,
         });
       }
-    });
-
-  // 전역 변수 및 상수 탐지
-  root
-    .findAll({ rule: { any: [{ kind: 'lexical_declaration' }, { kind: 'variable_declaration' }] } })
-    .forEach((m) => {
-      const parent = m.parent();
-      const parentKind = parent?.kind();
-
-      if (parentKind === 'program' || parentKind === 'export_statement') {
-        const varName = m.find({ rule: { kind: 'identifier' } })?.text() || 'unknown';
-        if (m.text().includes('{') && m.text().indexOf('{') < m.text().indexOf('=')) return;
-
-        const isFunction = m.text().includes('=>') || m.text().includes('function');
-        const typeLabel = isFunction ? '함수형 변수' : '전역 변수';
-
-        if (!hasKoreanCommentAbove(m)) {
-          violations.push({
-            type: 'READABILITY',
-            file: filePath,
-            message: `[Senior Advice] ${typeLabel} [${varName}] 위에 한글 주석을 추가하여 용도를 설명하세요.`,
-          });
-        }
-      }
-    });
+    }
+  });
 
   return violations;
 }

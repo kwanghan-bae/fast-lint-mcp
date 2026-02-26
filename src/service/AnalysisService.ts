@@ -1,16 +1,14 @@
-import { readFileSync, existsSync, statSync } from 'fs';
-import { createHash } from 'crypto';
+import { readFileSync, existsSync } from 'fs';
 import glob from 'fast-glob';
 import pMap from 'p-map';
 import { simpleGit, SimpleGit } from 'simple-git';
-import { QualityDB } from '../db.js';
+import { StateManager } from '../state.js';
 import { ConfigService } from '../config.js';
 import { SemanticService } from './SemanticService.js';
 import { DependencyGraph } from '../utils/DependencyGraph.js';
 import { countTechDebt } from '../analysis/rg.js';
 import { analyzeFile } from '../analysis/sg.js';
 import { checkEnv } from '../checkers/env.js';
-import { checkPackageAudit } from '../checkers/security.js';
 import { JavascriptProvider } from '../providers/JavascriptProvider.js';
 import { Violation, QualityReport, QualityProvider } from '../types/index.js';
 import { checkStructuralIntegrity } from '../utils/AnalysisUtils.js';
@@ -35,12 +33,12 @@ export class AnalysisService {
 
   /**
    * AnalysisService 인스턴스를 생성합니다.
-   * @param db 품질 이력 및 캐시 저장을 위한 데이터베이스 인스턴스
+   * @param stateManager 품질 세션 상태(커버리지 등)를 관리하는 매니저
    * @param config 프로젝트 설정 정보 서비스
    * @param semantic 시맨틱 분석(심볼 인덱싱 등)을 담당하는 서비스
    */
   constructor(
-    private db: QualityDB,
+    private stateManager: StateManager,
     private config: ConfigService,
     private semantic: SemanticService
   ) {
@@ -50,18 +48,7 @@ export class AnalysisService {
   }
 
   /**
-   * 파일의 무결성 검사 및 캐싱 여부 판단을 위해 SHA-256 해시값을 생성합니다.
-   * @param filePath 대상 파일 경로
-   * @returns 16진수 해시 문자열
-   */
-  private getFileHash(filePath: string): string {
-    const content = readFileSync(filePath);
-    return createHash('sha256').update(content).digest('hex');
-  }
-
-  /**
    * Git 상태를 분석하여 마지막 분석 이후 수정되거나 새로 생성된 파일 목록을 가져옵니다.
-   * src/ 디렉토리 내의 지원되는 확장자(ts, js 등) 파일만 필터링합니다.
    */
   private async getChangedFiles(): Promise<string[]> {
     try {
@@ -88,8 +75,7 @@ export class AnalysisService {
 
   /**
    * 대상 파일들에 대해 정밀 분석을 수행합니다.
-   * 파일 수정 시간(mtime) 및 해시 기반 캐시를 활용하여 분석 속도를 최적화하며,
-   * CPU 코어 수를 고려한 병렬 처리를 수행합니다.
+   * Native Rust (ast-grep) 기반으로 초고속(Zero-Cache) 분석을 수행합니다.
    * @param files 분석할 파일 경로 목록
    */
   private async performFileAnalysis(files: string[]): Promise<Violation[]> {
@@ -102,47 +88,8 @@ export class AnalysisService {
           const provider = this.providers.find((p) => p.extensions.includes(ext));
           if (!provider) return null;
 
-          const stats = statSync(file);
-          const cachedMetric = this.db.getFileMetric(file);
-
-          // 1차 최적화: 파일 수정 시간이 동일하면 분석 생략
-          if (cachedMetric && cachedMetric.mtime_ms === stats.mtimeMs) {
-            return {
-              fileViolations: JSON.parse(cachedMetric.violations || '[]'),
-            } as AnalysisResult;
-          }
-
-          const currentHash = this.getFileHash(file);
-          // 2차 최적화: 파일 내용의 해시값이 동일하면 캐시된 데이터 활용
-          if (cachedMetric && cachedMetric.hash === currentHash) {
-            this.db.updateFileMetric(
-              file,
-              currentHash,
-              stats.mtimeMs,
-              cachedMetric.line_count,
-              cachedMetric.complexity,
-              JSON.parse(cachedMetric.violations)
-            );
-            return {
-              fileViolations: JSON.parse(cachedMetric.violations || '[]'),
-            } as AnalysisResult;
-          }
-
-          // 캐시가 없거나 파일이 변경된 경우 실제 분석 수행
+          // 캐시 없이 항상 최신 상태로 정밀 분석 수행
           const fileViolations = await provider.check(file);
-          const metrics = await analyzeFile(file);
-          const lineCount = metrics.lineCount;
-
-          // 분석 결과 데이터베이스 업데이트
-          this.db.updateFileMetric(
-            file,
-            currentHash,
-            stats.mtimeMs,
-            lineCount,
-            metrics.complexity,
-            fileViolations
-          );
-
           return { fileViolations } as AnalysisResult;
         } catch (e) {
           // 개별 파일 처리 중 오류 발생 시 해당 파일은 건너뜀
@@ -167,12 +114,12 @@ export class AnalysisService {
    * 1. 환경 진단 (필수 도구 체크)
    * 2. 의존성 그래프 빌드 및 증분 분석 범위 결정
    * 3. 자가 치유(Linter/Formatter 자동 적용)
-   * 4. 파일별 정적 분석 및 구조적 무결성(순환 참조 등) 검사
+   * 4. 파일별 정적 분석 및 구조적 무결성 검사
    * 5. 기술 부채(TODO) 및 테스트 커버리지 검증
    * @returns 최종 품질 리포트 객체
    */
   async runAllChecks(): Promise<QualityReport> {
-    // 필수 도구(ripgrep 등) 설치 여부 확인
+    // 필수 도구 설치 여부 확인
     const envResult = await checkEnv();
     if (!envResult.pass) {
       return {
@@ -190,7 +137,7 @@ export class AnalysisService {
     const supportedExts = this.providers.flatMap((p) => p.extensions);
     const ignorePatterns = this.config.exclude;
 
-    // 고속 의존성 그래프 빌드 (Regex 기반, 프로젝트 구조 파악용)
+    // 고속 의존성 그래프 빌드
     await this.depGraph.build();
 
     // 분석 모드 결정: 설정에 따라 변경된 파일만 분석하거나 전체 분석 수행
@@ -200,7 +147,7 @@ export class AnalysisService {
         incrementalMode = true;
         const affectedFiles = new Set<string>(changedFiles);
 
-        // 지능형 역의존성 추적: 수정된 파일을 임포트하는 상위 파일들도 분석 범위에 포함
+        // 지능형 역의존성 추적
         for (const file of changedFiles) {
           try {
             const fullPath = join(process.cwd(), file);
@@ -212,26 +159,24 @@ export class AnalysisService {
               }
             });
           } catch (e) {
-            // 개별 파일 오류 무시 (안정성 보장)
+            // 개별 파일 오류 무시
           }
         }
         files = Array.from(affectedFiles);
       } else {
-        // 변경 사항이 없으면 전체 파일 대상으로 검사
         files = await glob(
           supportedExts.map((ext) => `**/*${ext}`),
           { ignore: ignorePatterns }
         );
       }
     } else {
-      // 전체 분석 모드
       files = await glob(
         supportedExts.map((ext) => `**/*${ext}`),
         { ignore: ignorePatterns }
       );
     }
 
-    // 자가 치유(Self-Healing): 린트 및 포맷 오류 자동 수정 시도
+    // 자가 치유(Self-Healing)
     const healingMessages: string[] = [];
     for (const provider of this.providers) {
       const targetFiles = files.filter((f) => provider.extensions.includes(extname(f)));
@@ -244,12 +189,12 @@ export class AnalysisService {
     // 개별 파일의 상세 품질 분석 수행
     const fileViolations = await this.performFileAnalysis(files);
 
-    // 프로젝트 아키텍처 및 구조 분석 (통합된 의존성 그래프 활용)
+    // 프로젝트 아키텍처 및 구조 분석
     const structuralViolations = checkStructuralIntegrity(this.depGraph);
 
     violations.push(...fileViolations, ...structuralViolations);
 
-    // 기술 부채 스캔: TODO, FIXME 등의 키워드 개수 측정
+    // 기술 부채 스캔
     const techDebtCount = await countTechDebt();
     if (techDebtCount > rules.techDebtLimit) {
       violations.push({
@@ -269,7 +214,6 @@ export class AnalysisService {
     ];
 
     let coveragePath = '';
-    // 다양한 경로에서 커버리지 리포트 탐색
     for (const cand of coverageCandidates) {
       if (existsSync(cand)) {
         coveragePath = cand;
@@ -281,20 +225,17 @@ export class AnalysisService {
       try {
         const content = readFileSync(coveragePath, 'utf-8');
         const coverageData = JSON.parse(content);
-        // 라인 커버리지 퍼센트 추출
         currentCoverage = coverageData.total.lines.pct || 0;
       } catch (e) {
-        // 리포트 파싱 에러 시 0%로 간주하고 로깅 없이 통과
+        // 리포트 파싱 에러 시 0%로 간주
       }
     } else if (rules.minCoverage > 0) {
-      // 설정된 최소 커버리지가 있는데 리포트가 없는 경우 차단
       violations.push({
         type: 'COVERAGE',
         message: '테스트 커버리지 리포트를 찾을 수 없습니다. 테스트를 먼저 실행하세요.',
       });
     }
 
-    // 커버리지 기준치 미달 여부 확인
     if (currentCoverage < rules.minCoverage && coveragePath !== '') {
       violations.push({
         type: 'COVERAGE',
@@ -304,16 +245,16 @@ export class AnalysisService {
       });
     }
 
-    // 이전 세션 대비 커버리지 하락 여부 확인 (품질 저하 방지)
-    const lastSession = this.db.getLastSession();
+    // 이전 세션 대비 커버리지 하락 여부 확인
+    const lastCoverage = this.stateManager.getLastCoverage();
     let pass = violations.length === 0;
 
-    if (lastSession && currentCoverage < lastSession.total_coverage) {
+    if (lastCoverage !== null && currentCoverage < lastCoverage) {
       violations.push({
         type: 'COVERAGE',
         value: `${currentCoverage}%`,
-        limit: `${lastSession.total_coverage}%`,
-        message: `이전 세션보다 커버리지가 하락했습니다 (${lastSession.total_coverage}% -> ${currentCoverage}%). REJECT!`,
+        limit: `${lastCoverage}%`,
+        message: `이전 세션보다 커버리지가 하락했습니다 (${lastCoverage}% -> ${currentCoverage}%). REJECT!`,
       });
       pass = false;
     }
@@ -340,8 +281,8 @@ export class AnalysisService {
       suggestion += `\n\n[Self-Healing Result]\n${healingMessages.join('\n')}`;
     }
 
-    // 이번 분석 세션 정보를 이력에 기록
-    this.db.saveSession(currentCoverage, violations.length, pass);
+    // 이번 분석 세션 정보를 상태 파일에 기록
+    this.stateManager.saveCoverage(currentCoverage);
 
     return { pass, violations, suggestion };
   }

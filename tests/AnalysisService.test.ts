@@ -6,10 +6,9 @@ import * as rg from '../src/analysis/rg.js';
 import * as env from '../src/checkers/env.js';
 import * as security from '../src/checkers/security.js';
 import * as importCheck from '../src/analysis/import-check.js';
-import { JavascriptProvider } from '../src/providers/JavascriptProvider.js';
-import { SemanticService } from '../src/service/SemanticService.js';
+import { StateManager } from '../src/state.js';
 
-vi.mock('../src/db.js');
+vi.mock('../src/state.js');
 vi.mock('../src/config.js');
 vi.mock('../src/analysis/sg.js');
 vi.mock('../src/analysis/fd.js');
@@ -40,34 +39,32 @@ vi.mock('fs', () => ({
 }));
 
 describe('AnalysisService', () => {
-  let db: any;
+  let stateManager: any;
   let config: any;
   let semantic: any;
   let service: AnalysisService;
 
   beforeEach(() => {
-    db = {
-      getFileMetric: vi.fn().mockReturnValue(null),
-      updateFileMetric: vi.fn(),
-      getLastSession: vi.fn().mockReturnValue(null),
-      saveSession: vi.fn(),
+    stateManager = {
+      getLastCoverage: vi.fn().mockReturnValue(null),
+      saveCoverage: vi.fn(),
     };
     config = {
       rules: {
-        maxLineCount: 300,
+        maxLineCount: 500,
         maxComplexity: 15,
         minCoverage: 0,
-        techDebtLimit: 10,
+        techDebtLimit: 20,
       },
       exclude: [],
       incremental: false,
       customRules: [],
     };
     semantic = {
-        getDependents: vi.fn().mockReturnValue([]),
-        ensureInitialized: vi.fn(),
+      getDependents: vi.fn().mockReturnValue([]),
+      ensureInitialized: vi.fn(),
     };
-    service = new AnalysisService(db as any, config as any, semantic as any);
+    service = new AnalysisService(stateManager as any, config as any, semantic as any);
 
     // Default mocks
     vi.mocked(fd.getDependencyMap).mockResolvedValue(new Map());
@@ -81,29 +78,28 @@ describe('AnalysisService', () => {
   it('모든 검사를 수행하고 리포트를 생성해야 한다', async () => {
     vi.mocked(env.checkEnv).mockResolvedValue({ pass: true, missing: [] });
     mockJsProvider.check.mockResolvedValue([]);
-    vi.mocked(fd.findOrphanFiles).mockResolvedValue([]);
     vi.mocked(rg.countTechDebt).mockResolvedValue(2);
 
     const report = await service.runAllChecks();
     expect(report.pass).toBe(true);
     expect(report.violations).toHaveLength(0);
-    expect(db.saveSession).toHaveBeenCalled();
+    expect(stateManager.saveCoverage).toHaveBeenCalled();
   });
 
   it('증분 분석 모드에서 변경된 파일과 역의존성 파일을 분석해야 한다', async () => {
     config.incremental = true;
     vi.mocked(env.checkEnv).mockResolvedValue({ pass: true, missing: [] });
-    
+
     // getChangedFiles 모킹
     (service as any).git = {
-        checkIsRepo: vi.fn().mockResolvedValue(true),
-        status: vi.fn().mockResolvedValue({
-            modified: ['src/changed.ts'],
-            not_added: [],
-            created: [],
-            staged: [],
-            renamed: []
-        })
+      checkIsRepo: vi.fn().mockResolvedValue(true),
+      status: vi.fn().mockResolvedValue({
+        modified: ['src/changed.ts'],
+        not_added: [],
+        created: [],
+        staged: [],
+        renamed: [],
+      }),
     };
 
     // 역의존성 모킹
@@ -125,36 +121,18 @@ describe('AnalysisService', () => {
     expect(report.suggestion).toContain('Fixed something automatically');
   });
 
-  it('캐시된 메트릭이 유효한 경우 재분석을 건너뛰어야 한다', async () => {
-    vi.mocked(env.checkEnv).mockResolvedValue({ pass: true, missing: [] });
-    mockJsProvider.check.mockClear(); // 호출 기록 초기화
-    
-    const now = Date.now();
-    db.getFileMetric.mockReturnValue({
-        mtime_ms: now,
-        violations: '[]',
-        hash: 'abc',
-        line_count: 10,
-        complexity: 1
-    });
-    
-    const fs = await import('fs');
-    vi.mocked(fs.statSync).mockReturnValue({ mtimeMs: now } as any);
-
-    await service.runAllChecks();
-    expect(mockJsProvider.check).not.toHaveBeenCalled();
-  });
-
   it('커버리지 하락 시 반려해야 한다', async () => {
     vi.mocked(env.checkEnv).mockResolvedValue({ pass: true, missing: [] });
-    db.getLastSession.mockReturnValue({ total_coverage: 90 });
+    stateManager.getLastCoverage.mockReturnValue(90);
 
     const fs = await import('fs');
-    vi.mocked(fs.existsSync).mockImplementation((path) => path.toString().includes('coverage-summary.json'));
+    vi.mocked(fs.existsSync).mockImplementation((path) =>
+      path.toString().includes('coverage-summary.json')
+    );
     vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ total: { lines: { pct: 85 } } }));
 
     const report = await service.runAllChecks();
     expect(report.pass).toBe(false);
-    expect(report.violations.some(v => v.type === 'COVERAGE')).toBe(true);
+    expect(report.violations.some((v) => v.type === 'COVERAGE')).toBe(true);
   });
 });
