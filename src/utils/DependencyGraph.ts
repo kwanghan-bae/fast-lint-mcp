@@ -141,34 +141,34 @@ export class DependencyGraph {
       const imports: string[] = [];
       const dir = dirname(filePath);
 
-      // 탐지할 임포트/엑스포트 패턴 정의
-      const patterns = [
-        "import $A from '$B'",
-        'import $A from "$B"',
-        "import { $$$ } from '$B'",
-        'import { $$$ } from "$B"',
-        "export { $$$ } from '$B'",
-        'export { $$$ } from "$B"',
-        "export * from '$B'",
-        'export * from "$B"',
-        "import '$B'",
-        'import "$B"',
-      ];
+      // 모든 임포트/엑스포트 패턴을 하나의 규칙으로 통합하여 Native Rust 레벨에서 한 번에 검색합니다.
+      const importRule = {
+        any: [
+          { pattern: "import $A from '$B'" },
+          { pattern: 'import $A from "$B"' },
+          { pattern: "import { $$$ } from '$B'" },
+          { pattern: 'import { $$$ } from "$B"' },
+          { pattern: "export { $$$ } from '$B'" },
+          { pattern: 'export { $$$ } from "$B"' },
+          { pattern: "export * from '$B'" },
+          { pattern: 'export * from "$B"' },
+          { pattern: "import '$B'" },
+          { pattern: 'import "$B"' },
+        ],
+      };
 
-      for (const pattern of patterns) {
-        try {
-          const matches = root.findAll(pattern);
-          for (const m of matches) {
-            const source = m.getMatch('B')?.text();
-            // 상대 경로(.) 또는 절대 경로(/)로 시작하는 임포트만 해소 대상으로 삼습니다.
-            if (source && (source.startsWith('.') || source.startsWith('/'))) {
-              const resolved = resolveModulePath(dir, source, allFiles);
-              if (resolved) imports.push(resolved);
-            }
+      try {
+        const matches = root.findAll({ rule: importRule });
+        for (const m of matches) {
+          const source = m.getMatch('B')?.text();
+          // 상대 경로(.) 또는 절대 경로(/)로 시작하는 임포트만 해소 대상으로 삼습니다.
+          if (source && (source.startsWith('.') || source.startsWith('/'))) {
+            const resolved = resolveModulePath(dir, source, allFiles);
+            if (resolved) imports.push(resolved);
           }
-        } catch (e) {
-          // 특정 패턴 파싱 에러 시 해당 패턴만 건너뜀
         }
+      } catch (e) {
+        // 파싱 에러 시 무시
       }
       // 중복 제거 후 반환
       return [...new Set(imports)];
