@@ -28,27 +28,49 @@ export class JavascriptProvider extends BaseQualityProvider {
     const rules = this.config.rules;
     const customRules = this.config.customRules;
 
-    // 1. 기본 AST 메트릭 분석: 파일 크기, 복잡도 및 사용자 정의 규칙을 검사합니다.
+    // 1. 기본 AST 메트릭 분석: 파일 크기, 복잡도 및 성격(Data vs Logic)을 검사합니다.
     const metrics = await analyzeFile(filePath, customRules);
 
-    // 파일의 전체 라인 수가 설정된 기준을 초과하는지 확인
-    if (metrics.lineCount > rules.maxLineCount) {
+    // 데이터 파일(예: 대규모 설정, 상수 모음)인 경우 제약 조건을 대폭 완화합니다. (Context-Aware v2.2)
+    const effectiveMaxLines = metrics.isDataFile ? rules.maxLineCount * 10 : rules.maxLineCount;
+    const effectiveMaxComplexity = metrics.isDataFile ? rules.maxComplexity * 10 : rules.maxComplexity;
+
+    if (metrics.lineCount > effectiveMaxLines) {
       violations.push({
         type: 'SIZE',
         file: filePath,
         value: metrics.lineCount,
-        limit: rules.maxLineCount,
-        message: `단일 파일이 너무 큽니다 (${metrics.lineCount}줄). 파일 분리 및 모듈화를 고려하세요.`,
+        limit: effectiveMaxLines,
+        message: metrics.isDataFile 
+          ? `데이터 파일의 크기가 임계치를 초과했습니다 (${metrics.lineCount}줄). 파일을 논리적 단위로 분할(Data Sharding)하세요.`
+          : `단일 로직 파일이 너무 큽니다 (${metrics.lineCount}줄). 에이전트의 환각을 방지하기 위해 파일을 작게 분리하세요.`,
       });
     }
-    // 함수나 클래스의 복잡도가 기준을 초과하는지 확인
-    if (metrics.complexity > rules.maxComplexity) {
+
+    if (metrics.complexity > effectiveMaxComplexity) {
+      const blueprint = metrics.topComplexSymbols
+        .map(s => `- [${s.kind}] ${s.name} (Complexity: ${s.complexity}, L${s.line})`)
+        .join('\n');
+      
+      const fileContent = existsSync(filePath) ? readFileSync(filePath, 'utf-8') : '';
+      const hasUIPatterns = fileContent.match(/(useState|useEffect|useMemo|React|JSX|createElement|view|render)/i);
+      const hasLogicPatterns = fileContent.match(/(Math|RegExp|Buffer|Map|Set|crypto|fetch|axios)/i);
+
+      let advice = '코드 복잡도가 기준을 초과했습니다. 로직을 더 작은 함수나 클래스로 분리하세요.';
+      if (hasUIPatterns && !hasLogicPatterns) {
+        advice = '이 컴포넌트에는 UI 렌더링과 복잡한 상태 관리가 혼재되어 있습니다. Business Logic을 Custom Hook으로 추출하거나, Presentational Component로 UI를 분리하세요.';
+      } else if (hasLogicPatterns && !hasUIPatterns) {
+        advice = '이 파일에는 고도의 연산 로직이 포함되어 있습니다. 서비스 레이어나 순수 함수 기반의 유틸리티 라이브러리로 로직을 캡슐화하는 것이 좋겠습니다.';
+      } else if (hasUIPatterns && hasLogicPatterns) {
+        advice = '렌더링 코드와 복잡한 계산 로직이 강하게 결합되어 있습니다. 유지보수를 위해 렌더링부와 로직부를 엄격히 분리(SOC: Separation of Concerns)하세요.';
+      }
+
       violations.push({
         type: 'COMPLEXITY',
         file: filePath,
         value: metrics.complexity,
-        limit: rules.maxComplexity,
-        message: `함수/클래스의 복잡도(${metrics.complexity})가 너무 높습니다. 로직을 단순화하거나 분리하세요.`,
+        limit: effectiveMaxComplexity,
+        message: `전체 복잡도(${metrics.complexity})가 기준을 초과했습니다. \n\n[Refactoring Blueprint]\n${blueprint}\n\n* Senior Advice: ${advice}`,
       });
     }
 

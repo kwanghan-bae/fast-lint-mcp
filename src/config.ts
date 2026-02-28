@@ -32,6 +32,8 @@ export const ConfigSchema = z.object({
     .object({
       maxLineCount: z.number().default(500), // 단일 파일 최대 라인 수 (주석 포함 고려하여 확장)
       maxComplexity: z.number().default(25), // 함수/클래스 최대 복잡도 (AST 노드 기준)
+  coveragePath: z.string().optional(), // 커버리지 리포트 파일 직접 지정 (lcov.info, coverage-summary.json 등)
+      coverageDirectory: z.string().default('coverage'), // 커버리지 리포트가 생성되는 디렉토리
       minCoverage: z.number().default(80), // 최소 필수 테스트 커버리지 (%)
       techDebtLimit: z.number().default(20), // 허용되는 최대 TODO/FIXME 개수
     })

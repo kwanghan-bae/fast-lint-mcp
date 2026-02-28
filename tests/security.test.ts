@@ -18,11 +18,11 @@ describe('Security Checker', () => {
 
   it('민감 정보를 탐지해야 한다', async () => {
     const code =
-      'const awsKey = "AKIA1234567890123456";\nconst apiToken = "api_key=abcdef1234567890_secret";';
+      "const awsKey = 'AKIA1234567890ABCDEF';\nconst apiToken = 'api_key: \"xYz12345_67890_AbCdEf_GhIjKl\"';";
     writeFileSync(testFile, code);
     const violations = await checkSecrets(testFile);
     expect(violations.length).toBeGreaterThanOrEqual(2);
-    expect(violations[0].message).toContain('AWS');
+    expect(violations.some(v => v.message.includes('AWS'))).toBe(true);
   });
 
   it('JWT 토큰을 탐지해야 한다', async () => {

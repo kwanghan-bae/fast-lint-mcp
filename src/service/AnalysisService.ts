@@ -1,4 +1,4 @@
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, statSync } from 'fs';
 import glob from 'fast-glob';
 import pMap from 'p-map';
 import { simpleGit, SimpleGit } from 'simple-git';
@@ -205,13 +205,15 @@ export class AnalysisService {
       });
     }
 
-    // 테스트 커버리지 검증 프로세스
+    // 테스트 커버리지 검증 프로세스 고도화 (v2.2)
     let currentCoverage = 0;
     const coverageCandidates = [
-      join(process.cwd(), 'coverage', 'coverage-summary.json'),
-      join(process.cwd(), 'coverage-summary.json'),
+      this.config.rules.coveragePath, // 1순위: 사용자 직접 지정 경로
+      join(process.cwd(), this.config.rules.coverageDirectory, 'coverage-summary.json'), // 2순위: 지정 디렉토리 내 표준 리포트
+      join(process.cwd(), 'coverage', 'coverage-summary.json'), // 3순위: 기본 경로
       'coverage/coverage-summary.json',
-    ];
+      'coverage-summary.json',
+    ].filter(Boolean) as string[];
 
     let coveragePath = '';
     for (const cand of coverageCandidates) {
@@ -223,16 +225,41 @@ export class AnalysisService {
 
     if (coveragePath) {
       try {
+        const coverageStat = statSync(coveragePath);
+        const lastSrcUpdate = files.length > 0 
+          ? Math.max(...files.map(f => {
+              try { return statSync(join(process.cwd(), f)).mtimeMs; } catch(e) { return 0; }
+            }))
+          : 0;
+
+        // 리포트가 소스 수정보다 1분 이상 오래된 경우 경고 (v2.2 Freshness Check)
+        const isStale = coverageStat.mtimeMs < lastSrcUpdate - 60000;
+
         const content = readFileSync(coveragePath, 'utf-8');
-        const coverageData = JSON.parse(content);
-        currentCoverage = coverageData.total.lines.pct || 0;
+        // ... (parsing logic)
+        if (coveragePath.endsWith('.json')) {
+          const coverageData = JSON.parse(content);
+          currentCoverage = coverageData.total?.lines?.pct ?? 0;
+        } else if (coveragePath.endsWith('lcov.info')) {
+          const lines = content.split('\n');
+          const found = lines.filter(l => l.startsWith('LF:')).reduce((a, b) => a + parseInt(b.split(':')[1]), 0);
+          const hit = lines.filter(l => l.startsWith('LH:')).reduce((a, b) => a + parseInt(b.split(':')[1]), 0);
+          currentCoverage = found > 0 ? (hit / found) * 100 : 0;
+        }
+
+        if (isStale && rules.minCoverage > 0) {
+          violations.push({
+            type: 'COVERAGE',
+            message: `테스트 리포트가 소스 코드보다 오래되었습니다 (만료됨). 최신 커버리지를 반영하려면 'npm test'를 실행하세요.`,
+          });
+        }
       } catch (e) {
-        // 리포트 파싱 에러 시 0%로 간주
+        // ...
       }
     } else if (rules.minCoverage > 0) {
       violations.push({
         type: 'COVERAGE',
-        message: '테스트 커버리지 리포트를 찾을 수 없습니다. 테스트를 먼저 실행하세요.',
+        message: `테스트 커버리지 리포트를 찾을 수 없습니다 (검색 경로: ${this.config.rules.coverageDirectory}). 'npm test'를 실행하여 리포트를 생성하세요.`,
       });
     }
 

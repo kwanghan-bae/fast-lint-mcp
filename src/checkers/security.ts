@@ -16,21 +16,62 @@ const SECRET_PATTERNS = [
 ];
 
 /**
- * 파일의 텍스트 내용을 스캔하여 하드코딩된 보안 비밀 정보가 있는지 검사합니다.
- * @param filePath 분석할 파일 경로
- * @returns 보안 위반 사항 목록
+ * 문자열의 Shannon Entropy를 측정하여 무작위성을 계산합니다.
+ * 비밀번호나 API Key는 일반 단어보다 엔트로피가 높습니다.
+ */
+function calculateEntropy(str: string): number {
+  const len = str.length;
+  if (len === 0) return 0;
+  const frequencies: Record<string, number> = {};
+  for (const char of str) {
+    frequencies[char] = (frequencies[char] || 0) + 1;
+  }
+  return Object.values(frequencies).reduce((sum, count) => {
+    const p = count / len;
+    return sum - p * Math.log2(p);
+  }, 0);
+}
+
+/**
+ * 보안 탐지 예외 처리 로직이 포함된 정밀 스캔 (v2.2 Entropy)
  */
 export async function checkSecrets(filePath: string): Promise<Violation[]> {
   const content = readFileSync(filePath, 'utf-8');
   const violations: Violation[] = [];
 
+  // 정규식 매칭 시도
   for (const { id, pattern, message } of SECRET_PATTERNS) {
-    if (pattern.test(content)) {
-      violations.push({
-        type: 'SECURITY',
-        file: filePath,
-        message: `[${id}] ${message} 민감 정보는 환경 변수(.env)나 Secret Manager로 관리하세요.`,
-      });
+    // 기존 RegExp에서 source와 flags를 추출하여 'g' 플래그를 결합합니다.
+    const flags = pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g';
+    const regex = new RegExp(pattern.source, flags);
+    const matches = content.matchAll(regex);
+    
+    for (const match of matches) {
+      const fullMatch = match[0];
+      // 1. 색상 코드(#FFFFFF, #000 등)는 무조건 제외
+      if (fullMatch.match(/^#([A-Fa-f0-9]{3}){1,2}$/)) continue;
+
+      // 2. 따옴표 내부의 실제 값만 추출하여 엔트로피 측정
+      let secretValue = fullMatch;
+      if (fullMatch.includes(':') || fullMatch.includes('=')) {
+        const parts = fullMatch.split(/[:=]/);
+        secretValue = parts[parts.length - 1].replace(/["']/g, '').trim();
+      } else {
+        secretValue = fullMatch.replace(/["']/g, '').trim();
+      }
+
+      // 3. 엔트로피가 낮거나(일반 단어), 변수명이 명백한 비보안 항목인 경우 제외
+      const entropy = calculateEntropy(secretValue);
+      const isLikelySafe = fullMatch.match(/(color|class|style|theme|name|id|type|path)/i);
+
+      // 기준을 3.0으로 완화하여 더 확실하게 탐지합니다.
+      if (entropy > 3.0 && !isLikelySafe) {
+        violations.push({
+          type: 'SECURITY',
+          file: filePath,
+          message: `[${id}] ${message} (엔트로피: ${entropy.toFixed(2)}) 민감 정보 노출 의심.`,
+        });
+      }
     }
   }
 

@@ -32,6 +32,8 @@ describe('JavascriptProvider', () => {
       path: 'test.ts',
       lineCount: 50,
       complexity: 5,
+      isDataFile: false,
+      topComplexSymbols: [],
       customViolations: [],
     });
     vi.mocked(importCheck.checkHallucination).mockResolvedValue([]);
@@ -46,6 +48,8 @@ describe('JavascriptProvider', () => {
       path: 'test.ts',
       lineCount: 150,
       complexity: 5,
+      isDataFile: false,
+      topComplexSymbols: [],
       customViolations: [],
     });
     const violations = await provider.check('test.ts');
@@ -57,6 +61,8 @@ describe('JavascriptProvider', () => {
       path: 'test.ts',
       lineCount: 50,
       complexity: 15,
+      isDataFile: false,
+      topComplexSymbols: [{ name: 'testFunc', complexity: 15, kind: 'function', line: 1 }],
       customViolations: [],
     });
     const violations = await provider.check('test.ts');

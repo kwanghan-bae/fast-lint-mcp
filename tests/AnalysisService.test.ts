@@ -56,6 +56,8 @@ describe('AnalysisService', () => {
         maxComplexity: 15,
         minCoverage: 0,
         techDebtLimit: 20,
+        coverageDirectory: 'coverage',
+        coveragePath: undefined,
       },
       exclude: [],
       incremental: false,
