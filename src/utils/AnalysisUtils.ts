@@ -16,7 +16,7 @@ export function formatReport(report: QualityReport): string {
   const statusText = report.pass ? 'PASS' : 'FAIL';
 
   // 1. 헤더 및 종합 상태 출력
-  output += `## ${statusIcon} 프로젝트 품질 인증 결과: **${statusText}** (v2.1.1)\n\n`;
+  output += `## ${statusIcon} 프로젝트 품질 인증 결과: **${statusText}** (v2.1.2)\n\n`;
 
   if (report.violations.length > 0) {
     // 2. 위반 사항 목록을 Markdown 테이블로 구성

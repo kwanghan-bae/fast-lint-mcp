@@ -276,9 +276,9 @@ export class AnalysisService {
         : '프로젝트 전체 정밀 분석';
         
       suggestion = pass
-        ? `모든 품질 인증 기준을 통과했습니다. (v2.1.1 / 대상 파일: ${files.length}개, 모드: ${modeDesc})`
+        ? `모든 품질 인증 기준을 통과했습니다. (v2.1.2 / 대상 파일: ${files.length}개, 모드: ${modeDesc})`
         : violations.map((v) => v.message).join('\n') +
-          `\n\n(v2.1.1 / 총 ${files.length}개 파일 분석됨 - ${modeDesc}) 위 사항들을 수정한 후 다시 인증을 요청하세요.`;
+          `\n\n(v2.1.2 / 총 ${files.length}개 파일 분석됨 - ${modeDesc}) 위 사항들을 수정한 후 다시 인증을 요청하세요.`;
     }
 
     if (healingMessages.length > 0) {
