@@ -36,6 +36,7 @@ vi.mock('fs', () => ({
   readFileSync: vi.fn().mockReturnValue('content'),
   existsSync: vi.fn().mockReturnValue(false),
   statSync: vi.fn().mockReturnValue({ mtimeMs: Date.now() }),
+  readFile: vi.fn().mockImplementation((path, encoding, cb) => cb(null, 'content')),
 }));
 
 describe('AnalysisService', () => {
@@ -61,8 +62,8 @@ describe('AnalysisService', () => {
       customRules: [],
     };
     semantic = {
-      getDependents: vi.fn().mockReturnValue([]),
-      ensureInitialized: vi.fn(),
+        getDependents: vi.fn().mockReturnValue([]),
+        ensureInitialized: vi.fn().mockResolvedValue(undefined),
     };
     service = new AnalysisService(stateManager as any, config as any, semantic as any);
 
@@ -89,17 +90,17 @@ describe('AnalysisService', () => {
   it('증분 분석 모드에서 변경된 파일과 역의존성 파일을 분석해야 한다', async () => {
     config.incremental = true;
     vi.mocked(env.checkEnv).mockResolvedValue({ pass: true, missing: [] });
-
+    
     // getChangedFiles 모킹
     (service as any).git = {
-      checkIsRepo: vi.fn().mockResolvedValue(true),
-      status: vi.fn().mockResolvedValue({
-        modified: ['src/changed.ts'],
-        not_added: [],
-        created: [],
-        staged: [],
-        renamed: [],
-      }),
+        checkIsRepo: vi.fn().mockResolvedValue(true),
+        status: vi.fn().mockResolvedValue({
+            modified: ['src/changed.ts'],
+            not_added: [],
+            created: [],
+            staged: [],
+            renamed: []
+        })
     };
 
     // 역의존성 모킹
@@ -126,13 +127,11 @@ describe('AnalysisService', () => {
     stateManager.getLastCoverage.mockReturnValue(90);
 
     const fs = await import('fs');
-    vi.mocked(fs.existsSync).mockImplementation((path) =>
-      path.toString().includes('coverage-summary.json')
-    );
+    vi.mocked(fs.existsSync).mockImplementation((path) => path.toString().includes('coverage-summary.json'));
     vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ total: { lines: { pct: 85 } } }));
 
     const report = await service.runAllChecks();
     expect(report.pass).toBe(false);
-    expect(report.violations.some((v) => v.type === 'COVERAGE')).toBe(true);
+    expect(report.violations.some(v => v.type === 'COVERAGE')).toBe(true);
   });
 });

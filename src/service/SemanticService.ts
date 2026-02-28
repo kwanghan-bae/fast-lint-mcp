@@ -1,8 +1,13 @@
-import { readFileSync, existsSync } from 'fs';
+import { readFile, existsSync } from 'fs';
+import { promisify } from 'util';
 import { SymbolIndexer, SymbolInfo } from '../utils/SymbolIndexer.js';
 import { DependencyGraph } from '../utils/DependencyGraph.js';
 import { Lang, parse, SgNode } from '@ast-grep/napi';
 import { normalize } from 'path';
+import pMap from 'p-map';
+import os from 'os';
+
+const readFileAsync = promisify(readFile);
 
 /**
  * 특정 심볼(함수, 클래스 등)의 분석 메트릭 정보를 담는 인터페이스입니다.
@@ -35,11 +40,16 @@ export class SemanticService {
     this.initialized = true;
   }
 
-  getSymbolMetrics(filePath: string): SymbolMetric[] {
+  /**
+   * 특정 파일 내에 정의된 모든 주요 심볼들의 메트릭 정보를 비동기로 수집합니다.
+   */
+  async getSymbolMetricsAsync(filePath: string): Promise<SymbolMetric[]> {
     if (!existsSync(filePath)) return [];
     try {
-      const content = readFileSync(filePath, 'utf-8');
-      const lang = (filePath.endsWith('.ts') || filePath.endsWith('.tsx')) ? Lang.TypeScript : Lang.JavaScript;
+      const content = await readFileAsync(filePath, 'utf-8');
+      const isTs = filePath.endsWith('.ts') || filePath.endsWith('.tsx');
+      const lang = isTs ? Lang.TypeScript : Lang.JavaScript;
+
       const root = parse(lang, content).root();
       const metrics: SymbolMetric[] = [];
 
@@ -48,6 +58,23 @@ export class SemanticService {
     } catch (e) {
       return [];
     }
+  }
+
+  /**
+   * 기존 동기 메서드 (하위 호환성 유지)
+   */
+  getSymbolMetrics(filePath: string): SymbolMetric[] {
+    // 내부적으로 비동기 루프를 타지 않는 단순 collectMetrics는 동기적으로 유지 가능
+    // 단, 파일 읽기는 SemanticService 외부에서 처리된 것을 가정하거나 동기 함수 사용
+    const { readFileSync } = require('fs');
+    if (!existsSync(filePath)) return [];
+    const content = readFileSync(filePath, 'utf-8');
+    const isTs = filePath.endsWith('.ts') || filePath.endsWith('.tsx');
+    const lang = isTs ? Lang.TypeScript : Lang.JavaScript;
+    const root = parse(lang, content).root();
+    const metrics: SymbolMetric[] = [];
+    this.collectMetrics(root, metrics);
+    return metrics;
   }
 
   private collectMetrics(node: SgNode, metrics: SymbolMetric[]) {
@@ -104,6 +131,7 @@ export class SemanticService {
   }
 
   getSymbolContent(filePath: string, symbolName: string): string | null {
+    const { readFileSync } = require('fs');
     if (!existsSync(filePath)) return null;
     try {
       const content = readFileSync(filePath, 'utf-8');
@@ -140,24 +168,22 @@ export class SemanticService {
   }
 
   /**
-   * 프로젝트 전체에서 실제로 사용되지 않는 (참조가 없는) Export 심볼을 탐지합니다.
-   * Native Rust 엔진을 활용하여 모든 의존성 파일 내의 심볼 사용 여부를 초고속으로 배치 처리합니다.
+   * 프로젝트 전체에서 실제로 사용되지 않는 Export 심볼을 병렬로 탐지합니다.
    */
-  findDeadCode(): { file: string; symbol: string }[] {
+  async findDeadCode(): Promise<{ file: string; symbol: string }[]> {
     const deadCodes: { file: string; symbol: string }[] = [];
     const allSymbolsMap = this.indexer.symbolMap;
 
-    // 1. 모든 의존성 파일별로 어떤 심볼들을 체크해야 하는지 그룹화 (O(Symbols * Dependents) -> O(Files * Symbols))
     const depFileToNeededSymbols = new Map<string, Set<string>>();
     const symbolToInfo = new Map<string, SymbolInfo>();
 
     for (const [name, infos] of allSymbolsMap.entries()) {
-      if (name.includes('.')) continue; // 복합 키 제외
+      if (name.includes('.')) continue;
       for (const info of infos) {
         symbolToInfo.set(name, info);
         const dependents = this.depGraph.getDependents(info.filePath);
         for (const dep of dependents) {
-          if (normalize(dep) === normalize(info.filePath)) continue; // 자기 자신 제외
+          if (normalize(dep) === normalize(info.filePath)) continue;
           const set = depFileToNeededSymbols.get(dep) || new Set<string>();
           set.add(name);
           depFileToNeededSymbols.set(dep, set);
@@ -165,36 +191,30 @@ export class SemanticService {
       }
     }
 
-    // 2. 각 의존성 파일별로 단 한 번씩만 파싱하여 해당 파일에서 필요한 모든 심볼 탐색
     const symbolUsageMap = new Map<string, boolean>();
+    const concurrency = Math.max(1, os.cpus().length - 1);
 
-    for (const [depFile, symbols] of depFileToNeededSymbols.entries()) {
+    await pMap(Array.from(depFileToNeededSymbols.entries()), async ([depFile, symbols]) => {
       try {
-        const content = readFileSync(depFile, 'utf-8');
+        const content = await readFileAsync(depFile, 'utf-8');
         const lang = (depFile.endsWith('.ts') || depFile.endsWith('.tsx')) ? Lang.TypeScript : Lang.JavaScript;
         const root = parse(lang, content).root();
 
         for (const symbol of symbols) {
-          if (symbolUsageMap.get(symbol)) continue; // 이미 사용 중인 것으로 판명됨
-
-          // 텍스트 포함 여부로 1차 필터링
+          if (symbolUsageMap.get(symbol)) continue;
           if (!content.includes(symbol)) continue;
-
-          // AST 기반 식별자 매칭 (Rust 엔진)
           if (root.find({ rule: { kind: 'identifier', regex: `^${symbol}$` } })) {
             symbolUsageMap.set(symbol, true);
           }
         }
       } catch (e) {}
-    }
+    }, { concurrency });
 
-    // 3. 사용되지 않는 것으로 남은 심볼들 취합
     for (const [name, info] of symbolToInfo.entries()) {
       if (!symbolUsageMap.get(name)) {
         deadCodes.push({ file: info.filePath, symbol: name });
       }
     }
-
     return deadCodes;
   }
 

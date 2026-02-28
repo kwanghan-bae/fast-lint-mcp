@@ -57,8 +57,8 @@ describe('SemanticService (v2.0 Tools)', () => {
         expect(content).not.toContain('class Calculator');
     });
 
-    it('findDeadCode는 참조가 없는 Export 심볼을 찾아야 한다', () => {
-        const deadCodes = semantic.findDeadCode();
+    it('findDeadCode는 참조가 없는 Export 심볼을 찾아야 한다', async () => {
+        const deadCodes = await semantic.findDeadCode();
         expect(deadCodes.some(d => d.symbol === 'unusedFunction')).toBe(true);
         expect(deadCodes.some(d => d.symbol === 'Calculator')).toBe(false); // caller.ts에서 쓰임
     });

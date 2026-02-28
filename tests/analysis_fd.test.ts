@@ -1,11 +1,19 @@
 import { describe, it, expect, vi } from 'vitest';
 import { findOrphanFiles } from '../src/analysis/fd.js';
 import glob from 'fast-glob';
-import { readFileSync } from 'fs';
+import { readFile } from 'fs';
 import { parse } from '@ast-grep/napi';
 
 vi.mock('fast-glob');
-vi.mock('fs');
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>();
+  return {
+    ...actual,
+    readFile: vi.fn(),
+    readFileSync: vi.fn(),
+  };
+});
+
 vi.mock('@ast-grep/napi', async (importOriginal) => {
   const original = await importOriginal<typeof import('@ast-grep/napi')>();
   return {
@@ -19,15 +27,24 @@ describe('Orphan File Analysis (fast-glob + sg Native)', () => {
     // glob 모킹
     vi.mocked(glob).mockResolvedValue(['src/index.ts', 'src/used.ts', 'src/orphan.ts'] as any);
 
-    // readFileSync 모킹
-    vi.mocked(readFileSync).mockReturnValue('mocked content');
+    // readFileAsync(promisify(readFile)) 대응을 위한 모킹
+    vi.mocked(readFile).mockImplementation((path: any, encoding: any, cb: any) => {
+      if (typeof encoding === 'function') {
+        cb = encoding;
+        encoding = undefined;
+      }
+      
+      if (path.includes('index.ts')) {
+        cb(null, 'index_content');
+      } else {
+        cb(null, 'empty_content');
+      }
+    });
 
     // parse & findAll 모킹
     vi.mocked(parse).mockImplementation((lang, content) => {
-      // index.ts일 때만 used를 참조하는 상황 시뮬레이션
       const mockRoot = {
         findAll: vi.fn().mockImplementation((pattern) => {
-          // 어떤 import 패턴이든 content가 index_content면 used를 반환하도록 유연하게 대응
           if (pattern.includes('import') && content === 'index_content') {
             return [
               {
@@ -42,12 +59,6 @@ describe('Orphan File Analysis (fast-glob + sg Native)', () => {
         }),
       };
       return { root: () => mockRoot } as any;
-    });
-
-    // 각 파일에 대해 다른 내용을 제공하기 위한 readFileSync 모킹 재정의
-    vi.mocked(readFileSync).mockImplementation((path: any) => {
-      if (path.includes('index.ts')) return 'index_content';
-      return 'empty_content';
     });
 
     const orphans = await findOrphanFiles();

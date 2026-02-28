@@ -229,7 +229,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'find-dead-code': {
         // 미사용 코드 탐지
-        const deadCodes = getSemantic().findDeadCode();
+        const deadCodes = await getSemantic().findDeadCode();
         if (deadCodes.length === 0) {
           return {
             content: [{ type: 'text', text: '미사용 코드가 발견되지 않았습니다. (Great Job!)' }],
