@@ -40,7 +40,17 @@ export const ConfigSchema = z.object({
     .default({}),
   incremental: z.boolean().default(true), // Git 변경 사항 기반의 증분 분석 사용 여부
   enableMutationTest: z.boolean().default(false), // 변이 테스트(Mutation Test) 활성화 여부
-  exclude: z.array(z.string()).default(['node_modules/**', 'dist/**', 'tests/**']), // 분석 제외 경로
+  exclude: z.array(z.string()).default([
+    'node_modules/**', 
+    'dist/**', 
+    'out/**',
+    'build/**',
+    '.next/**',
+    'coverage/**',
+    'android/**',
+    'ios/**',
+    'tests/**'
+  ]), // 분석 제외 경로
   customRules: z.array(CustomRuleSchema).default([]), // 사용자 정의 정적 분석 규칙 목록
   architectureRules: z.array(ArchitectureRuleSchema).default([]), // 아키텍처 의존성 규칙 목록
 });

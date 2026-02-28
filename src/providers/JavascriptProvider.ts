@@ -7,6 +7,24 @@ import { runSemanticReview } from '../analysis/reviewer.js';
 import { runSelfHealing } from '../checkers/fixer.js';
 import { Violation } from '../types/index.js';
 import { BaseQualityProvider } from './BaseQualityProvider.js';
+import { AstCacheManager } from '../utils/AstCacheManager.js';
+import { checkTestValidity } from '../analysis/test-check.js';
+
+// AST 패턴 정의 (v3.0 Semantic)
+const UI_AST_PATTERNS = [
+  'use$A($$$)', // Hooks
+  '< $A $$$ />', // JSX
+  'createElement($$$)',
+  'render($$$)',
+];
+
+const LOGIC_AST_PATTERNS = [
+  'Math.$A($$$)',
+  'new Map($$$)',
+  'new Set($$$)',
+  'crypto.$A($$$)',
+  'fetch($$$)',
+];
 
 /**
  * JavaScript 및 TypeScript 언어에 특화된 품질 분석을 수행하는 프로바이더 클래스입니다.
@@ -28,54 +46,76 @@ export class JavascriptProvider extends BaseQualityProvider {
     const rules = this.config.rules;
     const customRules = this.config.customRules;
 
+    // 테스트 파일 여부 판별 (v3.0)
+    const isTestFile = filePath.match(/\.(test|spec)\.[tj]sx?$/) || filePath.includes('/tests/') || filePath.includes('/__tests__/');
+
+    if (isTestFile) {
+      const testResult = checkTestValidity(filePath);
+      if (!testResult.isValid) {
+        violations.push({
+          type: 'READABILITY',
+          file: filePath,
+          message: `[테스트 신뢰성] ${testResult.message}`,
+        });
+      }
+    }
+
     // 1. 기본 AST 메트릭 분석: 파일 크기, 복잡도 및 성격(Data vs Logic)을 검사합니다.
     const metrics = await analyzeFile(filePath, customRules);
+    const isDataFile = metrics.isDataFile;
 
-    // 데이터 파일(예: 대규모 설정, 상수 모음)인 경우 제약 조건을 대폭 완화합니다. (Context-Aware v2.2)
-    const effectiveMaxLines = metrics.isDataFile ? rules.maxLineCount * 10 : rules.maxLineCount;
-    const effectiveMaxComplexity = metrics.isDataFile ? rules.maxComplexity * 10 : rules.maxComplexity;
+    // 데이터 파일 여부에 따른 임계치 자동 계산 (v3.0 Common)
+    const { maxLines, maxComplexity } = this.getEffectiveLimits(isDataFile);
 
-    if (metrics.lineCount > effectiveMaxLines) {
+    if (!isDataFile && metrics.lineCount > maxLines) {
       violations.push({
         type: 'SIZE',
         file: filePath,
         value: metrics.lineCount,
-        limit: effectiveMaxLines,
-        message: metrics.isDataFile 
-          ? `데이터 파일의 크기가 임계치를 초과했습니다 (${metrics.lineCount}줄). 파일을 논리적 단위로 분할(Data Sharding)하세요.`
-          : `단일 로직 파일이 너무 큽니다 (${metrics.lineCount}줄). 에이전트의 환각을 방지하기 위해 파일을 작게 분리하세요.`,
+        limit: maxLines,
+        message: `단일 로직 파일이 너무 큽니다 (${metrics.lineCount}줄). 에이전트의 환각을 방지하기 위해 파일을 작게 분리하세요.`,
       });
     }
 
-    if (metrics.complexity > effectiveMaxComplexity) {
-      const blueprint = metrics.topComplexSymbols
-        .map(s => `- [${s.kind}] ${s.name} (Complexity: ${s.complexity}, L${s.line})`)
-        .join('\n');
+    if (!isDataFile && metrics.complexity > maxComplexity) {
+      // 이름이 너무 짧은(3자 이하) 심볼은 내부 구현이거나 미니파이된 코드일 확률이 높으므로 제외
+      const validSymbols = metrics.topComplexSymbols.filter(s => s.name.length > 3);
       
-      const fileContent = existsSync(filePath) ? readFileSync(filePath, 'utf-8') : '';
-      const hasUIPatterns = fileContent.match(/(useState|useEffect|useMemo|React|JSX|createElement|view|render)/i);
-      const hasLogicPatterns = fileContent.match(/(Math|RegExp|Buffer|Map|Set|crypto|fetch|axios)/i);
+      if (validSymbols.length > 0) {
+        const blueprint = validSymbols
+          .map(s => `- [${s.kind}] ${s.name} (Complexity: ${s.complexity}, L${s.line})`)
+          .join('\n');
+        
+        const root = AstCacheManager.getInstance().getRootNode(filePath);
+        let hasUIPatterns = false;
+        let hasLogicPatterns = false;
 
-      let advice = '코드 복잡도가 기준을 초과했습니다. 로직을 더 작은 함수나 클래스로 분리하세요.';
-      if (hasUIPatterns && !hasLogicPatterns) {
-        advice = '이 컴포넌트에는 UI 렌더링과 복잡한 상태 관리가 혼재되어 있습니다. Business Logic을 Custom Hook으로 추출하거나, Presentational Component로 UI를 분리하세요.';
-      } else if (hasLogicPatterns && !hasUIPatterns) {
-        advice = '이 파일에는 고도의 연산 로직이 포함되어 있습니다. 서비스 레이어나 순수 함수 기반의 유틸리티 라이브러리로 로직을 캡슐화하는 것이 좋겠습니다.';
-      } else if (hasUIPatterns && hasLogicPatterns) {
-        advice = '렌더링 코드와 복잡한 계산 로직이 강하게 결합되어 있습니다. 유지보수를 위해 렌더링부와 로직부를 엄격히 분리(SOC: Separation of Concerns)하세요.';
+        if (root) {
+          hasUIPatterns = UI_AST_PATTERNS.some(p => root.findAll(p).length > 0);
+          hasLogicPatterns = LOGIC_AST_PATTERNS.some(p => root.findAll(p).length > 0);
+        }
+
+        let advice = '코드 복잡도가 기준을 초과했습니다. 로직을 더 작은 함수나 클래스로 분리하세요.';
+        if (hasUIPatterns && !hasLogicPatterns) {
+          advice = '이 컴포넌트에는 UI 렌더링과 복잡한 상태 관리가 혼재되어 있습니다. Business Logic을 Custom Hook으로 추출하거나, Presentational Component로 UI를 분리하세요.';
+        } else if (hasLogicPatterns && !hasUIPatterns) {
+          advice = '이 파일에는 고도의 연산 로직이 포함되어 있습니다. 서비스 레이어나 순수 함수 기반의 유틸리티 라이브러리로 로직을 캡슐화하는 것이 좋겠습니다.';
+        } else if (hasUIPatterns && hasLogicPatterns) {
+          advice = '렌더링 코드와 복잡한 계산 로직이 강하게 결합되어 있습니다. 유지보수를 위해 렌더링부와 로직부를 엄격히 분리(SOC: Separation of Concerns)하세요.';
+        }
+
+        violations.push({
+          type: 'COMPLEXITY',
+          file: filePath,
+          value: metrics.complexity,
+          limit: maxComplexity,
+          message: `전체 복잡도(${metrics.complexity})가 기준을 초과했습니다. \n\n[Refactoring Blueprint]\n${blueprint}\n\n* Senior Advice: ${advice}`,
+        });
       }
-
-      violations.push({
-        type: 'COMPLEXITY',
-        file: filePath,
-        value: metrics.complexity,
-        limit: effectiveMaxComplexity,
-        message: `전체 복잡도(${metrics.complexity})가 기준을 초과했습니다. \n\n[Refactoring Blueprint]\n${blueprint}\n\n* Senior Advice: ${advice}`,
-      });
     }
 
     // 2. AI 환각(Hallucination) 체크: 존재하지 않는 파일이나 라이브러리 임포트를 탐지합니다.
-    const hallucinationViolations = await checkHallucination(filePath);
+    const hallucinationViolations = await checkHallucination(filePath, process.cwd(), this.config.exclude);
     hallucinationViolations.forEach((hv) => {
       violations.push({
         type: 'HALLUCINATION',
@@ -93,7 +133,7 @@ export class JavascriptProvider extends BaseQualityProvider {
     // 4. 아키텍처 가드레일 체크: 레이어 간 의존성 방향 규칙 위반 여부를 검사합니다.
     const architectureRules = this.config.architectureRules;
     if (architectureRules && architectureRules.length > 0) {
-      const archViolations = await checkArchitecture(filePath, architectureRules);
+      const archViolations = await checkArchitecture(filePath, architectureRules, process.cwd(), this.config.exclude);
       archViolations.forEach((av) => {
         violations.push({
           type: 'ARCHITECTURE',
@@ -108,7 +148,8 @@ export class JavascriptProvider extends BaseQualityProvider {
     violations.push(...secretViolations);
 
     // 6. 시맨틱 코드 리뷰: 중첩 깊이, 파라미터 개수, 한글 주석 준수 여부 등 가독성 규칙을 검사합니다.
-    const reviewViolations = await runSemanticReview(filePath);
+    // 데이터 파일인 경우 노이즈를 줄이기 위해 세맨틱 리뷰를 스킵합니다. (v2.2.1)
+    const reviewViolations = await runSemanticReview(filePath, isDataFile);
     violations.push(...reviewViolations);
 
     // 7. 변이 테스트(Mutation Test): 테스트 코드의 견고함을 검증합니다 (설정 시에만 실행).

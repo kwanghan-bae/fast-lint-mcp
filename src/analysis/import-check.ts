@@ -5,15 +5,19 @@ import glob from 'fast-glob';
 import { resolveModulePath, loadProjectAliases } from '../utils/PathResolver.js';
 import { ArchitectureRule } from '../config.js';
 import { builtinModules } from 'module';
+import { AstCacheManager } from '../utils/AstCacheManager.js';
 
 /**
- * 프로젝트 내의 모든 파일 목록을 가져옵니다.
+ * 프로젝트 내의 모든 파일 목록을 가져옵니다. (v2.2.2 Dynamic Exclude)
  */
-export async function getProjectFiles(workspacePath: string): Promise<string[]> {
+export async function getProjectFiles(
+  workspacePath: string,
+  ignorePatterns: string[] = ['**/node_modules/**', '**/dist/**']
+): Promise<string[]> {
   const rawFiles = await glob(['**/*.{ts,js,tsx,jsx,json,css,svg}'], { 
     cwd: workspacePath, 
     absolute: true,
-    ignore: ['**/node_modules/**', '**/dist/**', '**/tests/**', '**/coverage/**']
+    ignore: ignorePatterns
   });
   return rawFiles.map((f) => normalize(f));
 }
@@ -24,9 +28,13 @@ export async function getProjectFiles(workspacePath: string): Promise<string[]> 
 export async function checkArchitecture(
   filePath: string,
   rules: ArchitectureRule[],
-  workspacePath: string = process.cwd()
+  workspacePath: string = process.cwd(),
+  ignorePatterns: string[] = ['**/node_modules/**', '**/dist/**']
 ): Promise<{ id: string; message: string }[]> {
   if (!existsSync(filePath)) return [];
+  const root = AstCacheManager.getInstance().getRootNode(filePath);
+  if (!root) return [];
+
   const violations: { id: string; message: string }[] = [];
   const absoluteFilePath = isAbsolute(filePath) ? filePath : join(workspacePath, filePath);
   const relativeFilePath = relative(workspacePath, absoluteFilePath);
@@ -41,11 +49,7 @@ export async function checkArchitecture(
 
   if (activeRules.length === 0) return [];
 
-  const content = readFileSync(filePath, 'utf-8');
-  const lang = filePath.endsWith('.ts') ? Lang.TypeScript : Lang.JavaScript;
-  const ast = parse(lang, content);
-  const root = ast.root();
-  const allFiles = await getProjectFiles(workspacePath);
+  const allFiles = await getProjectFiles(workspacePath, ignorePatterns);
 
   const patterns = ["import $A from '$B'", 'import $A from "$B"', "export { $$$ } from '$B'"];
 
@@ -73,16 +77,17 @@ export async function checkArchitecture(
 }
 
 /**
- * AI 에이전트의 환각(Hallucination) 탐지 (v2.2 Alias Support)
+ * AI 에이전트의 환각(Hallucination) 탐지 (v2.2.2 Exclude Sync)
  */
 export async function checkHallucination(
   filePath: string,
-  workspacePath: string = process.cwd()
+  workspacePath: string = process.cwd(),
+  ignorePatterns: string[] = ['**/node_modules/**', '**/dist/**']
 ): Promise<{ id: string; message: string }[]> {
   if (!existsSync(filePath)) return [];
-  const content = readFileSync(filePath, 'utf-8');
-  const lang = filePath.endsWith('.ts') ? Lang.TypeScript : Lang.JavaScript;
-  const root = parse(lang, content).root();
+  const root = AstCacheManager.getInstance().getRootNode(filePath);
+  if (!root) return [];
+
   const violations: { id: string; message: string }[] = [];
 
   const pkgPath = join(workspacePath, 'package.json');
@@ -96,7 +101,7 @@ export async function checkHallucination(
     } catch (e) {}
   }
 
-  const allFiles = await getProjectFiles(workspacePath);
+  const allFiles = await getProjectFiles(workspacePath, ignorePatterns);
   const absoluteFilePath = isAbsolute(filePath) ? filePath : join(workspacePath, filePath);
   const aliases = loadProjectAliases(workspacePath);
   const nodeBuiltins = new Set([...builtinModules, ...builtinModules.map((m) => `node:${m}`)]);
@@ -140,9 +145,9 @@ export async function checkHallucination(
  */
 export async function checkFakeLogic(filePath: string): Promise<{ id: string; message: string }[]> {
   if (!existsSync(filePath)) return [];
-  const content = readFileSync(filePath, 'utf-8');
-  const lang = filePath.endsWith('.ts') ? Lang.TypeScript : Lang.JavaScript;
-  const root = parse(lang, content).root();
+  const root = AstCacheManager.getInstance().getRootNode(filePath);
+  if (!root) return [];
+
   const violations: { id: string; message: string }[] = [];
 
   root.findAll({ rule: { kind: 'function_declaration' } }).forEach((m) => {

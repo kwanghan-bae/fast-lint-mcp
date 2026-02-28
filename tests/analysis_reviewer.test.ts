@@ -1,10 +1,15 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { runSemanticReview } from '../src/analysis/reviewer.js';
 import { writeFileSync, rmSync, existsSync } from 'fs';
 import { join } from 'path';
+import { AstCacheManager } from '../src/utils/AstCacheManager.js';
 
 describe('runSemanticReview', () => {
   const testFile = join(process.cwd(), 'temp_review.ts');
+
+  beforeEach(() => {
+    AstCacheManager.getInstance().clear();
+  });
 
   afterEach(() => {
     if (existsSync(testFile)) rmSync(testFile);

@@ -1,12 +1,21 @@
 import { readFileSync, existsSync } from 'fs';
 import { Lang, parse, SgNode } from '@ast-grep/napi';
 import { Violation } from '../types/index.js';
+import { AstCacheManager } from '../utils/AstCacheManager.js';
+
+// 프리컴파일된 정규식 (v3.0 Performance)
+const KOREAN_CHAR_REGEX = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/;
+const COMMENT_PATTERN_REGEX = /\/\/|\/\*|\*/g;
 
 /**
  * 정성적 코드 품질을 분석하고 시니어 개발자의 관점에서 조언을 생성합니다.
  */
-export async function runSemanticReview(filePath: string): Promise<Violation[]> {
-  if (!existsSync(filePath)) return [];
+export async function runSemanticReview(filePath: string, isDataFile: boolean = false): Promise<Violation[]> {
+  if (!existsSync(filePath) || isDataFile) return [];
+
+  // 1. AST 루트 노드 획득 (캐시 활용 v3.0)
+  const root = AstCacheManager.getInstance().getRootNode(filePath);
+  if (!root) return [];
 
   // 피드백 반영: 테스트 파일(.test, .spec) 및 테스트 디렉토리는 주석 강제 규칙에서 제외하여 소음을 줄입니다.
   const isTestFile =
@@ -15,17 +24,8 @@ export async function runSemanticReview(filePath: string): Promise<Violation[]> 
     filePath.includes('/tests/') ||
     filePath.includes('/__tests__/');
 
-  const content = readFileSync(filePath, 'utf-8');
-  const isTs =
-    filePath.endsWith('.ts') ||
-    filePath.endsWith('.tsx') ||
-    filePath.endsWith('.cts') ||
-    filePath.endsWith('.mts');
-  const lang = isTs ? Lang.TypeScript : Lang.JavaScript;
-  const ast = parse(lang, content);
-  const root = ast.root();
+  const content = root.text();
   const violations: Violation[] = [];
-
   const allLines = content.split(/\r?\n/);
 
   /**
@@ -65,7 +65,7 @@ export async function runSemanticReview(filePath: string): Promise<Violation[]> 
       }
 
       if (line.includes('//') || line.includes('*') || line.includes('/*')) {
-        if (/[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(line)) return true;
+        if (KOREAN_CHAR_REGEX.test(line)) return true;
         currentLineIdx--;
         checkedLines++;
       } else {
@@ -75,18 +75,21 @@ export async function runSemanticReview(filePath: string): Promise<Violation[]> 
     return false;
   };
 
-  // 1. 클래스 선언 검사 (테스트 파일 제외)
+  // 1. 클래스 선언 검사 (이름 3자 이하 제외)
   if (!isTestFile) {
     root
       .findAll({ rule: { any: [{ kind: 'class_declaration' }, { kind: 'class' }] } })
       .forEach((m) => {
         if (m.kind() === 'class' && m.parent()?.kind() === 'class_declaration') return;
 
-        const idNode = isTs
-          ? m.find({ rule: { any: [{ kind: 'type_identifier' }, { kind: 'identifier' }] } })
-          : m.find({ rule: { kind: 'identifier' } });
-
+        let idNode = null;
+        try {
+          idNode = m.find({ rule: { any: [{ kind: 'identifier' }, { kind: 'type_identifier' }] } });
+        } catch (e) {
+          idNode = m.find({ rule: { kind: 'identifier' } });
+        }
         const className = idNode?.text().trim() || 'unknown';
+        if (className !== 'unknown' && className.length <= 3) return;
 
         if (!hasKoreanCommentAbove(m)) {
           violations.push({
@@ -112,8 +115,8 @@ export async function runSemanticReview(filePath: string): Promise<Violation[]> 
     .forEach((m) => {
       const idNode = m.find({ rule: { kind: 'identifier' } });
       const funcDisplayName = idNode?.text() || 'anonymous';
+      if (funcDisplayName.length <= 3) return;
 
-      // (1) Named Function 선언 상단 주석 검사 (테스트 파일 제외)
       if (!isTestFile && m.kind() === 'function_declaration' && !hasKoreanCommentAbove(m)) {
         violations.push({
           type: 'READABILITY',
@@ -122,15 +125,14 @@ export async function runSemanticReview(filePath: string): Promise<Violation[]> 
         });
       }
 
-      // (2) 함수 본문 분석 (테스트 파일 제외)
       if (!isTestFile) {
         const body = m.text();
         const bodyLines = body.split(/\r?\n/);
-        const hasKorean = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(body);
+        if (bodyLines.length < 5) return;
 
-        // 상단 JSDoc 주석도 주석 개수에 포함시킴
+        const hasKorean = KOREAN_CHAR_REGEX.test(body);
         const hasTopComment = hasKoreanCommentAbove(m);
-        const internalCommentCount = (body.match(/\/\/|\/\*|\*/g) || []).length;
+        const internalCommentCount = (body.match(COMMENT_PATTERN_REGEX) || []).length;
         const totalCommentCount = internalCommentCount + (hasTopComment ? 1 : 0);
 
         if (bodyLines.length > 50) {
@@ -142,10 +144,7 @@ export async function runSemanticReview(filePath: string): Promise<Violation[]> 
         }
 
         if (bodyLines.length > 20 && !hasKorean && totalCommentCount > 0) {
-          const hasAnyKorean =
-            hasKorean ||
-            (hasTopComment && /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(allLines[m.range().start.line - 1] || ''));
-
+          const hasAnyKorean = hasKorean || (hasTopComment && KOREAN_CHAR_REGEX.test(allLines[m.range().start.line - 1] || ''));
           if (!hasAnyKorean) {
             violations.push({
               type: 'READABILITY',
@@ -163,20 +162,15 @@ export async function runSemanticReview(filePath: string): Promise<Violation[]> 
       }
     });
 
-  // 3. 클래스 멤버 검사 (테스트 파일 제외)
+  // 3. 클래스 멤버 검사
   if (!isTestFile) {
     root.findAll({ rule: { kind: 'class_body' } }).forEach((body) => {
       body.children().forEach((m) => {
         const kindName = m.kind() as string;
-        if (
-          kindName.includes('definition') ||
-          kindName.includes('method') ||
-          kindName.includes('field')
-        ) {
-          const nameNode = m.find({
-            rule: { any: [{ kind: 'property_identifier' }, { kind: 'identifier' }] },
-          });
+        if (kindName.includes('definition') || kindName.includes('method') || kindName.includes('field')) {
+          const nameNode = m.find({ rule: { any: [{ kind: 'property_identifier' }, { kind: 'identifier' }] } });
           const varName = nameNode?.text() || 'unknown';
+          if (varName.length <= 3) return;
           const kindLabel = kindName.includes('method') ? '메서드' : '멤버 변수';
 
           if (!hasKoreanCommentAbove(m)) {
@@ -191,7 +185,7 @@ export async function runSemanticReview(filePath: string): Promise<Violation[]> 
     });
   }
 
-  // 4. 전역 요소 및 CJS 할당 검사 (스코프 정밀화)
+  // 4. 전역 요소 검사
   root
     .findAll({
       rule: {
@@ -205,9 +199,6 @@ export async function runSemanticReview(filePath: string): Promise<Violation[]> 
     .forEach((m) => {
       const parent = m.parent();
       const parentKind = parent?.kind();
-
-      // 피드백 반영: 최상위 레벨(program)이나 export 문에 직접 속한 경우만 검사 대상으로 한정
-      // 함수 내부의 지역 변수(statement_block 등)는 무시합니다.
       if (parentKind !== 'program' && parentKind !== 'export_statement') return;
 
       let varName = '';
@@ -226,7 +217,7 @@ export async function runSemanticReview(filePath: string): Promise<Violation[]> 
         typeLabel = isFunction ? '함수형 변수' : '전역 변수';
       }
 
-      if (varName.includes('{') || varName.includes('[')) return;
+      if (varName.includes('{') || varName.includes('[') || varName.length <= 3) return;
 
       if (!hasKoreanCommentAbove(m)) {
         violations.push({
@@ -237,14 +228,13 @@ export async function runSemanticReview(filePath: string): Promise<Violation[]> 
       }
     });
 
-  // 5. 정성적 리뷰 (중첩 등 - 테스트 파일 제외)
+  // 5. 정성적 리뷰 (중첩 등)
   if (!isTestFile) {
     if (root.findAll('if ($A) { if ($B) { if ($C) { $$$ } } }').length > 0) {
       violations.push({
         type: 'READABILITY',
         file: filePath,
-        message:
-          '[Senior Advice] 코드 중첩이 너무 깊습니다. 조기 리턴(Early Return)을 활용하여 코드 흐름을 단순화하세요.',
+        message: '[Senior Advice] 코드 중첩이 너무 깊습니다. 조기 리턴(Early Return)을 활용하여 코드 흐름을 단순화하세요.',
       });
     }
 
@@ -252,8 +242,7 @@ export async function runSemanticReview(filePath: string): Promise<Violation[]> 
       violations.push({
         type: 'READABILITY',
         file: filePath,
-        message:
-          '[Senior Advice] 함수의 파라미터가 너무 많습니다 (5개 이상). 관련 데이터를 객체로 묶어서 전달하는 것을 고려하세요.',
+        message: '[Senior Advice] 함수의 파라미터가 너무 많습니다 (5개 이상). 관련 데이터를 객체로 묶어서 전달하는 것을 고려하세요.',
       });
     }
   }

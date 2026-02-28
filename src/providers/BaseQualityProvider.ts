@@ -23,10 +23,18 @@ export abstract class BaseQualityProvider implements QualityProvider {
   constructor(protected config: ConfigService) {}
 
   /**
+   * 데이터 파일 여부에 따라 실질적인 임계값을 계산합니다. (v3.0 Common)
+   */
+  protected getEffectiveLimits(isDataFile: boolean) {
+    const rules = this.config.rules;
+    return {
+      maxLines: isDataFile ? Infinity : rules.maxLineCount,
+      maxComplexity: isDataFile ? Infinity : rules.maxComplexity,
+    };
+  }
+
+  /**
    * 대상 파일에 대해 정적 분석을 수행하여 품질 위반 사항을 찾아냅니다.
-   * 각 언어별 프로바이더에서 구체적인 분석 로직을 구현해야 합니다.
-   * @param filePath 분석할 파일의 경로
-   * @returns 발견된 위반 사항(Violation) 배열
    */
   abstract check(filePath: string): Promise<Violation[]>;
 

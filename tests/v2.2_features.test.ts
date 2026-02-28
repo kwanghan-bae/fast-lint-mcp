@@ -4,11 +4,13 @@ import { analyzeFile } from '../src/analysis/sg.js';
 import { JavascriptProvider } from '../src/providers/JavascriptProvider.js';
 import { writeFileSync, rmSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
+import { AstCacheManager } from '../src/utils/AstCacheManager.js';
 
 describe('v2.2 New Features Validation', () => {
   const workspace = join(process.cwd(), 'temp_v22_test');
 
   beforeEach(() => {
+    AstCacheManager.getInstance().clear();
     if (!existsSync(workspace)) mkdirSync(workspace);
   });
 

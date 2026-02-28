@@ -32,6 +32,11 @@ function calculateEntropy(str: string): number {
   }, 0);
 }
 
+// 프리컴파일된 정규식 (v3.0 Performance)
+const HEX_COLOR_REGEX = /^#([A-Fa-f0-9]{3}){1,2}$/;
+const SAFE_IDENTIFIER_REGEX = /(color|class|style|theme|name|id|type|path|identifier|key_id|key_type|save_key)/i;
+const CONSTANT_KEY_REGEX = /^[A-Z_]+_KEY\s*[:=]/;
+
 /**
  * 보안 탐지 예외 처리 로직이 포함된 정밀 스캔 (v2.2 Entropy)
  */
@@ -39,19 +44,15 @@ export async function checkSecrets(filePath: string): Promise<Violation[]> {
   const content = readFileSync(filePath, 'utf-8');
   const violations: Violation[] = [];
 
-  // 정규식 매칭 시도
   for (const { id, pattern, message } of SECRET_PATTERNS) {
-    // 기존 RegExp에서 source와 flags를 추출하여 'g' 플래그를 결합합니다.
     const flags = pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g';
     const regex = new RegExp(pattern.source, flags);
     const matches = content.matchAll(regex);
     
     for (const match of matches) {
       const fullMatch = match[0];
-      // 1. 색상 코드(#FFFFFF, #000 등)는 무조건 제외
-      if (fullMatch.match(/^#([A-Fa-f0-9]{3}){1,2}$/)) continue;
+      if (HEX_COLOR_REGEX.test(fullMatch)) continue;
 
-      // 2. 따옴표 내부의 실제 값만 추출하여 엔트로피 측정
       let secretValue = fullMatch;
       if (fullMatch.includes(':') || fullMatch.includes('=')) {
         const parts = fullMatch.split(/[:=]/);
@@ -60,11 +61,9 @@ export async function checkSecrets(filePath: string): Promise<Violation[]> {
         secretValue = fullMatch.replace(/["']/g, '').trim();
       }
 
-      // 3. 엔트로피가 낮거나(일반 단어), 변수명이 명백한 비보안 항목인 경우 제외
       const entropy = calculateEntropy(secretValue);
-      const isLikelySafe = fullMatch.match(/(color|class|style|theme|name|id|type|path)/i);
+      const isLikelySafe = SAFE_IDENTIFIER_REGEX.test(fullMatch) || CONSTANT_KEY_REGEX.test(fullMatch);
 
-      // 기준을 3.0으로 완화하여 더 확실하게 탐지합니다.
       if (entropy > 3.0 && !isLikelySafe) {
         violations.push({
           type: 'SECURITY',
