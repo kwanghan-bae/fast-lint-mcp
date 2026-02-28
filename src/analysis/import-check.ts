@@ -7,21 +7,18 @@ import { ArchitectureRule } from '../config.js';
 import { builtinModules } from 'module';
 
 /**
- * 프로젝트 내의 모든 파일 목록을 메모리에 캐싱하여 성능을 최적화합니다.
- * 파일 탐색 작업을 매번 수행하지 않고 한 번의 세션 동안 재사용합니다.
- */
-let cachedFileList: string[] | null = null;
-
-/**
- * 프로젝트 내의 모든 소스 파일 목록을 가져옵니다.
+ * 프로젝트 내의 모든 파일 목록을 가져옵니다. (Zero-Cache 아키텍처에 맞춰 매 세션 새로 갱신 가능하도록 개선)
  * @param workspacePath 프로젝트 루트 경로
  * @returns 절대 경로로 변환된 파일 목록
  */
-async function getProjectFiles(workspacePath: string): Promise<string[]> {
-  if (cachedFileList) return cachedFileList;
-  const rawFiles = await glob(['src/**/*.{ts,js,tsx,jsx}'], { cwd: workspacePath, absolute: true });
-  cachedFileList = rawFiles.map((f) => normalize(f));
-  return cachedFileList;
+export async function getProjectFiles(workspacePath: string): Promise<string[]> {
+  // .json, .css, .svg 등 다양한 자산 파일도 임포트 대상이 될 수 있으므로 확장자 범위를 넓힙니다.
+  const rawFiles = await glob(['**/*.{ts,js,tsx,jsx,json,css,svg}'], { 
+    cwd: workspacePath, 
+    absolute: true,
+    ignore: ['**/node_modules/**', '**/dist/**', '**/tests/**']
+  });
+  return rawFiles.map((f) => normalize(f));
 }
 
 /**

@@ -114,7 +114,11 @@ export async function runSemanticReview(filePath: string): Promise<Violation[]> 
       const body = m.text();
       const bodyLines = body.split(/\r?\n/);
       const hasKorean = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(body);
-      const commentCount = (body.match(/\/\/|\/\*/g) || []).length;
+      
+      // 상단 JSDoc 주석도 주석 개수에 포함시킴
+      const hasTopComment = hasKoreanCommentAbove(m);
+      const internalCommentCount = (body.match(/\/\/|\/\*|\*/g) || []).length;
+      const totalCommentCount = internalCommentCount + (hasTopComment ? 1 : 0);
 
       if (bodyLines.length > 50) {
         violations.push({
@@ -124,13 +128,18 @@ export async function runSemanticReview(filePath: string): Promise<Violation[]> 
         });
       }
 
-      if (bodyLines.length > 20 && !hasKorean && commentCount > 0) {
-        violations.push({
-          type: 'READABILITY',
-          file: filePath,
-          message: `[Senior Advice] 함수 [${funcDisplayName}]에 한글 주석이 없습니다. 팀 내 가독성을 위해 영문 주석을 한글로 변경하세요.`,
-        });
-      } else if (bodyLines.length > 30 && commentCount === 0) {
+      if (bodyLines.length > 20 && !hasKorean && totalCommentCount > 0) {
+        // 본문이나 상단에 한글이 있는지 다시 확인
+        const hasAnyKorean = hasKorean || (hasTopComment && /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(allLines[m.range().start.line - 1] || ''));
+        
+        if (!hasAnyKorean) {
+          violations.push({
+            type: 'READABILITY',
+            file: filePath,
+            message: `[Senior Advice] 함수 [${funcDisplayName}]에 한글 주석이 없습니다. 팀 내 가독성을 위해 영문 주석을 한글로 변경하세요.`,
+          });
+        }
+      } else if (bodyLines.length > 30 && totalCommentCount === 0) {
         violations.push({
           type: 'READABILITY',
           file: filePath,

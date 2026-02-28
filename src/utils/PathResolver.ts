@@ -25,7 +25,7 @@ export function resolveModulePath(
 
   // 대상 파일의 기본 절대 경로(확장자 제외)를 계산합니다.
   const targetBase = normalize(join(currentDir, cleanPath));
-  const extensions = ['.ts', '.tsx', '.js', '.jsx'];
+  const extensions = ['.ts', '.tsx', '.js', '.jsx', '.json', '.css', '.svg'];
 
   // 2. 확장자를 순차적으로 붙여서 실제 파일이 존재하는지 확인합니다.
   for (const ext of extensions) {
