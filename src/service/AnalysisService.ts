@@ -271,10 +271,14 @@ export class AnalysisService {
       suggestion =
         '분석 대상 파일이 없습니다. .fast-lintrc의 exclude 설정이나 디렉토리 구조를 확인하세요.';
     } else {
+      const modeDesc = incrementalMode 
+        ? 'Git 변경 및 역의존성 기반 증분 분석' 
+        : '프로젝트 전체 정밀 분석';
+        
       suggestion = pass
-        ? `모든 품질 인증 기준을 통과했습니다. (v2.1.0 / 대상 파일: ${files.length}개, 모드: ${incrementalMode ? '증분' : '전체'})`
+        ? `모든 품질 인증 기준을 통과했습니다. (v2.1.1 / 대상 파일: ${files.length}개, 모드: ${modeDesc})`
         : violations.map((v) => v.message).join('\n') +
-          `\n\n(v2.1.0 / 총 ${files.length}개 파일 분석됨) 위 사항들을 수정한 후 다시 인증을 요청하세요.`;
+          `\n\n(v2.1.1 / 총 ${files.length}개 파일 분석됨 - ${modeDesc}) 위 사항들을 수정한 후 다시 인증을 요청하세요.`;
     }
 
     if (healingMessages.length > 0) {

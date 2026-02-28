@@ -18,7 +18,7 @@ import { join } from 'path';
 const server = new Server(
   {
     name: 'fast-lint-mcp',
-    version: '2.1.0',
+    version: '2.1.1',
   },
   {
     capabilities: {
