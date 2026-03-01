@@ -11,7 +11,8 @@ import { checkEnv } from '../checkers/env.js';
 import { JavascriptProvider } from '../providers/JavascriptProvider.js';
 import { Violation, QualityReport, QualityProvider } from '../types/index.js';
 import { checkStructuralIntegrity } from '../utils/AnalysisUtils.js';
-import { clearProjectFilesCache } from '../analysis/import-check.js';
+import { clearProjectFilesCache, getProjectFiles } from '../analysis/import-check.js';
+import { clearPathCache } from '../utils/PathResolver.js';
 import { join, extname, relative, isAbsolute } from 'path';
 import os from 'os';
 import { AstCacheManager } from '../utils/AstCacheManager.js';
@@ -71,7 +72,6 @@ export class AnalysisService {
           const ext = extname(fullPath);
           const provider = this.providers.find((p) => p.extensions.includes(ext));
           if (!provider) return null;
-          // provider.check에도 절대 경로를 전달하거나 workspacePath 컨텍스트 유지 필요
           const fileViolations = await provider.check(fullPath);
           return { fileViolations } as AnalysisResult;
         } catch (e) {
@@ -106,7 +106,11 @@ export class AnalysisService {
     const supportedExts = this.providers.flatMap((p) => p.extensions);
     const ignorePatterns = this.config.exclude;
 
-    await this.depGraph.build();
+    // v3.3: One-Pass Scan (Pre-load all project files once)
+    const allProjectFiles = await getProjectFiles(this.workspacePath, ignorePatterns);
+    
+    // 의존성 그래프 빌드 시 이미 스캔된 파일 리스트 활용 (I/O 병목 제거)
+    await this.depGraph.build(allProjectFiles);
 
     if (this.config.incremental) {
       const changedFiles = await this.getChangedFiles();
@@ -135,10 +139,10 @@ export class AnalysisService {
         }
         files = Array.from(affectedFiles);
       } else {
-        files = await glob(supportedExts.map((ext) => `**/*${ext}`), { cwd: this.workspacePath, ignore: ignorePatterns });
+        files = allProjectFiles.filter(f => supportedExts.includes(extname(f)));
       }
     } else {
-      files = await glob(supportedExts.map((ext) => `**/*${ext}`), { cwd: this.workspacePath, ignore: ignorePatterns });
+      files = allProjectFiles.filter(f => supportedExts.includes(extname(f)));
     }
 
     const healingMessages: string[] = [];
@@ -241,15 +245,15 @@ export class AnalysisService {
     }
 
     let suggestion = '';
-    if (files.length === 0) {
+    if (allProjectFiles.length === 0) {
       pass = false;
       violations.push({ type: 'ENV', message: '분석할 소스 파일을 찾지 못했습니다.' });
       suggestion = `분석 대상 파일이 없습니다. [${this.workspacePath}] 디렉토리를 확인하세요.`;
     } else {
       const modeDesc = incrementalMode ? '증분 분석' : '전체 분석';
       suggestion = pass
-        ? `모든 품질 인증 기준을 통과했습니다. (v3.1.0 / 대상: ${files.length}개, ${modeDesc})`
-        : violations.map((v) => v.message).join('\n') + `\n\n(v3.1.0 / 총 ${files.length}개 파일 분석됨 - ${modeDesc})`;
+        ? `모든 품질 인증 기준을 통과했습니다. (v3.3.0 / 대상: ${files.length}개, ${modeDesc})`
+        : violations.map((v) => v.message).join('\n') + `\n\n(v3.3.0 / 총 ${files.length}개 파일 분석됨 - ${modeDesc})`;
     }
 
     if (healingMessages.length > 0) {
@@ -258,6 +262,7 @@ export class AnalysisService {
 
     AstCacheManager.getInstance().clear();
     clearProjectFilesCache();
+    clearPathCache();
     this.stateManager.saveCoverage(currentCoverage);
     return { pass, violations, suggestion };
   }
