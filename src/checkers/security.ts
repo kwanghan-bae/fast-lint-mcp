@@ -34,11 +34,11 @@ function calculateEntropy(str: string): number {
 }
 
 // 프리컴파일된 정규식 (v3.0 Performance)
-/** 16진수 색상 코드를 탐지하는 정규식 */
-const HEX_COLOR_REGEX = /^#([A-Fa-f0-9]{3}){1,2}$/;
+/** 16진수 색상 코드를 탐지하는 정규식 (v3.0 Extended) */
+const HEX_COLOR_REGEX = /^(#|0x)([A-Fa-f0-9]{3,4}|[A-Fa-f0-9]{6}|[A-Fa-f0-9]{8})$/;
 /** 보안 위협이 아닌 일반적인 식별자 패턴 목록 */
 const SAFE_IDENTIFIER_REGEX =
-  /(color|class|style|theme|name|id|type|path|identifier|key_id|key_type|save_key)/i;
+  /(color|class|style|theme|name|id|type|path|identifier|key_id|key_type|save_key|offset|width|height|opacity|padding)/i;
 /** 대문자 상수로 정의된 키 식별자 패턴 (예: API_KEY = ...) */
 const CONSTANT_KEY_REGEX = /^[A-Z_]+_KEY\s*[:=]/;
 
@@ -58,7 +58,7 @@ export async function checkSecrets(filePath: string): Promise<Violation[]> {
     let match;
     while ((match = regex.exec(content)) !== null) {
       const fullMatch = match[0];
-      if (HEX_COLOR_REGEX.test(fullMatch)) continue;
+      const matchIndex = match.index;
 
       let keyName = '';
       let secretValue = fullMatch;
@@ -73,14 +73,28 @@ export async function checkSecrets(filePath: string): Promise<Violation[]> {
         secretValue = fullMatch.replace(/["']/g, '').trim();
       }
 
+      // 16진수 색상 코드(0x, #)인 경우 즉시 제외
+      if (HEX_COLOR_REGEX.test(secretValue)) continue;
+
       const entropy = calculateEntropy(secretValue);
       const isLikelySafe =
         hasAssignment && (SAFE_IDENTIFIER_REGEX.test(keyName) || CONSTANT_KEY_REGEX.test(keyName));
 
-      if (id === 'JWT_TOKEN' || (entropy > 2.5 && !isLikelySafe)) {
+      if (id === 'JWT_TOKEN' || (entropy > 4.0 && !isLikelySafe)) {
+        const lines = content.substring(0, matchIndex).split('\n');
+        const line = lines.length;
+        const column = lines[lines.length - 1].length + 1;
+        const snippet = content.substring(
+          Math.max(0, matchIndex - 20),
+          Math.min(content.length, matchIndex + fullMatch.length + 20)
+        );
+
         violations.push({
           type: 'SECURITY',
           file: filePath,
+          line,
+          column,
+          snippet: `...${snippet.replace(/\n/g, ' ')}...`,
           message: `[${id}] ${message}${id !== 'JWT_TOKEN' ? ` (엔트로피: ${entropy.toFixed(2)})` : ''} 민감 정보 노출 의심.`,
         });
       }

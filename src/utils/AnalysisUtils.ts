@@ -27,8 +27,8 @@ export function formatReport(report: QualityReport): string {
     report.violations.forEach((v: Violation) => {
       // 테이블 깨짐 방지를 위해 파이프(|) 기호 이스케이프 처리
       const safeMessage = v.message.replace(/\|/g, '\\|');
-      const fileName = v.file ? `\`${v.file}\`` : '`-`';
-      output += `| **${v.type}** | ${fileName} | ${safeMessage} |\n`;
+      const fileWithLine = v.file ? `\`${v.file}${v.line ? `:L${v.line}` : ''}\`` : '`-`';
+      output += `| **${v.type}** | ${fileWithLine} | ${safeMessage} |\n`;
     });
   } else {
     // 3. 위반 사항이 없는 경우의 축하 메시지
@@ -66,7 +66,8 @@ export function formatCLITable(report: QualityReport): string {
     });
 
     report.violations.forEach((v: Violation) => {
-      table.push([chalk.yellow(v.type), v.file || '-', v.message]);
+      const fileWithLine = v.file ? `${v.file}${v.line ? `:L${v.line}` : ''}` : '-';
+      table.push([chalk.yellow(v.type), fileWithLine, v.message]);
     });
 
     output += table.toString() + '\n';

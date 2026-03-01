@@ -7,7 +7,8 @@ import { AnalysisService } from './service/AnalysisService.js';
 import { SemanticService } from './service/SemanticService.js';
 import { AgentWorkflow } from './agent/workflow.js';
 import { formatReport, formatCLITable } from './utils/AnalysisUtils.js';
-import { join } from 'path';
+import { join, dirname } from 'path';
+import { existsSync, statSync } from 'fs';
 
 /**
  * Fast-Lint-MCP 서버의 엔트리 포인트입니다.
@@ -209,17 +210,11 @@ async function handleToolCall(name: string, args: any) {
       return { content: [{ type: 'text', text: JSON.stringify(impact, null, 2) }] };
     }
     case 'find-references': {
-      const refs = semanticSvc.findReferences(
-        join(workspace, String(args?.filePath)),
-        String(args?.symbolName)
-      );
+      const refs = semanticSvc.findReferences(String(args?.symbolName));
       return { content: [{ type: 'text', text: JSON.stringify(refs, null, 2) }] };
     }
     case 'go-to-definition': {
-      const def = semanticSvc.goToDefinition(
-        join(workspace, String(args?.filePath)),
-        String(args?.symbolName)
-      );
+      const def = semanticSvc.goToDefinition(String(args?.symbolName));
       return def
         ? { content: [{ type: 'text', text: JSON.stringify(def, null, 2) }] }
         : { content: [{ type: 'text', text: 'Definition not found' }], isError: true };
@@ -241,10 +236,14 @@ async function main() {
   const targetDir = targetDirIdx !== -1 ? process.argv[targetDirIdx + 1] : process.cwd();
 
   if (process.argv.includes('--check')) {
-    const sMgr = new StateManager(targetDir);
-    const cfg = new ConfigService(targetDir);
+    let resolvedPath = targetDir;
+    if (existsSync(targetDir) && statSync(targetDir).isFile()) {
+      resolvedPath = dirname(targetDir);
+    }
+    const sMgr = new StateManager(resolvedPath);
+    const cfg = new ConfigService(resolvedPath);
     const analyzerSvc = new AnalysisService(sMgr, cfg, getSemantic());
-    console.error(`Running quality check for: ${targetDir}...`);
+    console.error(`Running quality check for: ${resolvedPath}...`);
     const report = await analyzerSvc.runAllChecks();
     console.log(formatCLITable(report));
     process.exit(report.pass ? 0 : 1);

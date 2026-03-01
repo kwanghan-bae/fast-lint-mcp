@@ -1,70 +1,36 @@
-import { describe, it, expect, vi } from 'vitest';
-import { findOrphanFiles } from '../src/analysis/fd.js';
-import glob from 'fast-glob';
-import { readFile } from 'fs';
-import { parse } from '@ast-grep/napi';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { findOrphanFiles, getDependencyMap } from '../src/analysis/fd.js';
+import { writeFileSync, rmSync, mkdirSync, existsSync } from 'fs';
+import { join } from 'path';
 
-vi.mock('fast-glob');
-vi.mock('fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('fs')>();
-  return {
-    ...actual,
-    readFile: vi.fn(),
-    readFileSync: vi.fn(),
-  };
-});
+describe('findOrphanFiles', () => {
+  const testDir = join(process.cwd(), 'temp_fd_test');
 
-vi.mock('@ast-grep/napi', async (importOriginal) => {
-  const original = await importOriginal<typeof import('@ast-grep/napi')>();
-  return {
-    ...original,
-    parse: vi.fn(),
-  };
-});
+  beforeEach(() => {
+    if (!existsSync(testDir)) mkdirSync(testDir);
+  });
 
-describe('Orphan File Analysis (fast-glob + sg Native)', () => {
+  afterEach(() => {
+    if (existsSync(testDir)) rmSync(testDir, { recursive: true, force: true });
+  });
+
   it('참조되지 않은 파일을 올바르게 식별해야 한다', async () => {
-    // glob 모킹
-    vi.mocked(glob).mockResolvedValue(['src/index.ts', 'src/used.ts', 'src/orphan.ts'] as any);
+    const file1 = join(testDir, 'index.ts');
+    const file2 = join(testDir, 'used.ts');
+    const orphan = join(testDir, 'orphan.ts');
 
-    // readFileAsync(promisify(readFile)) 대응을 위한 모킹
-    vi.mocked(readFile).mockImplementation((path: any, encoding: any, cb: any) => {
-      if (typeof encoding === 'function') {
-        cb = encoding;
-        encoding = undefined;
-      }
-      
-      if (path.includes('index.ts')) {
-        cb(null, 'index_content');
-      } else {
-        cb(null, 'empty_content');
-      }
-    });
+    writeFileSync(file1, "import './used'");
+    writeFileSync(file2, "export const a = 1");
+    writeFileSync(orphan, "export const b = 2");
 
-    // parse & findAll 모킹
-    vi.mocked(parse).mockImplementation((lang, content) => {
-      const mockRoot = {
-        findAll: vi.fn().mockImplementation((pattern) => {
-          if (pattern.includes('import') && content === 'index_content') {
-            return [
-              {
-                getMatch: (id: string) => {
-                  if (id === 'SOURCE') return { text: () => './used' };
-                  return null;
-                },
-              },
-            ];
-          }
-          return [];
-        }),
-      };
-      return { root: () => mockRoot } as any;
-    });
+    const allFiles = [file1, file2, orphan];
+    const depMap = await getDependencyMap(testDir, allFiles);
+    
+    // index.ts를 진입점으로 설정
+    const orphans = await findOrphanFiles(depMap, [file1]);
 
-    const orphans = await findOrphanFiles();
-
-    expect(orphans).toContain('src/orphan.ts');
-    expect(orphans).not.toContain('src/index.ts');
-    expect(orphans).not.toContain('src/used.ts');
+    expect(orphans).toContain(orphan);
+    expect(orphans).not.toContain(file1);
+    expect(orphans).not.toContain(file2);
   });
 });

@@ -33,11 +33,11 @@ describe('runSemanticReview', () => {
     );
   });
 
-  it('함수 길이가 50줄을 초과하면 READABILITY 위반을 반환해야 한다', async () => {
-    // 50줄 이상의 빈 줄을 포함하는 함수 생성
+  it('함수 길이가 150줄을 초과하면 READABILITY 위반을 반환해야 한다', async () => {
+    // 150줄 이상의 빈 줄을 포함하는 함수 생성
     const lines = [];
     lines.push('function longFunc() {');
-    for (let i = 0; i < 55; i++) lines.push('  // line ' + i);
+    for (let i = 0; i < 155; i++) lines.push('  // line ' + i);
     lines.push('  return true;');
     lines.push('}');
     writeFileSync(testFile, lines.join('\n'));

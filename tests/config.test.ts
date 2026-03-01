@@ -34,9 +34,9 @@ describe('ConfigService', () => {
     expect(config.incremental).toBe(false);
   });
 
-  it('package.json의 fastLint 필드에서 설정을 로드해야 한다', () => {
+  it('package.json의 fast-lint 필드에서 설정을 로드해야 한다', () => {
     const pkg = {
-      fastLint: {
+      'fast-lint': {
         rules: { techDebtLimit: 50 },
         exclude: ['src/ignored/**'],
       },

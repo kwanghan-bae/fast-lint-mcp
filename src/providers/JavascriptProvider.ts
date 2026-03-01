@@ -124,23 +124,29 @@ export class JavascriptProvider extends BaseQualityProvider {
     }
 
     // 2. AI 환각(Hallucination) 체크: 존재하지 않는 파일이나 라이브러리 임포트를 탐지합니다.
-    const hallucinationViolations = await checkHallucination(
+    const hallucinationViolations = (await checkHallucination(
       filePath,
       process.cwd(),
       this.config.exclude
-    );
+    )) as any[];
     hallucinationViolations.forEach((hv) => {
       violations.push({
         type: 'HALLUCINATION',
         file: filePath,
+        line: hv.line,
         message: `[환각 경고] ${hv.message}`,
       });
     });
 
     // 3. 가짜 구현(Fake Logic) 체크: 파라미터를 무시한 채 고정된 값을 반환하는 등의 의심스러운 로직을 찾습니다.
-    const fakeLogicViolations = await checkFakeLogic(filePath);
+    const fakeLogicViolations = (await checkFakeLogic(filePath)) as any[];
     fakeLogicViolations.forEach((fv) => {
-      violations.push({ type: 'FAKE_LOGIC', file: filePath, message: `[논리 의심] ${fv.message}` });
+      violations.push({
+        type: 'FAKE_LOGIC',
+        file: filePath,
+        line: fv.line,
+        message: `[논리 의심] ${fv.message}`,
+      });
     });
 
     // 4. 아키텍처 가드레일 체크: 레이어 간 의존성 방향 규칙 위반 여부를 검사합니다.

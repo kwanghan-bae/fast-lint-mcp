@@ -145,18 +145,24 @@ export class AnalysisService {
 
     // 3. One-Pass 파일 스캔 및 의존성 그래프 구축
     let allProjectFiles = await getProjectFiles(this.workspacePath, ignorePatterns);
-    
-    // v3.7.3: 노이즈 파일(빌드 산출물, 미니파이) 2중 차단 - 리포트 오염 방지의 핵심
-    allProjectFiles = allProjectFiles.filter(file => {
+
+    // v3.7.4: 노이즈 파일 원천 박멸 - 모든 분석의 기초가 되는 리스트 정제
+    allProjectFiles = allProjectFiles.filter((file) => {
       const lower = file.toLowerCase();
-      const isNoise = lower.includes('/dist/') || 
-                      lower.includes('/.next/') || 
-                      lower.includes('/out/') || 
-                      lower.includes('/build/') || 
-                      lower.includes('/coverage/') ||
-                      lower.endsWith('.min.js') ||
-                      lower.endsWith('.map');
-      return !isNoise;
+      const isExcluded = ignorePatterns.some((p) =>
+        new RegExp('^' + p.replace(/\*\*/g, '.*').replace(/\*/g, '[^/]*') + '$').test(file)
+      );
+      const isCommonNoise =
+        lower.includes('/dist/') ||
+        lower.includes('/.next/') ||
+        lower.includes('/out/') ||
+        lower.includes('/build/') ||
+        lower.includes('/coverage/') ||
+        lower.includes('/android/') ||
+        lower.includes('/ios/') ||
+        lower.endsWith('.min.js') ||
+        lower.endsWith('.map');
+      return !isExcluded && !isCommonNoise;
     });
 
     await this.depGraph.build(allProjectFiles);

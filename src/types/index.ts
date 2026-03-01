@@ -25,6 +25,9 @@ export type ViolationType =
 export interface Violation {
   type: ViolationType; // 위반 종류
   file?: string; // 위반이 발생한 파일 경로
+  line?: number; // 위반 발생 라인 번호 (1부터 시작)
+  column?: number; // 위반 발생 컬럼 번호
+  snippet?: string; // 위반이 발생한 코드 조각
   message: string; // 위반 내용에 대한 상세 설명
   value?: any; // 현재 측정값 (선택 사항)
   limit?: any; // 허용되는 기준값 (선택 사항)
@@ -38,6 +41,28 @@ export interface QualityReport {
   pass: boolean; // 품질 기준 통과 여부
   violations: Violation[]; // 발견된 위반 사항 목록
   suggestion?: string; // 개선을 위한 종합 조치 가이드
+}
+
+/**
+ * 심볼 레벨의 품질 측정값 정보입니다.
+ */
+export interface SymbolMetric {
+  name: string; // 심볼 이름 (함수/클래스 명)
+  kind: string; // 종류 (function, class, method 등)
+  lineCount: number; // 총 라인 수
+  complexity: number; // 복잡도 지수
+  startLine: number; // 시작 라인
+  endLine: number; // 종료 라인
+}
+
+/**
+ * 심볼 변경 시의 영향도 분석 결과 정보입니다.
+ */
+export interface ImpactAnalysis {
+  symbolName: string; // 분석 대상 심볼 이름
+  affectedFiles: string[]; // 영향을 받는 파일 목록
+  referencingFiles: string[]; // 직접 참조 중인 파일 목록
+  affectedTests: string[]; // 관련 테스트 파일 목록
 }
 
 /**

@@ -8,6 +8,7 @@ import { runSemanticReview } from '../analysis/reviewer.js';
  * Kotlin 언어에 특화된 품질 분석을 수행하는 프로바이더 클래스입니다. (v3.4 Polyglot)
  */
 export class KotlinProvider extends BaseQualityProvider {
+  name = 'Kotlin';
   public extensions = ['.kt', '.kts'];
 
   async check(filePath: string): Promise<Violation[]> {
