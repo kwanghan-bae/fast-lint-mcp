@@ -91,7 +91,6 @@ export class AnalysisService {
   }
 
   async runAllChecks(): Promise<QualityReport> {
-    // legacy state 파일 청소 (프로젝트 성역화 v3.5)
     const legacyStateFile = join(this.workspacePath, '.fast-lint-state.json');
     if (existsSync(legacyStateFile)) {
       try { rmSync(legacyStateFile); } catch(e) {}
@@ -114,9 +113,7 @@ export class AnalysisService {
     const supportedExts = this.providers.flatMap((p) => p.extensions);
     const ignorePatterns = this.config.exclude;
 
-    // v3.4: One-Pass Scan (JS/TS + Kotlin 지원)
     const allProjectFiles = await getProjectFiles(this.workspacePath, ignorePatterns);
-    
     await this.depGraph.build(allProjectFiles);
 
     if (this.config.incremental) {
@@ -238,7 +235,8 @@ export class AnalysisService {
       });
     }
 
-    const lastCoverage = this.stateManager.getLastCoverage();
+    // v3.7: 비동기 브랜치 인식 상태 로드
+    const lastCoverage = await this.stateManager.getLastCoverage();
     let pass = violations.length === 0;
 
     if (lastCoverage !== null && currentCoverage < lastCoverage) {
@@ -259,8 +257,8 @@ export class AnalysisService {
     } else {
       const modeDesc = incrementalMode ? '증분 분석' : '전체 분석';
       suggestion = pass
-        ? `모든 품질 인증 기준을 통과했습니다. (v3.4.0 / 대상: ${files.length}개, ${modeDesc})`
-        : violations.map((v) => v.message).join('\n') + `\n\n(v3.4.0 / 총 ${files.length}개 파일 분석됨 - ${modeDesc})`;
+        ? `모든 품질 인증 기준을 통과했습니다. (v3.7.0 / 대상: ${files.length}개, ${modeDesc})`
+        : violations.map((v) => v.message).join('\n') + `\n\n(v3.7.0 / 총 ${files.length}개 파일 분석됨 - ${modeDesc})`;
     }
 
     if (healingMessages.length > 0) {
@@ -270,7 +268,8 @@ export class AnalysisService {
     AstCacheManager.getInstance().clear();
     clearProjectFilesCache();
     clearPathCache();
-    this.stateManager.saveCoverage(currentCoverage);
+    // v3.7: 비동기 브랜치 인식 상태 저장
+    await this.stateManager.saveCoverage(currentCoverage);
     return { pass, violations, suggestion };
   }
 }
