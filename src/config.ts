@@ -60,12 +60,14 @@ export type ArchitectureRule = z.infer<typeof ArchitectureRuleSchema>;
 export class ConfigService {
   // 파싱 및 검증이 완료된 최종 설정 객체
   private config: Config;
+  public workspacePath: string;
 
   /**
    * ConfigService 인스턴스를 생성하고 설정을 로드합니다.
    * @param workspacePath 프로젝트 루트 경로
    */
   constructor(workspacePath: string = process.cwd()) {
+    this.workspacePath = workspacePath;
     let userConfig = this.loadConfig(workspacePath);
     
     // Zod 스키마를 사용하여 기본값과 병합

@@ -294,10 +294,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
  * 서버를 시작합니다. CLI 실행 시 --check 플래그를 지원합니다.
  */
 async function main() {
+  const targetDirIdx = process.argv.indexOf('--path');
+  const targetDir = targetDirIdx !== -1 ? process.argv[targetDirIdx + 1] : process.cwd();
+
   // CLI 직접 실행 시 품질 검사만 수행하고 종료하는 모드
   if (process.argv.includes('--check')) {
-    const analyzer = getAnalyzer();
-    console.error('Running quality check via CLI...');
+    stateManager = new StateManager(targetDir);
+    config = new ConfigService(targetDir);
+    analyzer = new AnalysisService(stateManager, config, getSemantic());
+    
+    console.error(`Running quality check for: ${targetDir}...`);
     const report = await analyzer.runAllChecks();
     console.log(formatCLITable(report)); // CLI용 테이블 포맷 사용
     process.exit(report.pass ? 0 : 1);

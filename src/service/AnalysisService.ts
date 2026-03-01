@@ -7,12 +7,12 @@ import { ConfigService } from '../config.js';
 import { SemanticService } from './SemanticService.js';
 import { DependencyGraph } from '../utils/DependencyGraph.js';
 import { countTechDebt } from '../analysis/rg.js';
-import { analyzeFile } from '../analysis/sg.js';
 import { checkEnv } from '../checkers/env.js';
 import { JavascriptProvider } from '../providers/JavascriptProvider.js';
 import { Violation, QualityReport, QualityProvider } from '../types/index.js';
 import { checkStructuralIntegrity } from '../utils/AnalysisUtils.js';
-import { join, extname, relative } from 'path';
+import { clearProjectFilesCache } from '../analysis/import-check.js';
+import { join, extname, relative, isAbsolute } from 'path';
 import os from 'os';
 import { AstCacheManager } from '../utils/AstCacheManager.js';
 
@@ -27,15 +27,17 @@ export class AnalysisService {
   private git: SimpleGit;
   private providers: QualityProvider[] = [];
   private depGraph: DependencyGraph;
+  private workspacePath: string;
 
   constructor(
     private stateManager: StateManager,
     private config: ConfigService,
     private semantic: SemanticService
   ) {
-    this.git = simpleGit();
+    this.workspacePath = this.config.workspacePath || process.cwd();
+    this.git = simpleGit(this.workspacePath);
     this.providers.push(new JavascriptProvider(this.config));
-    this.depGraph = new DependencyGraph();
+    this.depGraph = new DependencyGraph(this.workspacePath);
   }
 
   private async getChangedFiles(): Promise<string[]> {
@@ -65,10 +67,12 @@ export class AnalysisService {
       files,
       async (file) => {
         try {
-          const ext = extname(file);
+          const fullPath = isAbsolute(file) ? file : join(this.workspacePath, file);
+          const ext = extname(fullPath);
           const provider = this.providers.find((p) => p.extensions.includes(ext));
           if (!provider) return null;
-          const fileViolations = await provider.check(file);
+          // provider.check에도 절대 경로를 전달하거나 workspacePath 컨텍스트 유지 필요
+          const fileViolations = await provider.check(fullPath);
           return { fileViolations } as AnalysisResult;
         } catch (e) {
           return null;
@@ -108,7 +112,6 @@ export class AnalysisService {
       const changedFiles = await this.getChangedFiles();
       if (changedFiles.length > 0) {
         incrementalMode = true;
-        // v2.2.2: 증분 분석 시에도 제외 패턴 적용
         const filteredChanges = changedFiles.filter(file => {
           return !ignorePatterns.some(pattern => {
             const regex = new RegExp('^' + pattern.replace(/\*\*/g, '.*').replace(/\*/g, '[^/]*') + '$');
@@ -119,10 +122,10 @@ export class AnalysisService {
         const affectedFiles = new Set<string>(filteredChanges);
         for (const file of filteredChanges) {
           try {
-            const fullPath = join(process.cwd(), file);
+            const fullPath = isAbsolute(file) ? file : join(this.workspacePath, file);
             const dependents = this.depGraph.getDependents(fullPath);
             dependents.forEach((dep) => {
-              const relativeDep = relative(process.cwd(), dep);
+              const relativeDep = relative(this.workspacePath, dep);
               const isIgnored = ignorePatterns.some(p => new RegExp('^' + p.replace(/\*\*/g, '.*').replace(/\*/g, '[^/]*') + '$').test(relativeDep));
               if (supportedExts.includes(extname(relativeDep)) && !isIgnored) {
                 affectedFiles.add(relativeDep);
@@ -132,17 +135,18 @@ export class AnalysisService {
         }
         files = Array.from(affectedFiles);
       } else {
-        files = await glob(supportedExts.map((ext) => `**/*${ext}`), { ignore: ignorePatterns });
+        files = await glob(supportedExts.map((ext) => `**/*${ext}`), { cwd: this.workspacePath, ignore: ignorePatterns });
       }
     } else {
-      files = await glob(supportedExts.map((ext) => `**/*${ext}`), { ignore: ignorePatterns });
+      files = await glob(supportedExts.map((ext) => `**/*${ext}`), { cwd: this.workspacePath, ignore: ignorePatterns });
     }
 
     const healingMessages: string[] = [];
     for (const provider of this.providers) {
-      const targetFiles = files.filter((f) => provider.extensions.includes(extname(f)));
+      const targetFiles = files.filter((f) => provider.extensions.includes(extname(f)))
+                               .map(f => isAbsolute(f) ? f : join(this.workspacePath, f));
       if (targetFiles.length > 0 && provider.fix) {
-        const res = await provider.fix(targetFiles, process.cwd());
+        const res = await provider.fix(targetFiles, this.workspacePath);
         healingMessages.push(...res.messages);
       }
     }
@@ -151,8 +155,7 @@ export class AnalysisService {
     const structuralViolations = checkStructuralIntegrity(this.depGraph);
     violations.push(...fileViolations, ...structuralViolations);
 
-    // v2.2.2: 기술 부채 스캔 시에도 제외 패턴 적용
-    const techDebtCount = await countTechDebt(process.cwd(), ignorePatterns);
+    const techDebtCount = await countTechDebt(this.workspacePath, ignorePatterns);
     if (techDebtCount > rules.techDebtLimit) {
       violations.push({
         type: 'TECH_DEBT',
@@ -165,16 +168,16 @@ export class AnalysisService {
     let currentCoverage = 0;
     const coverageCandidates = [
       this.config.rules.coveragePath,
-      join(process.cwd(), this.config.rules.coverageDirectory, 'coverage-summary.json'),
-      join(process.cwd(), 'coverage', 'coverage-summary.json'),
-      'coverage/coverage-summary.json',
-      'coverage-summary.json',
+      join(this.workspacePath, this.config.rules.coverageDirectory, 'coverage-summary.json'),
+      join(this.workspacePath, 'coverage', 'coverage-summary.json'),
+      join(this.workspacePath, 'coverage-summary.json'),
     ].filter(Boolean) as string[];
 
     let coveragePath = '';
     for (const cand of coverageCandidates) {
-      if (existsSync(cand)) {
-        coveragePath = cand;
+      const fullCand = isAbsolute(cand) ? cand : join(this.workspacePath, cand);
+      if (existsSync(fullCand)) {
+        coveragePath = fullCand;
         break;
       }
     }
@@ -184,7 +187,7 @@ export class AnalysisService {
         const coverageStat = statSync(coveragePath);
         const lastSrcUpdate = files.length > 0 
           ? Math.max(...files.map(f => {
-              try { return statSync(join(process.cwd(), f)).mtimeMs; } catch(e) { return 0; }
+              try { return statSync(isAbsolute(f) ? f : join(this.workspacePath, f)).mtimeMs; } catch(e) { return 0; }
             }))
           : 0;
 
@@ -241,21 +244,20 @@ export class AnalysisService {
     if (files.length === 0) {
       pass = false;
       violations.push({ type: 'ENV', message: '분석할 소스 파일을 찾지 못했습니다.' });
-      suggestion = '분석 대상 파일이 없습니다. exclude 설정을 확인하세요.';
+      suggestion = `분석 대상 파일이 없습니다. [${this.workspacePath}] 디렉토리를 확인하세요.`;
     } else {
       const modeDesc = incrementalMode ? '증분 분석' : '전체 분석';
       suggestion = pass
-        ? `모든 품질 인증 기준을 통과했습니다. (v2.2.2 / 대상: ${files.length}개, ${modeDesc})`
-        : violations.map((v) => v.message).join('\n') + `\n\n(v2.2.2 / 총 ${files.length}개 파일 분석됨 - ${modeDesc})`;
+        ? `모든 품질 인증 기준을 통과했습니다. (v3.1.0 / 대상: ${files.length}개, ${modeDesc})`
+        : violations.map((v) => v.message).join('\n') + `\n\n(v3.1.0 / 총 ${files.length}개 파일 분석됨 - ${modeDesc})`;
     }
 
     if (healingMessages.length > 0) {
       suggestion += `\n\n[Self-Healing Result]\n${healingMessages.join('\n')}`;
     }
 
-    // 세션 종료 후 AST 캐시 정리 (v3.0 Memory Management)
     AstCacheManager.getInstance().clear();
-
+    clearProjectFilesCache();
     this.stateManager.saveCoverage(currentCoverage);
     return { pass, violations, suggestion };
   }

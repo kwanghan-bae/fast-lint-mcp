@@ -27,19 +27,31 @@ export class DependencyGraph {
 
   /**
    * 프로젝트 내의 모든 소스 파일을 스캔하여 의존성 맵을 생성합니다.
-   * 비동기 I/O와 병렬 처리를 통해 분석 속도를 극대화합니다.
+   * v3.2 Turbo: 멀티모듈 구조를 완벽히 지원하며, 빌드 결과물은 스캔에서 원천 차단합니다.
    */
   async build() {
     this.importMap.clear();
     this.dependentMap.clear();
 
-    const files = await glob(['src/**/*.{ts,js,tsx,jsx}'], {
+    // 1. 초고속 파일 스캔 (빌드 폴더 및 node_modules는 탐색조차 하지 않음)
+    const files = await glob(['**/*.{ts,js,tsx,jsx}'], {
       cwd: this.workspacePath,
       absolute: true,
+      ignore: [
+        '**/node_modules/**', 
+        '**/dist/**', 
+        '**/build/**', 
+        '**/out/**', 
+        '**/.next/**', 
+        '**/coverage/**',
+        '**/android/**',
+        '**/ios/**',
+        '**/.git/**'
+      ]
     });
     const allFiles = files.map((f) => normalize(f));
 
-    // 코어 수에 따른 병렬도 설정
+    // 2. 풀 코어 병렬 분석
     const concurrency = Math.max(1, os.cpus().length - 1);
 
     await pMap(
@@ -48,12 +60,14 @@ export class DependencyGraph {
         const imports = await this.extractImports(file, allFiles);
         this.importMap.set(file, imports);
 
-        // 역의존성 정보 동기화 (Node.js 이벤트 루프 특성상 Map 조작은 안전)
+        // 역의존성 맵 구축 (동기적 조작으로 안전성 확보)
         for (const imp of imports) {
-          const deps = this.dependentMap.get(imp) || [];
+          if (!this.dependentMap.has(imp)) {
+            this.dependentMap.set(imp, []);
+          }
+          const deps = this.dependentMap.get(imp)!;
           if (!deps.includes(file)) {
             deps.push(file);
-            this.dependentMap.set(imp, deps);
           }
         }
       },
@@ -142,8 +156,9 @@ export class DependencyGraph {
         const matches = root.findAll({ rule: importRule });
         for (const m of matches) {
           const source = m.getMatch('B')?.text();
-          if (source && (source.startsWith('.') || source.startsWith('/'))) {
-            const resolved = resolveModulePath(dir, source, allFiles);
+          if (source) {
+            // v3.2: Context-Aware Path Resolution (supports sub-project aliases)
+            const resolved = resolveModulePath(dir, source, allFiles, undefined, filePath);
             if (resolved) imports.push(resolved);
           }
         }

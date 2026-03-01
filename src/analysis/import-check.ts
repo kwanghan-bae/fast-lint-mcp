@@ -7,19 +7,37 @@ import { ArchitectureRule } from '../config.js';
 import { builtinModules } from 'module';
 import { AstCacheManager } from '../utils/AstCacheManager.js';
 
+let projectFilesCache: { workspacePath: string; files: string[] } | null = null;
+
 /**
- * 프로젝트 내의 모든 파일 목록을 가져옵니다. (v2.2.2 Dynamic Exclude)
+ * 프로젝트 내의 모든 파일 목록을 가져옵니다. (v3.2 Cached Turbo)
  */
 export async function getProjectFiles(
   workspacePath: string,
   ignorePatterns: string[] = ['**/node_modules/**', '**/dist/**']
 ): Promise<string[]> {
+  // 동일 워크스페이스에 대한 캐시가 있다면 즉시 반환
+  if (projectFilesCache && projectFilesCache.workspacePath === workspacePath) {
+    return projectFilesCache.files;
+  }
+
   const rawFiles = await glob(['**/*.{ts,js,tsx,jsx,json,css,svg}'], { 
     cwd: workspacePath, 
     absolute: true,
     ignore: ignorePatterns
   });
-  return rawFiles.map((f) => normalize(f));
+  const files = rawFiles.map((f) => normalize(f));
+  
+  // 캐시 업데이트
+  projectFilesCache = { workspacePath, files };
+  return files;
+}
+
+/**
+ * 프로젝트 파일 캐시를 비웁니다.
+ */
+export function clearProjectFilesCache() {
+  projectFilesCache = null;
 }
 
 /**
