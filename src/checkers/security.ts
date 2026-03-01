@@ -1,6 +1,7 @@
 import { execSync } from 'child_process';
 import { readFileSync } from 'fs';
 import { Violation } from '../types/index.js';
+import { AstCacheManager } from '../utils/AstCacheManager.js';
 
 /**
  * 소스 코드 내에 실수로 포함될 수 있는 민감 정보(API Key, Secret, Token 등)를 탐지하기 위한 정규식 패턴 목록입니다.
@@ -41,7 +42,10 @@ const CONSTANT_KEY_REGEX = /^[A-Z_]+_KEY\s*[:=]/;
  * 보안 탐지 예외 처리 로직이 포함된 정밀 스캔 (v2.2 Entropy)
  */
 export async function checkSecrets(filePath: string): Promise<Violation[]> {
-  const content = readFileSync(filePath, 'utf-8');
+  // v3.3.2: AstCacheManager 활용하여 중복 I/O 제거
+  const root = AstCacheManager.getInstance().getRootNode(filePath);
+  const content = root ? root.text() : readFileSync(filePath, 'utf-8');
+  
   const violations: Violation[] = [];
 
   for (const { id, pattern, message } of SECRET_PATTERNS) {

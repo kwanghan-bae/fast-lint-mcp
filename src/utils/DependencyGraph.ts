@@ -74,29 +74,33 @@ export class DependencyGraph {
   detectCycles(): string[][] {
     const visited = new Set<string>();
     const stack = new Set<string>();
+    const currentPath: string[] = [];
     const cycles: string[][] = [];
 
-    const dfs = (node: string, path: string[]) => {
-      // v3.3.1: node_modules 등 외부 파일은 순환 참조 분석에서 제외하여 노이즈 차단
+    const dfs = (node: string) => {
       if (node.includes('node_modules')) return;
+      if (stack.has(node)) {
+        const cycleStartIdx = currentPath.indexOf(node);
+        cycles.push([...currentPath.slice(cycleStartIdx), node]);
+        return;
+      }
+      if (visited.has(node)) return;
 
       visited.add(node);
       stack.add(node);
-      path.push(node);
+      currentPath.push(node);
 
-      for (const neighbor of this.importMap.get(node) || []) {
-        if (!visited.has(neighbor)) {
-          dfs(neighbor, [...path]);
-        } else if (stack.has(neighbor)) {
-          const cycleStartIdx = path.indexOf(neighbor);
-          cycles.push([...path.slice(cycleStartIdx), neighbor]);
-        }
+      const neighbors = this.importMap.get(node) || [];
+      for (const neighbor of neighbors) {
+        dfs(neighbor);
       }
+
+      currentPath.pop();
       stack.delete(node);
     };
 
     for (const node of this.importMap.keys()) {
-      if (!visited.has(node)) dfs(node, []);
+      dfs(node);
     }
     return cycles;
   }

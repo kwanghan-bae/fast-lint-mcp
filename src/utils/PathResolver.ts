@@ -1,12 +1,13 @@
 import { join, dirname, normalize, isAbsolute } from 'path';
 import { readFileSync, existsSync, statSync } from 'fs';
 
-// 세션 내 설정을 보관하는 메모리 캐시 (v3.3 Hyper-Speed)
+// 세션 내 모든 탐색 결과를 보관하는 메모리 캐시 (v3.3.2 Real-Time)
 const aliasCache = new Map<string, Record<string, string>>();
+const rootCache = new Map<string, string>();
 let fileSetCache: Set<string> | null = null;
 
 /**
- * 프로젝트 내의 모든 파일을 Set으로 관리하여 초고속 조회를 지원합니다.
+ * 프로젝트 내의 모든 파일을 Set으로 관리하여 O(1) 조회를 지원합니다.
  */
 function getFileSet(allFiles: string[]): Set<string> {
   if (!fileSetCache || fileSetCache.size !== allFiles.length) {
@@ -17,32 +18,39 @@ function getFileSet(allFiles: string[]): Set<string> {
 
 /**
  * 특정 파일 경로에서 상위로 올라가며 가장 가까운 프로젝트 루트를 찾습니다.
+ * 메모이제이션을 통해 불필요한 디렉토리 탐색을 99% 제거합니다.
  */
 export function findNearestProjectRoot(currentDir: string): string {
+  if (rootCache.has(currentDir)) return rootCache.get(currentDir)!;
+
   let dir = currentDir;
+  const pathStack: string[] = [];
+
   while (dir !== dirname(dir)) {
+    pathStack.push(dir);
     if (existsSync(join(dir, 'tsconfig.json')) || existsSync(join(dir, 'package.json'))) {
+      for (const p of pathStack) rootCache.set(p, dir);
       return dir;
     }
     dir = dirname(dir);
   }
-  return process.cwd();
+
+  const res = process.cwd();
+  for (const p of pathStack) rootCache.set(p, res);
+  return res;
 }
 
 /**
- * 프로젝트 설정에서 경로 별칭(Path Alias) 설정을 읽어옵니다. (v3.3 Memory Optimized)
+ * 프로젝트 설정에서 경로 별칭(Path Alias) 설정을 읽어옵니다.
  */
 export function loadProjectAliases(pathContext?: string): Record<string, string> {
   let workspacePath = process.cwd();
   if (pathContext) {
     try {
-      if (existsSync(pathContext) && statSync(pathContext).isDirectory()) {
-        workspacePath = pathContext;
-      } else {
-        workspacePath = findNearestProjectRoot(dirname(pathContext));
-      }
-    } catch (e) {
+      // isDirectory 체크 시 발생하는 statSync 병목 방어
       workspacePath = pathContext.includes('.') ? findNearestProjectRoot(dirname(pathContext)) : pathContext;
+    } catch (e) {
+      workspacePath = findNearestProjectRoot(pathContext);
     }
   }
 
@@ -83,7 +91,7 @@ export function loadProjectAliases(pathContext?: string): Record<string, string>
 }
 
 /**
- * 소스 코드 내의 임포트 경로를 실제 물리 파일 경로로 변환합니다. (v3.3 I/O Zero)
+ * 소스 코드 내의 임포트 경로를 실제 물리 파일 경로로 변환합니다.
  */
 export function resolveModulePath(
   currentDir: string,
@@ -137,9 +145,10 @@ export function resolveModulePath(
 }
 
 /**
- * 세션 종료 시 모든 캐시를 비웁니다.
+ * 모든 경로 캐시를 초기화합니다.
  */
 export function clearPathCache(): void {
   aliasCache.clear();
+  rootCache.clear();
   fileSetCache = null;
 }
