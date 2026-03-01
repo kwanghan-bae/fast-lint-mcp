@@ -144,7 +144,21 @@ export class AnalysisService {
     const ignorePatterns = this.config.exclude;
 
     // 3. One-Pass 파일 스캔 및 의존성 그래프 구축
-    const allProjectFiles = await getProjectFiles(this.workspacePath, ignorePatterns);
+    let allProjectFiles = await getProjectFiles(this.workspacePath, ignorePatterns);
+    
+    // v3.7.3: 노이즈 파일(빌드 산출물, 미니파이) 2중 차단 - 리포트 오염 방지의 핵심
+    allProjectFiles = allProjectFiles.filter(file => {
+      const lower = file.toLowerCase();
+      const isNoise = lower.includes('/dist/') || 
+                      lower.includes('/.next/') || 
+                      lower.includes('/out/') || 
+                      lower.includes('/build/') || 
+                      lower.includes('/coverage/') ||
+                      lower.endsWith('.min.js') ||
+                      lower.endsWith('.map');
+      return !isNoise;
+    });
+
     await this.depGraph.build(allProjectFiles);
 
     // 4. 분석 대상 파일 결정 (증분 vs 전체)
