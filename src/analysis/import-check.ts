@@ -2,7 +2,7 @@ import { readFileSync, existsSync } from 'fs';
 import { Lang, parse } from '@ast-grep/napi';
 import { dirname, join, normalize, isAbsolute, relative } from 'path';
 import glob from 'fast-glob';
-import { resolveModulePath, loadProjectAliases } from '../utils/PathResolver.js';
+import { resolveModulePath, loadProjectAliases, findNearestProjectRoot } from '../utils/PathResolver.js';
 import { ArchitectureRule } from '../config.js';
 import { builtinModules } from 'module';
 import { AstCacheManager } from '../utils/AstCacheManager.js';
@@ -57,7 +57,8 @@ export async function checkArchitecture(
     root.findAll(pattern).forEach((match) => {
       const source = match.getMatch('B')?.text();
       if (source) {
-        const resolved = resolveModulePath(dirname(normalize(absoluteFilePath)), source, allFiles, workspacePath);
+        // v3.1: Context-Aware Path Resolution
+        const resolved = resolveModulePath(dirname(normalize(absoluteFilePath)), source, allFiles, workspacePath, filePath);
         if (resolved) {
           const relativeResolved = relative(workspacePath, resolved);
           for (const rule of activeRules) {
@@ -77,7 +78,7 @@ export async function checkArchitecture(
 }
 
 /**
- * AI 에이전트의 환각(Hallucination) 탐지 (v2.2.2 Exclude Sync)
+ * AI 에이전트의 환각(Hallucination) 탐지 (v3.1 Multi-Module Support)
  */
 export async function checkHallucination(
   filePath: string,
@@ -90,20 +91,31 @@ export async function checkHallucination(
 
   const violations: { id: string; message: string }[] = [];
 
-  const pkgPath = join(workspacePath, 'package.json');
+  // v3.1: 파일에서 가장 가까운 프로젝트 루트를 찾아 의존성 로드
+  const projectRoot = findNearestProjectRoot(dirname(filePath));
+  const pkgPath = join(projectRoot, 'package.json');
   let dependencies: string[] = [];
-  if (existsSync(pkgPath)) {
-    try {
-      const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
-      dependencies = Object.keys(pkg.dependencies || {}).concat(
-        Object.keys(pkg.devDependencies || {})
-      );
-    } catch (e) {}
+  
+  const loadDeps = (path: string) => {
+    if (existsSync(path)) {
+      try {
+        const pkg = JSON.parse(readFileSync(path, 'utf-8'));
+        return Object.keys(pkg.dependencies || {}).concat(Object.keys(pkg.devDependencies || {}));
+      } catch (e) {}
+    }
+    return [];
+  };
+
+  dependencies = loadDeps(pkgPath);
+  // 상위(Root) package.json 의존성도 보조적으로 포함 (공통 라이브러리 대응)
+  if (projectRoot !== workspacePath) {
+    const rootPkgDeps = loadDeps(join(workspacePath, 'package.json'));
+    dependencies = [...new Set([...dependencies, ...rootPkgDeps])];
   }
 
   const allFiles = await getProjectFiles(workspacePath, ignorePatterns);
   const absoluteFilePath = isAbsolute(filePath) ? filePath : join(workspacePath, filePath);
-  const aliases = loadProjectAliases(workspacePath);
+  const aliases = loadProjectAliases(filePath);
   const nodeBuiltins = new Set([...builtinModules, ...builtinModules.map((m) => `node:${m}`)]);
 
   const patterns = ["import $A from '$B'", 'import $A from "$B"', "import '$B'", 'import "$B"'];
@@ -116,7 +128,8 @@ export async function checkHallucination(
       const isAliased = Object.keys(aliases).some(alias => source.startsWith(alias));
 
       if (source.startsWith('.') || isAliased) {
-        const resolved = resolveModulePath(dirname(normalize(absoluteFilePath)), source, allFiles, workspacePath);
+        // v3.1: Context-Aware Path Resolution
+        const resolved = resolveModulePath(dirname(normalize(absoluteFilePath)), source, allFiles, workspacePath, filePath);
         if (!resolved) {
           violations.push({
             id: 'HALLUCINATION_FILE',

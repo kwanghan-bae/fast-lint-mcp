@@ -1,14 +1,43 @@
 import { join, dirname, normalize, isAbsolute } from 'path';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, statSync } from 'fs';
 
 /**
- * 프로젝트 설정(tsconfig.json)에서 경로 별칭(Path Alias) 설정을 읽어옵니다.
+ * 특정 파일 경로에서 상위로 올라가며 가장 가까운 프로젝트 루트(tsconfig.json 또는 package.json 존재)를 찾습니다.
  */
-export function loadProjectAliases(workspacePath: string = process.cwd()): Record<string, string> {
+export function findNearestProjectRoot(currentDir: string): string {
+  let dir = currentDir;
+  while (dir !== dirname(dir)) {
+    if (existsSync(join(dir, 'tsconfig.json')) || existsSync(join(dir, 'package.json'))) {
+      return dir;
+    }
+    dir = dirname(dir);
+  }
+  return process.cwd();
+}
+
+/**
+ * 프로젝트 설정에서 경로 별칭(Path Alias) 설정을 읽어옵니다. (v3.1 Hierarchical)
+ */
+export function loadProjectAliases(pathContext?: string): Record<string, string> {
   const aliases: Record<string, string> = {};
+  
+  let workspacePath = process.cwd();
+  if (pathContext) {
+    try {
+      if (existsSync(pathContext) && statSync(pathContext).isDirectory()) {
+        workspacePath = pathContext;
+      } else {
+        workspacePath = findNearestProjectRoot(dirname(pathContext));
+      }
+    } catch (e) {
+      // statSync 실패 시(모킹 등) 경로 문자열 기반 추측
+      workspacePath = pathContext.includes('.') ? findNearestProjectRoot(dirname(pathContext)) : pathContext;
+    }
+  }
 
   // 1. tsconfig.json 분석
   const tsConfigPath = join(workspacePath, 'tsconfig.json');
+// ... (rest same)
   if (existsSync(tsConfigPath)) {
     try {
       const content = readFileSync(tsConfigPath, 'utf-8').replace(/\/\/.*|\/\*[\s\S]*?\*\//g, '');
@@ -40,18 +69,20 @@ export function loadProjectAliases(workspacePath: string = process.cwd()): Recor
 }
 
 /**
- * 소스 코드 내의 임포트 경로를 실제 물리 파일 경로로 변환합니다. (v2.2 Alias Support)
+ * 소스 코드 내의 임포트 경로를 실제 물리 파일 경로로 변환합니다. (v3.1 Context-Aware)
  */
 export function resolveModulePath(
   currentDir: string,
   importPath: string,
   allFiles: string[],
-  workspacePath: string = process.cwd()
+  _ignoredWorkspacePath?: string,
+  filePath?: string
 ): string | null {
   let resolvedImportPath = importPath;
+  const projectRoot = filePath ? findNearestProjectRoot(dirname(filePath)) : currentDir;
 
-  // 1. 별칭(Alias) 해소 시도
-  const aliases = loadProjectAliases(workspacePath);
+  // 1. 별칭(Alias) 해소 시도 (해당 파일이 속한 프로젝트 컨텍스트 활용)
+  const aliases = loadProjectAliases(filePath);
   for (const [alias, target] of Object.entries(aliases)) {
     if (importPath === alias || importPath.startsWith(alias + '/')) {
       resolvedImportPath = importPath === alias 
@@ -59,7 +90,7 @@ export function resolveModulePath(
         : target + importPath.slice(alias.length);
       
       if (!isAbsolute(resolvedImportPath)) {
-        resolvedImportPath = join(workspacePath, resolvedImportPath);
+        resolvedImportPath = join(projectRoot, resolvedImportPath);
       }
       break;
     }

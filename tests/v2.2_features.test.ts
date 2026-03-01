@@ -31,7 +31,9 @@ describe('v2.2 New Features Validation', () => {
 
     // Alias resolution test
     const allFiles = [join(workspace, 'src/utils/Helper.ts')];
-    const resolved = resolveModulePath(workspace, '@/utils/Helper', allFiles, workspace);
+    // filePath를 명시적으로 전달하여 컨텍스트 기반 해소 테스트
+    const testFilePath = join(workspace, 'src/main.ts');
+    const resolved = resolveModulePath(workspace, '@/utils/Helper', allFiles, workspace, testFilePath);
     expect(resolved).toContain('src/utils/Helper.ts');
   });
 

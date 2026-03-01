@@ -22,24 +22,19 @@ export const ArchitectureRuleSchema = z.object({
   to: z.string(), // 허용되지 않는 대상 패턴 (예: 'src/infrastructure/**')
   message: z.string(), // 위반 시 출력할 안내 메시지
 });
-
-/**
- * Fast-Lint-MCP의 전체 설정 구조를 정의하는 스키마입니다.
- */
-const RulesSchema = z.object({
-  maxLineCount: z.number().default(500),
-  maxComplexity: z.number().default(25),
-  coveragePath: z.string().optional(),
-  coverageDirectory: z.string().default('coverage'),
-  minCoverage: z.number().default(80),
-  techDebtLimit: z.number().default(20),
-});
-
 export const ConfigSchema = z.object({
-  rules: RulesSchema.default({}),
+  rules: z.object({
+    maxLineCount: z.number().default(500),
+    maxComplexity: z.number().default(25),
+    coveragePath: z.string().optional(),
+    coverageDirectory: z.string().default('coverage'),
+    minCoverage: z.number().default(80),
+    techDebtLimit: z.number().default(20),
+  }).default({}),
   incremental: z.boolean().default(true),
   enableMutationTest: z.boolean().default(false),
   exclude: z.array(z.string()).default([
+// ...
     'node_modules/**', 
     'dist/**', 
     'out/**',
@@ -72,7 +67,9 @@ export class ConfigService {
    */
   constructor(workspacePath: string = process.cwd()) {
     let userConfig = this.loadConfig(workspacePath);
-    // Zod 스키마를 사용하여 사용자 설정의 유효성을 검사하고 기본값을 채웁니다.
+    
+    // Zod 스키마를 사용하여 기본값과 병합
+    // rules 객체 내부 필드들이 유실되지 않도록 Zod의 parse 결과를 활용
     this.config = ConfigSchema.parse(userConfig);
   }
 
