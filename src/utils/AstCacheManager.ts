@@ -31,7 +31,13 @@ export class AstCacheManager {
 
     try {
       const content = readFileSync(filePath, 'utf-8');
-      const lang = filePath.endsWith('.ts') || filePath.endsWith('.tsx') ? Lang.TypeScript : Lang.JavaScript;
+      let lang = Lang.JavaScript;
+      if (filePath.endsWith('.ts') || filePath.endsWith('.tsx')) {
+        lang = Lang.TypeScript;
+      } else if (filePath.endsWith('.kt') || filePath.endsWith('.kts')) {
+        lang = Lang.Kotlin;
+      }
+      
       const root = parse(lang, content).root();
       this.cache.set(filePath, root);
       return root;

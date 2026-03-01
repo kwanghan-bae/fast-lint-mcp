@@ -27,7 +27,7 @@ export class DependencyGraph {
     if (providedFiles) {
       allFiles = providedFiles.map(f => normalize(f));
     } else {
-      const files = await glob(['**/*.{ts,js,tsx,jsx}'], {
+      const files = await glob(['**/*.{ts,js,tsx,jsx,kt,kts}'], {
         cwd: this.workspacePath,
         absolute: true,
         ignore: [

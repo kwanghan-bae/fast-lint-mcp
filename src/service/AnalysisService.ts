@@ -9,6 +9,7 @@ import { DependencyGraph } from '../utils/DependencyGraph.js';
 import { countTechDebt } from '../analysis/rg.js';
 import { checkEnv } from '../checkers/env.js';
 import { JavascriptProvider } from '../providers/JavascriptProvider.js';
+import { KotlinProvider } from '../providers/KotlinProvider.js';
 import { Violation, QualityReport, QualityProvider } from '../types/index.js';
 import { checkStructuralIntegrity } from '../utils/AnalysisUtils.js';
 import { clearProjectFilesCache, getProjectFiles } from '../analysis/import-check.js';
@@ -38,6 +39,7 @@ export class AnalysisService {
     this.workspacePath = this.config.workspacePath || process.cwd();
     this.git = simpleGit(this.workspacePath);
     this.providers.push(new JavascriptProvider(this.config));
+    this.providers.push(new KotlinProvider(this.config));
     this.depGraph = new DependencyGraph(this.workspacePath);
   }
 
@@ -106,10 +108,9 @@ export class AnalysisService {
     const supportedExts = this.providers.flatMap((p) => p.extensions);
     const ignorePatterns = this.config.exclude;
 
-    // v3.3: One-Pass Scan (Pre-load all project files once)
+    // v3.4: One-Pass Scan (JS/TS + Kotlin 지원)
     const allProjectFiles = await getProjectFiles(this.workspacePath, ignorePatterns);
     
-    // 의존성 그래프 빌드 시 이미 스캔된 파일 리스트 활용 (I/O 병목 제거)
     await this.depGraph.build(allProjectFiles);
 
     if (this.config.incremental) {
@@ -252,8 +253,8 @@ export class AnalysisService {
     } else {
       const modeDesc = incrementalMode ? '증분 분석' : '전체 분석';
       suggestion = pass
-        ? `모든 품질 인증 기준을 통과했습니다. (v3.3.0 / 대상: ${files.length}개, ${modeDesc})`
-        : violations.map((v) => v.message).join('\n') + `\n\n(v3.3.0 / 총 ${files.length}개 파일 분석됨 - ${modeDesc})`;
+        ? `모든 품질 인증 기준을 통과했습니다. (v3.4.0 / 대상: ${files.length}개, ${modeDesc})`
+        : violations.map((v) => v.message).join('\n') + `\n\n(v3.4.0 / 총 ${files.length}개 파일 분석됨 - ${modeDesc})`;
     }
 
     if (healingMessages.length > 0) {
