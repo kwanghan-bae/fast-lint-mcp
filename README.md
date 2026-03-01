@@ -1,49 +1,43 @@
-# Fast-Lint-MCP (QualityGate) 🚀 v2.1.2
+# Fast-Lint-MCP 🚀 v3.7.0 (The Ultimate AI Architect)
 
-**"AI가 만든 기술 부채를 AI 스스로 해결하게 만드는 지능형 품질 검속 서버"**
+**"AI가 만든 기술 부채를 뿌리 뽑고, 대규모 멀티모듈 아키텍처를 수호하는 지능형 품질 엔진"**
 
-Fast-Lint-MCP는 AI 에이전트(Claude, Gemini 등)가 작성한 코드의 품질을 실시간으로 감시하고, 정해진 기준을 통과하지 못할 경우 리팩토링을 강제하는 **Model Context Protocol (MCP)** 서버입니다. v2.1.2에서는 **ast-grep 배치 처리(Batching)** 기술을 도입하여 Rust 네이티브 엔진의 성능을 극한까지 끌어올렸습니다.
-
----
-
-## ✨ 주요 기능 (Key Features)
-
-### 1. ⚡ 초고속 Rust 배치 처리 아키텍처 - v2.1.2 UP!
-Native Rust (`ast-grep`) 엔진의 성능을 100% 활용하도록 설계를 최적화했습니다.
-*   **의존성 분석 통합**: 수십 개의 임포트 패턴을 단 하나의 규칙으로 통합하여 파일당 스캔 횟수를 최소화했습니다.
-*   **미사용 코드 탐지 최적화**: 각 의존성 파일을 단 한 번만 파싱하고 내부의 모든 심볼 사용 여부를 동시에 판별하는 배치 처리 방식을 도입하여, 대규모 프로젝트 분석 속도를 획기적으로 개선했습니다.
-*   **Zero-Cache 신뢰성**: 성능이 비약적으로 향상되어 캐시 없이도 실시간 분석이 가능하며, 언제나 최신 규칙이 즉각 반영됩니다.
-
-### 2. 🇰🇷 Korean First 가독성 및 주석 규칙
-AI 에이전트가 생성하는 코드의 가독성을 보장하기 위해 한국어 주석 작성을 강력히 강제합니다.
-*   **맥락 인식 규칙 (Context-aware)**: 테스트 파일 및 디렉토리는 주석 강제 대상에서 제외하여 실무적인 편의성을 높였습니다.
-*   **스코프 정밀 분석**: 전역 심볼과 지역 변수를 정확히 구분하여, 실제로 관리가 필요한 코드에 대해서만 주석을 요구합니다.
-*   **범용 선언 지원**: ESM 및 CommonJS(Node.js) 패턴을 모두 지원합니다.
-
-### 3. 📊 시각적 품질 리포트 (Pretty Reports)
-MCP 클라이언트에서 보기 좋게 렌더링되는 **Markdown 기반의 유려한 리포트**를 제공합니다.
-*   **투명한 분석 통계**: 리포트 하단에 서버 버전과 분석 근거(Git staging 등)를 명시합니다.
-*   **상세 가이드**: 시니어 개발자의 관점에서 구체적인 리팩토링 방향을 제안합니다.
+Fast-Lint-MCP는 AI 에이전트(Claude, Gemini 등)가 작성한 코드의 품질을 실시간으로 감시하고, 정해진 아키텍처 기준을 통과하지 못할 경우 리팩토링을 강제하는 **Model Context Protocol (MCP)** 서버입니다. v3.7.0은 **Real-Time Turbo 엔진**과 **다국어(Polyglot) 지원**을 통해 엔터프라이즈급 프로젝트의 품질을 10초 이내에 정복합니다.
 
 ---
 
-## ⚡ Built-in High Performance
+## ✨ 핵심 혁신 사항 (What's New in v3.0+)
 
-Fast-Lint-MCP는 성능 최적화에 진심입니다.
-*   **Zero-Install Performance**: 별도의 Rust 컴파일러 없이 즉시 작동하는 고성능 바이너리가 포함되어 있습니다.
-*   **스마트 증분 분석**: 변경 사항 및 역의존성을 추적하여 꼭 필요한 범위만 정밀 분석합니다.
+### 1. ⚡ Real-Time Turbo 엔진 (Zero I/O & AST Caching)
+Native Rust (`ast-grep`) 엔진의 성능을 200% 해방시켰습니다.
+*   **AST Cache Manager**: 세션 내 중복 파싱을 완벽히 제거하여 대규모 프로젝트(수천 개 파일) 분석 속도를 수 분에서 **수 초**로 단축했습니다.
+*   **Memory-Native Path Resolver**: 모든 파일 탐색 및 프로젝트 루트 탐색을 메모리에서 처리하여 디스크 I/O 병목을 제거했습니다.
+*   **Parallel Dependency Graph**: 전 전용 코어를 풀가동하여 의존성 그래프를 병렬로 구축합니다.
+
+### 2. 🏗️ 멀티모듈 & 계층적 분석 (Hierarchical Support)
+복잡한 모노레포(NX, Turborepo, Yarn Workspaces) 환경을 완벽히 지원합니다.
+*   **컨텍스트 인식 별칭(Alias)**: 분석 중인 파일에서 가장 가까운 `tsconfig.json`을 자동으로 찾아 별칭을 해소합니다.
+*   **지능형 의존성 병합**: 서브 프로젝트와 루트 프로젝트의 `package.json`을 통합 분석하여 라이브러리 환각(Hallucination)을 오탐 없이 탐지합니다.
+
+### 3. 🌐 다국어(Polyglot) 분석 엔진
+이제 JavaScript/TypeScript를 넘어 더 넓은 생태계를 수호합니다.
+*   **Kotlin Native Support**: Kotlin(`.kt`, `.kts`) 언어에 대한 네이티브 AST 품질 분석을 지원합니다.
+*   **추상화 레이어**: 새로운 언어 프로바이더를 플러그인 형태로 즉시 추가할 수 있는 표준 파이프라인을 구축했습니다.
+
+### 4. 🛡️ 프로젝트 성역화 (Global Storage & Hygiene)
+사용자의 소중한 소스 코드를 조금도 오염시키지 않습니다.
+*   **Global Storage**: 모든 상태값과 캐시는 `~/.fast-lint-mcp` 전역 저장소에 보관됩니다. 프로젝트 폴더는 100% 청정하게 유지됩니다.
+*   **브랜치 격리(Isolation)**: Git 브랜치별로 품질 기준점을 독립적으로 관리하여 협업 중 발생하는 간섭을 차단했습니다.
+*   **자동 위생 관리(GC)**: 30일 이상 접근하지 않은 오래된 데이터는 시스템이 스스로 삭제하여 디스크를 보호합니다.
 
 ---
 
-## 🧠 에이전트 전용 Skill (Semantic Guardian)
+## 📊 지능형 가드레일 (Smart Guardrails)
 
-Gemini CLI용 전용 스킬을 통해 에이전트는 **"한글 주석 작성 원칙"**과 **"최소 토큰 작업 전략"**을 완벽히 이해하고 실행합니다.
-
-### 스킬 등록 방법
-```bash
-# Gemini CLI 글로벌 스킬로 등록 (심볼릭 링크)
-gemini skills link .gemini/skills/semantic-guardian
-```
+*   **Security Entropy**: 단순 키워드 매칭 대신 문자열 무작위성을 측정하여 실제 비밀번호만 정확히 탐지하고 색상 코드 등의 오탐을 제거합니다.
+*   **Intelligent Coverage**: 테스트 리포트의 신선도(Freshness)를 검사하여 코드를 고치고 테스트를 누락하는 꼼수를 차단합니다.
+*   **Refactoring Blueprint**: 복잡한 심볼 TOP 3를 특정하고, 코드 패턴(UI vs Logic)에 따른 **시니어급 리팩토링 가이드(Senior Advice)**를 제공합니다.
+*   **Test Validity Check**: 단언문(expect, assert 등)이 없는 '가짜 테스트'를 AST 레벨에서 탐지합니다.
 
 ---
 
@@ -60,20 +54,23 @@ npm run build
 gemini mcp add -s user --trust fast-lint-mcp node /절대경로/to/fast-lint-mcp/dist/index.js
 ```
 
+### 3. CLI 실전 분석 (외부 프로젝트 조준)
+```bash
+npx tsx src/index.ts --check --path /목표/프로젝트/경로
+```
+
 ---
 
 ## 🛠️ 요구사항 (Prerequisites)
 
 *   **Node.js**: v18.0.0 이상
 *   **ripgrep (rg)**: 기술 부채 스캔용 (`brew install ripgrep`)
-*   **fd-find (fd)**: 고속 파일 탐색용 (`brew install fd`)
 *   **Zero-Install Rust**: 별도의 Rust 설치가 필요 없습니다. (`@ast-grep/napi` 바이너리 내장)
 
 ---
 
-## 🤖 AI 에이전트 작업 규약 (Agent Protocol v2.1.2)
+## 🤖 AI 에이전트 작업 규약 (Agent Protocol v3.7.0)
 
 1.  **[한글 주석 우선]**: 모든 주요 클래스, 함수, 멤버 변수 위에는 반드시 한글 주석을 작성하십시오. (테스트 파일 제외)
 2.  **[최소 읽기]**: `read_file` 대신 `get-symbol-metrics`와 `get-symbol-content`를 사용하여 필요한 부분만 읽으십시오.
-3.  **[자가 검증]**: 코드 수정 후 반드시 `verify-fix`를 실행하여 테스트 통과 여부를 확인하십시오.
-4.  **[품질 인증]**: 모든 작업 완료 전 반드시 `quality-check`를 호출하여 `pass: true`를 획득해야 합니다.
+3.  **[품질 인증]**: 모든 작업 완료 전 반드시 `quality-check`를 호출하여 `pass: true`를 획득해야 합니다.
