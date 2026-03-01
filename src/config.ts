@@ -25,21 +25,20 @@ export const ArchitectureRuleSchema = z.object({
 
 /**
  * Fast-Lint-MCP의 전체 설정 구조를 정의하는 스키마입니다.
- * 기본값 설정 및 유효성 검사를 Zod를 통해 수행합니다.
  */
+const RulesSchema = z.object({
+  maxLineCount: z.number().default(500),
+  maxComplexity: z.number().default(25),
+  coveragePath: z.string().optional(),
+  coverageDirectory: z.string().default('coverage'),
+  minCoverage: z.number().default(80),
+  techDebtLimit: z.number().default(20),
+});
+
 export const ConfigSchema = z.object({
-  rules: z
-    .object({
-      maxLineCount: z.number().default(500), // 단일 파일 최대 라인 수 (주석 포함 고려하여 확장)
-      maxComplexity: z.number().default(25), // 함수/클래스 최대 복잡도 (AST 노드 기준)
-  coveragePath: z.string().optional(), // 커버리지 리포트 파일 직접 지정 (lcov.info, coverage-summary.json 등)
-      coverageDirectory: z.string().default('coverage'), // 커버리지 리포트가 생성되는 디렉토리
-      minCoverage: z.number().default(80), // 최소 필수 테스트 커버리지 (%)
-      techDebtLimit: z.number().default(20), // 허용되는 최대 TODO/FIXME 개수
-    })
-    .default({}),
-  incremental: z.boolean().default(true), // Git 변경 사항 기반의 증분 분석 사용 여부
-  enableMutationTest: z.boolean().default(false), // 변이 테스트(Mutation Test) 활성화 여부
+  rules: RulesSchema.default({}),
+  incremental: z.boolean().default(true),
+  enableMutationTest: z.boolean().default(false),
   exclude: z.array(z.string()).default([
     'node_modules/**', 
     'dist/**', 
@@ -50,9 +49,9 @@ export const ConfigSchema = z.object({
     'android/**',
     'ios/**',
     'tests/**'
-  ]), // 분석 제외 경로
-  customRules: z.array(CustomRuleSchema).default([]), // 사용자 정의 정적 분석 규칙 목록
-  architectureRules: z.array(ArchitectureRuleSchema).default([]), // 아키텍처 의존성 규칙 목록
+  ]),
+  customRules: z.array(CustomRuleSchema).default([]),
+  architectureRules: z.array(ArchitectureRuleSchema).default([]),
 });
 
 // TypeScript 타입 추출

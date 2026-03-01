@@ -92,7 +92,7 @@ export function checkStructuralIntegrity(dg?: DependencyGraph): Violation[] {
   if (!dg) return [];
 
   // 1. 모듈 간 순환 참조(Circular Dependency) 탐지
-  const cycles = dg.detectCycles();
+  const cycles = dg.detectCycles() || [];
   cycles.forEach((cycle) => {
     violations.push({
       type: 'ARCHITECTURE',
