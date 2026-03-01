@@ -43,10 +43,12 @@ export interface QualityReport {
   violations: Violation[]; // 발견된 위반 사항 목록
   suggestion?: string; // 개선을 위한 종합 조치 가이드
   metadata?: {
+    version: string; // 도구 버전 (예: 'v3.8.0')
     timestamp: string; // 분석 수행 시각
     coverageFreshness?: 'fresh' | 'stale' | 'missing'; // 커버리지 리포트의 신선도 상태
     coverageLastUpdated?: string; // 커버리지 리포트의 마지막 수정 시각
     analysisMode: 'full' | 'incremental'; // 분석 모드
+    filesAnalyzed: number; // 이번 분석에서 스캔/갱신된 파일 수
   };
 }
 

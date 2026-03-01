@@ -83,6 +83,21 @@ export class DependencyGraph {
   }
 
   /**
+   * 특정 파일이 임포트하고 있는 하위 파일(Dependencies) 목록을 가져옵니다.
+   * @param filePath 대상 파일 경로
+   */
+  getDependencies(filePath: string): string[] {
+    return this.importMap.get(normalize(filePath)) || [];
+  }
+
+  /**
+   * 그래프에 등록된 모든 파일 경로 목록을 반환합니다.
+   */
+  getAllFiles(): string[] {
+    return Array.from(this.importMap.keys());
+  }
+
+  /**
    * 프로젝트 내의 순환 참조(Circular Dependency)를 탐지합니다.
    * v3.3.2: 고성능 스택 기반 DFS 알고리즘을 사용하여 분석 속도를 높였습니다.
    */

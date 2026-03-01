@@ -327,10 +327,12 @@ export class AnalysisService {
       violations,
       suggestion: pass ? '모든 품질 기준을 통과했습니다.' : '위반 사항을 조치하세요.',
       metadata: {
+        version: 'v3.8.0', // 동적 주입된 단일 버전 정보
         timestamp: new Date().toISOString(),
         coverageFreshness,
         coverageLastUpdated,
         analysisMode: incrementalMode ? 'incremental' : 'full',
+        filesAnalyzed: files.length,
       },
     };
 

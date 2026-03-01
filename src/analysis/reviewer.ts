@@ -267,6 +267,7 @@ function checkCommentDensity(
 
 /**
  * 클래스 멤버들의 품질을 리뷰합니다.
+ * v3.8.1: Decorator 인지 및 DTO/Entity 성격에 따른 명명 최적화
  */
 function reviewMembers(
   root: SgNode,
@@ -276,22 +277,40 @@ function reviewMembers(
 ): Violation[] {
   if (isTestFile) return [];
   const violations: Violation[] = [];
+  const isDtoOrEntity = filePath.toLowerCase().includes('dto') || filePath.toLowerCase().includes('entity');
+
   root.findAll({ rule: { kind: 'class_body' } }).forEach((body) => {
     body.children().forEach((m) => {
       const kind = m.kind() as string;
       if (kind.includes('definition') || kind.includes('method') || kind.includes('field')) {
-        const idNode = m.find({
+        // 데코레이터 하위의 식별자는 제외하고 실제 프로퍼티/메서드 식별자만 추출
+        const allIds = m.findAll({
           rule: { any: [{ kind: 'property_identifier' }, { kind: 'identifier' }] },
         });
+        
+        let idNode = allIds.find(node => {
+          let parent = node.parent();
+          while (parent && parent !== m) {
+            if (parent.kind() === 'decorator') return false;
+            parent = parent.parent();
+          }
+          return true;
+        }) || allIds[0];
+
         const name = idNode?.text().trim() || 'unknown';
         if (isNoiseSymbol(name)) return;
-        const label = kind.includes('method') ? '메서드' : '멤버 변수';
+
+        let label = kind.includes('method') ? '메서드' : '멤버 변수';
+        if (!kind.includes('method') && isDtoOrEntity) {
+          label = '필드 (DTO/Entity)';
+        }
 
         if (!hasKoreanCommentAbove(m, allLines)) {
           violations.push({
             type: 'READABILITY',
             file: filePath,
             line: m.range().start.line + 1,
+            rationale: `심볼 타입: ${kind} [${name}]`,
             message: `[Senior Advice] ${label} [${name}] 위에 한글 주석을 추가하세요.`,
           });
         }
@@ -302,6 +321,7 @@ function reviewMembers(
 }
 /**
  * 전역 변수 및 할당부의 품질을 리뷰합니다.
+ * v3.8.1: 테스트 코드 명세화 (Test-as-Spec) 지원 및 생태계 인식 강화
  */
 function reviewGlobals(root: SgNode, filePath: string, allLines: string[]): Violation[] {
   const violations: Violation[] = [];
@@ -310,6 +330,12 @@ function reviewGlobals(root: SgNode, filePath: string, allLines: string[]): Viol
     { kind: 'variable_declaration' },
     { kind: 'expression_statement' },
   ];
+
+  const isTestFile =
+    filePath.includes('.test.') ||
+    filePath.includes('.spec.') ||
+    filePath.includes('/tests/') ||
+    filePath.includes('/__tests__/');
 
   root.findAll({ rule: { any: globalKinds } }).forEach((m) => {
     const parent = m.parent();
@@ -320,13 +346,31 @@ function reviewGlobals(root: SgNode, filePath: string, allLines: string[]): Viol
     const startLine = m.range().start.line + 1;
 
     if (m.kind() === 'expression_statement') {
-      if (
-        !m.text().includes('=') ||
-        (!m.text().includes('exports') && !m.text().includes('module'))
-      )
-        return;
-      name = m.text().split('=')[0].trim();
-      label = '모듈 할당';
+      const text = m.text();
+      // Test-as-Spec: 테스트 블록 인지
+      if (isTestFile) {
+        if (text.startsWith('describe(')) {
+          name = 'describe';
+          label = '테스트 스위트(Suite)';
+        } else if (text.startsWith('it(') || text.startsWith('test(')) {
+          // 개별 테스트 케이스는 너무 많을 수 있으므로 생략하거나 경고 레벨을 조정할 수 있으나,
+          // 여기서는 주요 검증 대상에만 집중하기 위해 스킵합니다.
+          return;
+        } else if (text.startsWith('beforeEach(') || text.startsWith('beforeAll(') || text.startsWith('afterEach(')) {
+          name = text.split('(')[0];
+          label = '테스트 설정 로직(Setup)';
+        } else {
+          return; // 기타 테스트 파일 내 표현식은 무시
+        }
+      } else {
+        if (
+          !text.includes('=') ||
+          (!text.includes('exports') && !text.includes('module'))
+        )
+          return;
+        name = text.split('=')[0].trim();
+        label = '모듈 할당';
+      }
     } else {
       // v3.7.4: JS/TS 혼합 환경에서 Kind 안전성 확보
       let idNode = null;
@@ -344,11 +388,16 @@ function reviewGlobals(root: SgNode, filePath: string, allLines: string[]): Viol
     if (isNoiseSymbol(name)) return;
 
     if (!hasKoreanCommentAbove(m, allLines)) {
+      const advice = label.includes('테스트') 
+        ? `[Senior Advice] 복잡한 ${label} [${name}] 구간의 의도(Intent)나 Mocking 구조를 설명하는 한글 주석을 추가하세요.` 
+        : `[Senior Advice] ${label} [${name}] 위에 한글 주석을 추가하세요.`;
+      
       violations.push({
         type: 'READABILITY',
         file: filePath,
         line: startLine,
-        message: `[Senior Advice] ${label} [${name}] 위에 한글 주석을 추가하세요.`,
+        rationale: `심볼 타입: ${label}`,
+        message: advice,
       });
     }
   });

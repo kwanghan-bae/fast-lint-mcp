@@ -170,12 +170,31 @@ function scanImportsForHallucination(
         const libName = source.startsWith('@')
           ? source.split('/').slice(0, 2).join('/')
           : source.split('/')[0];
+          
         if (!nodeBuiltins.has(libName) && !dependencies.includes(libName)) {
-          violations.push({
-            id: 'HALLUCINATION_LIB',
-            line,
-            message: `설치되지 않은 라이브러리 참조: ${libName}`,
-          });
+          // v3.8.1: 트랜지티브(Transitive) 의존성 방어 - node_modules에 물리적으로 존재하는지 확인
+          let isInstalled = false;
+          let currentDir = dirname(absPath);
+          while (currentDir.length >= workspacePath.length) {
+            if (existsSync(join(currentDir, 'node_modules', libName))) {
+              isInstalled = true;
+              break;
+            }
+            const parent = dirname(currentDir);
+            if (parent === currentDir) break;
+            currentDir = parent;
+          }
+          if (!isInstalled && existsSync(join(workspacePath, 'node_modules', libName))) {
+            isInstalled = true;
+          }
+
+          if (!isInstalled) {
+            violations.push({
+              id: 'HALLUCINATION_LIB',
+              line,
+              message: `설치되지 않은 라이브러리 참조: ${libName}`,
+            });
+          }
         }
       }
     });
@@ -262,28 +281,46 @@ export async function checkFakeLogic(
         paramsNode = m.child(0); // 첫 번째 자식이 파라미터일 확률이 높음
       }
 
-      const paramsText = paramsNode?.text() || '';
-      if (paramsText.trim().length > 2 && body.includes('return ')) {
-        // 파라미터 목록 추출 (구조 분해 할당 및 타입 정의 제거)
-        const pList = paramsText
-          .replace(/[()]/g, '')
-          .split(',')
-          .map((p) => {
-            const clean = p
-              .trim()
-              .split(':')[0]
-              .replace(/[\?=\{\}\[\]]/g, ' ')
-              .trim();
-            return clean.split(/\s+/)[0]; // 첫 번째 식별자만 취함
-          })
-          .filter((p) => p && p.length > 0 && !['props', 'req', 'res', 'next', 'ctx'].includes(p));
+      if (paramsNode && body.includes('return ')) {
+        const paramNames = new Set<string>();
 
-        if (pList.length > 0 && pList.every((p) => !body.includes(p))) {
-          violations.push({
-            id: 'FAKE_LOGIC_CONST',
-            line: m.range().start.line + 1,
-            message: `[${name}] 파라미터를 사용하지 않는 의심스러운 로직 (가짜 구현 가능성)`,
+        // 1. 일반 식별자 추출 (타입 선언 내부 제외)
+        paramsNode.findAll({ rule: { kind: 'identifier' } }).forEach((idNode) => {
+          let isType = false;
+          let p = idNode.parent();
+          while (p && p !== paramsNode) {
+            if (p.kind() === 'type_annotation' || p.kind() === 'type_identifier' || p.kind() === 'type_parameters') {
+              isType = true;
+              break;
+            }
+            p = p.parent();
+          }
+          if (!isType) paramNames.add(idNode.text().trim());
+        });
+
+        // 2. 구조 분해 할당의 단축 속성명 추출 (예: { id })
+        paramsNode.findAll({ rule: { kind: 'shorthand_property_identifier' } }).forEach((idNode) => {
+          paramNames.add(idNode.text().trim());
+        });
+
+        const pList = Array.from(paramNames).filter(
+          (p) => p.length > 0 && !['props', 'req', 'res', 'next', 'ctx'].includes(p)
+        );
+
+        // 파라미터가 하나라도 사용되지 않았는지 검사 (단어 경계 기반)
+        if (pList.length > 0) {
+          const allUnused = pList.every((p) => {
+            const regex = new RegExp(`\\b${p}\\b`);
+            return !regex.test(body);
           });
+
+          if (allUnused) {
+            violations.push({
+              id: 'FAKE_LOGIC_CONST',
+              line: m.range().start.line + 1,
+              message: `[${name}] 파라미터를 사용하지 않는 의심스러운 로직 (가짜 구현 가능성)`,
+            });
+          }
         }
       }
     });
