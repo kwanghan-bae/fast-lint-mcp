@@ -15,6 +15,10 @@ import { existsSync, statSync } from 'fs';
  * v3.7.2: 도구 핸들러 고도화 및 가독성 최적화
  */
 
+if (process.env.FAST_LINT_WORKSPACE) {
+  process.chdir(process.env.FAST_LINT_WORKSPACE);
+}
+
 /** MCP 서버 인스턴스 설정 및 초기화 */
 const server = new Server(
   {
@@ -94,6 +98,10 @@ function getToolDefinitions() {
           incremental: {
             type: 'boolean',
             description: 'Whether to use incremental analysis based on git changes',
+          },
+          targetPath: {
+            type: 'string',
+            description: 'Absolute path to the project directory to analyze (optional, defaults to current working directory)',
           },
         },
       },
@@ -190,7 +198,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
  * 개별 도구 호출에 대한 실제 로직을 수행합니다.
  */
 async function handleToolCall(name: string, args: any) {
-  const workspace = process.cwd();
+  const workspace = args?.targetPath || process.env.FAST_LINT_WORKSPACE || process.cwd();
+  // 동적으로 설정한 workspace 경로로 프로세스의 작업 디렉토리를 변경합니다.
+  process.chdir(workspace);
   const semanticSvc = getSemantic();
 
   switch (name) {
