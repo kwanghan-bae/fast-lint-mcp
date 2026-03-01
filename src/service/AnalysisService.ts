@@ -1,4 +1,4 @@
-import { readFileSync, existsSync, statSync } from 'fs';
+import { readFileSync, existsSync, statSync, rmSync } from 'fs';
 import glob from 'fast-glob';
 import pMap from 'p-map';
 import { simpleGit, SimpleGit } from 'simple-git';
@@ -91,6 +91,12 @@ export class AnalysisService {
   }
 
   async runAllChecks(): Promise<QualityReport> {
+    // legacy state 파일 청소 (프로젝트 성역화 v3.5)
+    const legacyStateFile = join(this.workspacePath, '.fast-lint-state.json');
+    if (existsSync(legacyStateFile)) {
+      try { rmSync(legacyStateFile); } catch(e) {}
+    }
+
     const envResult = await checkEnv();
     if (!envResult.pass) {
       return {
