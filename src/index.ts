@@ -75,8 +75,28 @@ function getToolDefinitions() {
     {
       name: 'quality-check',
       description:
-        'Performs a comprehensive code quality check across the entire project. (v3.7 Turbo)',
-      inputSchema: { type: 'object', properties: {} },
+        'Performs a comprehensive code quality check. Supports dynamic tuning of thresholds. (v3.8 Evolution)',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          securityThreshold: {
+            type: 'number',
+            description: 'Minimum entropy for secret detection (default: 4.0)',
+          },
+          maxLines: {
+            type: 'number',
+            description: 'Maximum lines allowed in a single logic file',
+          },
+          maxComplexity: {
+            type: 'number',
+            description: 'Maximum cyclomatic complexity allowed',
+          },
+          incremental: {
+            type: 'boolean',
+            description: 'Whether to use incremental analysis based on git changes',
+          },
+        },
+      },
     },
     {
       name: 'get-symbol-metrics',
@@ -175,7 +195,7 @@ async function handleToolCall(name: string, args: any) {
 
   switch (name) {
     case 'quality-check': {
-      const report = await getAnalyzer().runAllChecks();
+      const report = await getAnalyzer().runAllChecks(args);
       return { content: [{ type: 'text', text: formatReport(report) }] };
     }
     case 'get-symbol-metrics': {

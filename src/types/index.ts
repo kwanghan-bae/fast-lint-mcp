@@ -28,6 +28,7 @@ export interface Violation {
   line?: number; // 위반 발생 라인 번호 (1부터 시작)
   column?: number; // 위반 발생 컬럼 번호
   snippet?: string; // 위반이 발생한 코드 조각
+  rationale?: string; // 도구가 이 위반을 판정한 구체적인 근거 (예: "심볼 타입: Function")
   message: string; // 위반 내용에 대한 상세 설명
   value?: any; // 현재 측정값 (선택 사항)
   limit?: any; // 허용되는 기준값 (선택 사항)
@@ -41,6 +42,12 @@ export interface QualityReport {
   pass: boolean; // 품질 기준 통과 여부
   violations: Violation[]; // 발견된 위반 사항 목록
   suggestion?: string; // 개선을 위한 종합 조치 가이드
+  metadata?: {
+    timestamp: string; // 분석 수행 시각
+    coverageFreshness?: 'fresh' | 'stale' | 'missing'; // 커버리지 리포트의 신선도 상태
+    coverageLastUpdated?: string; // 커버리지 리포트의 마지막 수정 시각
+    analysisMode: 'full' | 'incremental'; // 분석 모드
+  };
 }
 
 /**
@@ -74,8 +81,13 @@ export interface QualityProvider {
 
   /**
    * 지정된 파일의 품질을 분석합니다.
+   * v3.8: 런타임에 동적으로 주입된 옵션을 지원합니다.
    */
-  check(filePath: string): Promise<Violation[]>;
+  check(filePath: string, options?: {
+    securityThreshold?: number;
+    maxLines?: number;
+    maxComplexity?: number;
+  }): Promise<Violation[]>;
 
   /**
    * (선택 사항) 발견된 오류에 대한 자동 수정 기능을 수행합니다.

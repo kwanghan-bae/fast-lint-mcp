@@ -44,11 +44,14 @@ const CONSTANT_KEY_REGEX = /^[A-Z_]+_KEY\s*[:=]/;
 
 /**
  * 보안 탐지 예외 처리 로직이 포함된 정밀 스캔 (v2.2 Entropy)
+ * v3.8: 동적 엔트로피 임계값 지원 및 추론 근거(Rationale) 추가.
  */
-export async function checkSecrets(filePath: string): Promise<Violation[]> {
+export async function checkSecrets(filePath: string, securityThreshold?: number): Promise<Violation[]> {
   // v3.3.2: AstCacheManager 활용하여 중복 I/O 제거
   const root = AstCacheManager.getInstance().getRootNode(filePath);
   const content = root ? root.text() : readFileSync(filePath, 'utf-8');
+  
+  const threshold = securityThreshold ?? 4.0;
 
   const violations: Violation[] = [];
   for (const { id, pattern, message } of SECRET_PATTERNS) {
@@ -80,7 +83,7 @@ export async function checkSecrets(filePath: string): Promise<Violation[]> {
       const isLikelySafe =
         hasAssignment && (SAFE_IDENTIFIER_REGEX.test(keyName) || CONSTANT_KEY_REGEX.test(keyName));
 
-      if (id === 'JWT_TOKEN' || (entropy > 4.0 && !isLikelySafe)) {
+      if (id === 'JWT_TOKEN' || (entropy > threshold && !isLikelySafe)) {
         const lines = content.substring(0, matchIndex).split('\n');
         const line = lines.length;
         const column = lines[lines.length - 1].length + 1;
@@ -95,6 +98,7 @@ export async function checkSecrets(filePath: string): Promise<Violation[]> {
           line,
           column,
           snippet: `...${snippet.replace(/\n/g, ' ')}...`,
+          rationale: `엔트로피: ${entropy.toFixed(2)} (임계값: ${threshold.toFixed(1)}), 매칭 키: ${keyName || 'N/A'}`,
           message: `[${id}] ${message}${id !== 'JWT_TOKEN' ? ` (엔트로피: ${entropy.toFixed(2)})` : ''} 민감 정보 노출 의심.`,
         });
       }

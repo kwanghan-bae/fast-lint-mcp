@@ -140,6 +140,7 @@ function reviewClasses(
           type: 'READABILITY',
           file: filePath,
           line: m.range().start.line + 1,
+          rationale: `심볼 타입: Class [${className}]`,
           message: `[Senior Advice] 클래스 [${className}] 위에 한글 주석을 추가하여 역할을 설명하세요.`,
         });
       }
@@ -194,6 +195,7 @@ function analyzeSingleFunction(
       type: 'READABILITY',
       file: filePath,
       line: startLine,
+      rationale: `심볼 타입: ${m.kind()} [${name}]`,
       message: `[Senior Advice] 함수 [${name}] 위에 한글 주석을 추가하여 용도를 설명하세요.`,
     });
   }
@@ -211,6 +213,7 @@ function analyzeSingleFunction(
       type: 'READABILITY',
       file: filePath,
       line: startLine,
+      rationale: `함수 길이: ${bodyLines.length}줄 (제한: 150줄), 타입: ${m.kind()}`,
       message: `[Senior Advice] 함수 [${name}]의 길이가 너무 깁니다 (${bodyLines.length}줄). 분할을 권장합니다.`,
     });
   }
@@ -246,6 +249,7 @@ function checkCommentDensity(
         type: 'READABILITY',
         file: path,
         line: startLine,
+        rationale: `함수 길이: ${lines.length}줄, 주석 개수: ${commentCount}, 한글 미검출`,
         message: `[Senior Advice] 함수 [${name}]에 한글 주석이 없습니다. 한글 주석을 추가하세요.`,
       });
     }
@@ -254,6 +258,7 @@ function checkCommentDensity(
       type: 'READABILITY',
       file: path,
       line: startLine,
+      rationale: `함수 길이: ${lines.length}줄, 주석 0개`,
       message: `[Senior Advice] 함수 [${name}]의 로직이 복잡하지만 주석이 없습니다. 한글 주석을 추가하세요.`,
     });
   }

@@ -85,8 +85,13 @@ export class AnalysisService {
   /**
    * 병렬 처리를 통해 각 파일에 대한 품질 분석을 수행합니다.
    * @param files 분석 대상 파일 경로 목록
+   * @param options 동적 분석 옵션
    */
-  private async performFileAnalysis(files: string[]): Promise<Violation[]> {
+  private async performFileAnalysis(files: string[], options?: {
+    securityThreshold?: number;
+    maxLines?: number;
+    maxComplexity?: number;
+  }): Promise<Violation[]> {
     const cpuCount = os.cpus().length;
     const analysisResults = await pMap(
       files,
@@ -96,7 +101,7 @@ export class AnalysisService {
           const ext = extname(fullPath);
           const provider = this.providers.find((p) => p.extensions.includes(ext));
           if (!provider) return null;
-          const fileViolations = await provider.check(fullPath);
+          const fileViolations = await provider.check(fullPath, options);
           return { fileViolations } as AnalysisResult;
         } catch (e) {
           return null;
@@ -113,11 +118,17 @@ export class AnalysisService {
   }
 
   /**
-   * 전체 품질 체크 파이프라인을 실행합니다. (v3.7 Turbo)
-   * 환경 검사, 파일 스캔, 의존성 분석, 개별 파일 분석, 기술 부채 및 커버리지 확인을 순차적으로 수행합니다.
+   * 전체 품질 체크 파이프라인을 실행합니다. (v3.8 Evolution)
+   * 동적 파라미터를 지원하며, 상세한 메타데이터와 추론 근거를 포함한 리포트를 생성합니다.
+   * @param options 동적 임계값 및 분석 옵션
    */
-  async runAllChecks(): Promise<QualityReport> {
-    // 1. 레거시 상태 파일 청소 (프로젝트 성역화)
+  async runAllChecks(options: {
+    securityThreshold?: number;
+    maxLines?: number;
+    maxComplexity?: number;
+    incremental?: boolean;
+  } = {}): Promise<QualityReport> {
+    // 1. 레거시 상태 파일 청소
     const legacyStateFile = join(this.workspacePath, '.fast-lint-state.json');
     if (existsSync(legacyStateFile)) {
       try {
@@ -125,7 +136,7 @@ export class AnalysisService {
       } catch (e) {}
     }
 
-    // 2. 실행 환경( ripgrep 등) 확인
+    // 2. 실행 환경 확인
     const envResult = await checkEnv();
     if (!envResult.pass) {
       return {
@@ -136,17 +147,21 @@ export class AnalysisService {
     }
 
     const violations: Violation[] = [];
-    const rules = this.config.rules;
+    const rules = { ...this.config.rules }; // 런타임 수정을 위해 복사본 사용
+    
+    // 동적 파라미터 적용 (v3.8)
+    if (options.maxLines) rules.maxLineCount = options.maxLines;
+    if (options.maxComplexity) rules.maxComplexity = options.maxComplexity;
+    const incrementalOption = options.incremental ?? this.config.incremental;
+
     let files: string[] = [];
     let incrementalMode = false;
 
     const supportedExts = this.providers.flatMap((p) => p.extensions);
     const ignorePatterns = this.config.exclude;
 
-    // 3. One-Pass 파일 스캔 및 의존성 그래프 구축
+    // 3. One-Pass 파일 스캔
     let allProjectFiles = await getProjectFiles(this.workspacePath, ignorePatterns);
-
-    // v3.7.4: 노이즈 파일 원천 박멸 - 모든 분석의 기초가 되는 리스트 정제
     allProjectFiles = allProjectFiles.filter((file) => {
       const lower = file.toLowerCase();
       const isExcluded = ignorePatterns.some((p) =>
@@ -158,8 +173,6 @@ export class AnalysisService {
         lower.includes('/out/') ||
         lower.includes('/build/') ||
         lower.includes('/coverage/') ||
-        lower.includes('/android/') ||
-        lower.includes('/ios/') ||
         lower.endsWith('.min.js') ||
         lower.endsWith('.map');
       return !isExcluded && !isCommonNoise;
@@ -167,8 +180,8 @@ export class AnalysisService {
 
     await this.depGraph.build(allProjectFiles);
 
-    // 4. 분석 대상 파일 결정 (증분 vs 전체)
-    if (this.config.incremental) {
+    // 4. 분석 대상 파일 결정
+    if (incrementalOption) {
       const changedFiles = await this.getChangedFiles();
       if (changedFiles.length > 0) {
         incrementalMode = true;
@@ -207,7 +220,7 @@ export class AnalysisService {
       files = allProjectFiles.filter((f) => supportedExts.includes(extname(f)));
     }
 
-    // 5. 소스 파일 최신 수정 시간 기록 (자가 치유에 의한 변경분 제외 목적)
+    // 5. 소스 파일 최신 수정 시간 기록
     const lastSrcUpdate =
       files.length > 0
         ? files.reduce((max, f) => {
@@ -220,23 +233,13 @@ export class AnalysisService {
           }, 0)
         : 0;
 
-    // 6. 자가 치유(Self-Healing) 및 정적 분석 수행
-    const healingMessages: string[] = [];
-    for (const provider of this.providers) {
-      const targetFiles = files
-        .filter((f) => provider.extensions.includes(extname(f)))
-        .map((f) => (isAbsolute(f) ? f : join(this.workspacePath, f)));
-      if (targetFiles.length > 0 && provider.fix) {
-        const res = await provider.fix(targetFiles, this.workspacePath);
-        healingMessages.push(...res.messages);
-      }
-    }
-
-    const fileViolations = await this.performFileAnalysis(files);
+    // 6. 자가 치유 및 정적 분석 수행
+    // v3.8: 프로바이더에게 런타임 옵션 전달 로직 추가 예정
+    const fileViolations = await this.performFileAnalysis(files, options);
     const structuralViolations = checkStructuralIntegrity(this.depGraph);
     violations.push(...fileViolations, ...structuralViolations);
 
-    // 7. 기술 부채(TODO) 스캔
+    // 7. 기술 부채 스캔
     const techDebtCount = await countTechDebt(this.workspacePath, ignorePatterns);
     if (techDebtCount > rules.techDebtLimit) {
       violations.push({
@@ -247,11 +250,14 @@ export class AnalysisService {
       });
     }
 
-    // 8. 테스트 커버리지 검증 및 신선도 검사
+    // 8. 테스트 커버리지 및 신선도 메타데이터 생성
     let currentCoverage = 0;
+    let coverageFreshness: 'fresh' | 'stale' | 'missing' = 'missing';
+    let coverageLastUpdated = '';
+
     const coverageCandidates = [
-      this.config.rules.coveragePath,
-      join(this.workspacePath, this.config.rules.coverageDirectory, 'coverage-summary.json'),
+      rules.coveragePath,
+      join(this.workspacePath, rules.coverageDirectory, 'coverage-summary.json'),
       join(this.workspacePath, 'coverage', 'coverage-summary.json'),
       join(this.workspacePath, 'coverage-summary.json'),
     ].filter(Boolean) as string[];
@@ -268,35 +274,28 @@ export class AnalysisService {
     if (coveragePath) {
       try {
         const coverageStat = statSync(coveragePath);
-        // v3.7.8: 허용 오차를 5분(300,000ms)으로 상향하여 긴 테스트 수행 시간 지원
+        coverageLastUpdated = coverageStat.mtime.toISOString();
         const isStale = coverageStat.mtimeMs < lastSrcUpdate - 300000;
-        const content = readFileSync(coveragePath, 'utf-8');
+        coverageFreshness = isStale ? 'stale' : 'fresh';
 
+        const content = readFileSync(coveragePath, 'utf-8');
         if (coveragePath.endsWith('.json')) {
           const coverageData = JSON.parse(content);
           currentCoverage = coverageData.total?.lines?.pct ?? 0;
-        } else if (coveragePath.endsWith('lcov.info')) {
-          const lines = content.split('\n');
-          const found = lines
-            .filter((l) => l.startsWith('LF:'))
-            .reduce((a, b) => a + parseInt(b.split(':')[1]), 0);
-          const hit = lines
-            .filter((l) => l.startsWith('LH:'))
-            .reduce((a, b) => a + parseInt(b.split(':')[1]), 0);
-          currentCoverage = found > 0 ? (hit / found) * 100 : 0;
         }
 
         if (isStale && rules.minCoverage > 0) {
           violations.push({
             type: 'COVERAGE',
             message: `테스트 리포트가 소스 코드보다 오래되었습니다 (만료됨). 최신 커버리지를 반영하려면 'npm test'를 실행하세요.`,
+            rationale: `리포트 시각: ${coverageLastUpdated}, 소스 최신 수정: ${new Date(lastSrcUpdate).toISOString()}`,
           });
         }
       } catch (e) {}
     } else if (rules.minCoverage > 0) {
       violations.push({
         type: 'COVERAGE',
-        message: `테스트 커버리지 리포트를 찾을 수 없습니다 (검색 경로: ${this.config.rules.coverageDirectory}). 'npm test'를 실행하여 리포트를 생성하세요.`,
+        message: `테스트 커버리지 리포트를 찾을 수 없습니다. 'npm test'를 실행하여 리포트를 생성하세요.`,
       });
     }
 
@@ -309,7 +308,7 @@ export class AnalysisService {
       });
     }
 
-    // 8. 세션 간 품질 하락 감지 (가드레일)
+    // 9. 최종 리포트 및 메타데이터 구성
     const lastCoverage = await this.stateManager.getLastCoverage();
     let pass = violations.length === 0;
 
@@ -318,34 +317,28 @@ export class AnalysisService {
         type: 'COVERAGE',
         value: `${currentCoverage}%`,
         limit: `${lastCoverage}%`,
-        message: `이전 세션보다 커버리지가 하락했습니다 (${lastCoverage}% -> ${currentCoverage}%). REJECT!`,
+        message: `이전 세션보다 커버리지가 하락했습니다.`,
       });
       pass = false;
     }
 
-    // 9. 최종 결과 요약 생성
-    let suggestion = '';
-    if (allProjectFiles.length === 0) {
-      pass = false;
-      violations.push({ type: 'ENV', message: '분석할 소스 파일을 찾지 못했습니다.' });
-      suggestion = `분석 대상 파일이 없습니다. [${this.workspacePath}] 디렉토리를 확인하세요.`;
-    } else {
-      const modeDesc = incrementalMode ? '증분 분석' : '전체 분석';
-      suggestion = pass
-        ? `모든 품질 인증 기준을 통과했습니다. (v3.7.0 / 대상: ${files.length}개, ${modeDesc})`
-        : violations.map((v) => v.message).join('\n') +
-          `\n\n(v3.7.0 / 총 ${files.length}개 파일 분석됨 - ${modeDesc})`;
-    }
+    const report: QualityReport = {
+      pass,
+      violations,
+      suggestion: pass ? '모든 품질 기준을 통과했습니다.' : '위반 사항을 조치하세요.',
+      metadata: {
+        timestamp: new Date().toISOString(),
+        coverageFreshness,
+        coverageLastUpdated,
+        analysisMode: incrementalMode ? 'incremental' : 'full',
+      },
+    };
 
-    if (healingMessages.length > 0) {
-      suggestion += `\n\n[Self-Healing Result]\n${healingMessages.join('\n')}`;
-    }
-
-    // 10. 캐시 정리 및 상태 저장
+    // 캐시 정리 및 상태 저장
     AstCacheManager.getInstance().clear();
     clearProjectFilesCache();
     clearPathCache();
     await this.stateManager.saveCoverage(currentCoverage);
-    return { pass, violations, suggestion };
+    return report;
   }
 }

@@ -41,11 +41,15 @@ export class JavascriptProvider extends BaseQualityProvider {
   /**
    * 지정된 파일에 대해 종합적인 품질 검사를 수행합니다.
    * @param filePath 분석할 파일 경로
+   * @param options 동적 분석 옵션
    * @returns 발견된 위반 사항들의 배열
    */
-  async check(filePath: string): Promise<Violation[]> {
+  async check(filePath: string, options?: {
+    securityThreshold?: number;
+    maxLines?: number;
+    maxComplexity?: number;
+  }): Promise<Violation[]> {
     const violations: Violation[] = [];
-    const rules = this.config.rules;
     const customRules = this.config.customRules;
 
     // 테스트 파일 여부 판별 (v3.0)
@@ -70,7 +74,7 @@ export class JavascriptProvider extends BaseQualityProvider {
     const isDataFile = metrics.isDataFile;
 
     // 데이터 파일 여부에 따른 임계치 자동 계산 (v3.0 Common)
-    const { maxLines, maxComplexity } = this.getEffectiveLimits(isDataFile);
+    const { maxLines, maxComplexity } = this.getEffectiveLimits(isDataFile, options);
 
     if (!isDataFile && metrics.lineCount > maxLines) {
       violations.push({
@@ -78,6 +82,7 @@ export class JavascriptProvider extends BaseQualityProvider {
         file: filePath,
         value: metrics.lineCount,
         limit: maxLines,
+        rationale: `동적 임계값: ${maxLines}줄 (isDataFile: ${isDataFile})`,
         message: `단일 로직 파일이 너무 큽니다 (${metrics.lineCount}줄). 에이전트의 환각을 방지하기 위해 파일을 작게 분리하세요.`,
       });
     }
@@ -118,6 +123,7 @@ export class JavascriptProvider extends BaseQualityProvider {
           file: filePath,
           value: metrics.complexity,
           limit: maxComplexity,
+          rationale: `복잡도: ${metrics.complexity} (임계값: ${maxComplexity})`,
           message: `전체 복잡도(${metrics.complexity})가 기준을 초과했습니다. \n\n[Refactoring Blueprint]\n${blueprint}\n\n* Senior Advice: ${advice}`,
         });
       }
@@ -134,6 +140,7 @@ export class JavascriptProvider extends BaseQualityProvider {
         type: 'HALLUCINATION',
         file: filePath,
         line: hv.line,
+        rationale: `임포트 소스 분석 결과`,
         message: `[환각 경고] ${hv.message}`,
       });
     });
@@ -145,6 +152,7 @@ export class JavascriptProvider extends BaseQualityProvider {
         type: 'FAKE_LOGIC',
         file: filePath,
         line: fv.line,
+        rationale: `심볼 타입 분석 및 파라미터 사용 추적`,
         message: `[논리 의심] ${fv.message}`,
       });
     });
@@ -168,7 +176,7 @@ export class JavascriptProvider extends BaseQualityProvider {
     }
 
     // 5. 보안(Secret) 스캔: 하드코딩된 API Key나 토큰 노출 여부를 검사합니다.
-    const secretViolations = await checkSecrets(filePath);
+    const secretViolations = await checkSecrets(filePath, options?.securityThreshold);
     violations.push(...secretViolations);
 
     // 6. 시맨틱 코드 리뷰: 중첩 깊이, 파라미터 개수, 한글 주석 준수 여부 등 가독성 규칙을 검사합니다.

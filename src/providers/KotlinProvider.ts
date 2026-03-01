@@ -11,14 +11,18 @@ export class KotlinProvider extends BaseQualityProvider {
   name = 'Kotlin';
   public extensions = ['.kt', '.kts'];
 
-  async check(filePath: string): Promise<Violation[]> {
+  async check(filePath: string, options?: {
+    securityThreshold?: number;
+    maxLines?: number;
+    maxComplexity?: number;
+  }): Promise<Violation[]> {
     const violations: Violation[] = [];
     const customRules = this.config.customRules;
 
     // 1. 기본 AST 메트릭 분석 (Kotlin 지원 sg 엔진 활용)
     const metrics = await analyzeFile(filePath, customRules);
     const isDataFile = metrics.isDataFile;
-    const { maxLines, maxComplexity } = this.getEffectiveLimits(isDataFile);
+    const { maxLines, maxComplexity } = this.getEffectiveLimits(isDataFile, options);
 
     if (!isDataFile && metrics.lineCount > maxLines) {
       violations.push({
@@ -26,6 +30,7 @@ export class KotlinProvider extends BaseQualityProvider {
         file: filePath,
         value: metrics.lineCount,
         limit: maxLines,
+        rationale: `Kotlin 파일 크기 임계값: ${maxLines}줄`,
         message: `Kotlin 파일이 너무 큽니다 (${metrics.lineCount}줄). 클래스나 인터페이스를 논리적으로 분리하세요.`,
       });
     }
@@ -36,12 +41,13 @@ export class KotlinProvider extends BaseQualityProvider {
         file: filePath,
         value: metrics.complexity,
         limit: maxComplexity,
+        rationale: `Kotlin 함수 복잡도 임계값: ${maxComplexity}`,
         message: `Kotlin 함수의 복잡도(${metrics.complexity})가 너무 높습니다. 가독성을 위해 리팩토링이 필요합니다.`,
       });
     }
 
     // 2. 보안 스캔
-    const secretViolations = await checkSecrets(filePath);
+    const secretViolations = await checkSecrets(filePath, options?.securityThreshold);
     violations.push(...secretViolations);
 
     // 3. 정성적 리뷰 (Kotlin AST 구조 지원)

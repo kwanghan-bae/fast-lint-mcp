@@ -16,19 +16,27 @@ export function formatReport(report: QualityReport): string {
   const statusText = report.pass ? 'PASS' : 'FAIL';
 
   // 1. 헤더 및 종합 상태 출력
-  output += `## ${statusIcon} 프로젝트 품질 인증 결과: **${statusText}** (v2.1.2)\n\n`;
+  output += `## ${statusIcon} 프로젝트 품질 인증 결과: **${statusText}** (v3.8 Evolution)\n\n`;
+
+  // 메타데이터 출력 (v3.8)
+  if (report.metadata) {
+    const meta = report.metadata;
+    const freshnessIcon = meta.coverageFreshness === 'fresh' ? '🟢' : meta.coverageFreshness === 'stale' ? '🟠' : '⚪';
+    output += `> **분석 시각**: \`${meta.timestamp}\` | **모드**: \`${meta.analysisMode}\` | **커버리지**: ${freshnessIcon} \`${meta.coverageFreshness || 'unknown'}\` (최종 업데이트: ${meta.coverageLastUpdated || 'N/A'})\n\n`;
+  }
 
   if (report.violations.length > 0) {
     // 2. 위반 사항 목록을 Markdown 테이블로 구성
     output += `### 🚨 발견된 위반 사항 (${report.violations.length}건)\n\n`;
-    output += `| 구분(Type) | 대상 파일(File) | 위반 내용(Message) |\n`;
-    output += `| :--- | :--- | :--- |\n`;
+    output += `| 구분(Type) | 대상 파일(File) | 위반 내용(Message) | 판단 근거(Rationale) |\n`;
+    output += `| :--- | :--- | :--- | :--- |\n`;
 
     report.violations.forEach((v: Violation) => {
       // 테이블 깨짐 방지를 위해 파이프(|) 기호 이스케이프 처리
       const safeMessage = v.message.replace(/\|/g, '\\|');
+      const safeRationale = (v.rationale || '-').replace(/\|/g, '\\|');
       const fileWithLine = v.file ? `\`${v.file}${v.line ? `:L${v.line}` : ''}\`` : '`-`';
-      output += `| **${v.type}** | ${fileWithLine} | ${safeMessage} |\n`;
+      output += `| **${v.type}** | ${fileWithLine} | ${safeMessage} | *${safeRationale}* |\n`;
     });
   } else {
     // 3. 위반 사항이 없는 경우의 축하 메시지
@@ -60,14 +68,14 @@ export function formatCLITable(report: QualityReport): string {
   if (report.violations.length > 0) {
     // cli-table3를 사용하여 가독성 높은 표 생성
     const table = new Table({
-      head: [chalk.cyan('Type'), chalk.cyan('File'), chalk.cyan('Message')],
-      colWidths: [15, 30, 50],
+      head: [chalk.cyan('Type'), chalk.cyan('File'), chalk.cyan('Message'), chalk.cyan('Rationale')],
+      colWidths: [12, 25, 40, 25],
       wordWrap: true,
     });
 
     report.violations.forEach((v: Violation) => {
       const fileWithLine = v.file ? `${v.file}${v.line ? `:L${v.line}` : ''}` : '-';
-      table.push([chalk.yellow(v.type), fileWithLine, v.message]);
+      table.push([chalk.yellow(v.type), fileWithLine, v.message, chalk.italic(v.rationale || '-')]);
     });
 
     output += table.toString() + '\n';
@@ -75,9 +83,10 @@ export function formatCLITable(report: QualityReport): string {
     output += chalk.green('\n🎉 발견된 위반 사항이 없습니다. 완벽합니다!\n');
   }
 
-  // 조치 가이드를 굵은 파란색 텍스트로 강조
-  if (report.suggestion) {
-    output += `\n${chalk.blue.bold('💡 Suggestion:')}\n${report.suggestion}\n`;
+  // 메타데이터 및 조치 가이드 추가
+  if (report.metadata) {
+    const meta = report.metadata;
+    output += chalk.gray(`\n[Metadata] Time: ${meta.timestamp} | Mode: ${meta.analysisMode} | Coverage: ${meta.coverageFreshness}\n`);
   }
 
   return output;
