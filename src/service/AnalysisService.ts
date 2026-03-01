@@ -207,7 +207,20 @@ export class AnalysisService {
       files = allProjectFiles.filter((f) => supportedExts.includes(extname(f)));
     }
 
-    // 5. 자가 치유(Self-Healing) 및 정적 분석 수행
+    // 5. 소스 파일 최신 수정 시간 기록 (자가 치유에 의한 변경분 제외 목적)
+    const lastSrcUpdate =
+      files.length > 0
+        ? files.reduce((max, f) => {
+            try {
+              const mtime = statSync(isAbsolute(f) ? f : join(this.workspacePath, f)).mtimeMs;
+              return Math.max(max, mtime);
+            } catch (e) {
+              return max;
+            }
+          }, 0)
+        : 0;
+
+    // 6. 자가 치유(Self-Healing) 및 정적 분석 수행
     const healingMessages: string[] = [];
     for (const provider of this.providers) {
       const targetFiles = files
@@ -223,7 +236,7 @@ export class AnalysisService {
     const structuralViolations = checkStructuralIntegrity(this.depGraph);
     violations.push(...fileViolations, ...structuralViolations);
 
-    // 6. 기술 부채(TODO) 스캔
+    // 7. 기술 부채(TODO) 스캔
     const techDebtCount = await countTechDebt(this.workspacePath, ignorePatterns);
     if (techDebtCount > rules.techDebtLimit) {
       violations.push({
@@ -234,7 +247,7 @@ export class AnalysisService {
       });
     }
 
-    // 7. 테스트 커버리지 검증 및 신선도 검사
+    // 8. 테스트 커버리지 검증 및 신선도 검사
     let currentCoverage = 0;
     const coverageCandidates = [
       this.config.rules.coveragePath,
@@ -255,20 +268,8 @@ export class AnalysisService {
     if (coveragePath) {
       try {
         const coverageStat = statSync(coveragePath);
-        const lastSrcUpdate =
-          files.length > 0
-            ? Math.max(
-                ...files.map((f) => {
-                  try {
-                    return statSync(isAbsolute(f) ? f : join(this.workspacePath, f)).mtimeMs;
-                  } catch (e) {
-                    return 0;
-                  }
-                })
-              )
-            : 0;
-
-        const isStale = coverageStat.mtimeMs < lastSrcUpdate - 60000;
+        // v3.7.8: 허용 오차를 5분(300,000ms)으로 상향하여 긴 테스트 수행 시간 지원
+        const isStale = coverageStat.mtimeMs < lastSrcUpdate - 300000;
         const content = readFileSync(coveragePath, 'utf-8');
 
         if (coveragePath.endsWith('.json')) {
