@@ -10,14 +10,21 @@ import { AstCacheManager } from './AstCacheManager.js';
  * p-map을 사용하여 멀티코어 환경에서 병렬로 의존성 맵을 구축합니다.
  */
 export class DependencyGraph {
+  /** 각 파일이 임포트하고 있는 대상 목록 (File -> Imports) */
   private importMap: Map<string, string[]> = new Map();
+  /** 각 파일을 임포트하고 있는 상위 파일 목록 (File -> Dependents) */
   private dependentMap: Map<string, string[]> = new Map();
 
+  /**
+   * DependencyGraph 인스턴스를 생성합니다.
+   * @param workspacePath 분석할 워크스페이스 절대 경로
+   */
   constructor(private workspacePath: string = process.cwd()) {}
 
   /**
    * 프로젝트 내의 모든 소스 파일을 스캔하여 의존성 맵을 생성합니다.
    * v3.3 Turbo: 파싱 오버헤드를 제거하고 중복 스캔을 방지합니다.
+   * @param providedFiles 이미 스캔된 파일 목록이 있다면 이를 활용합니다.
    */
   async build(providedFiles?: string[]) {
     this.importMap.clear();
@@ -25,26 +32,26 @@ export class DependencyGraph {
 
     let allFiles: string[] = [];
     if (providedFiles) {
-      allFiles = providedFiles.map(f => normalize(f));
+      allFiles = providedFiles.map((f) => normalize(f));
     } else {
       const files = await glob(['**/*.{ts,js,tsx,jsx,kt,kts}'], {
         cwd: this.workspacePath,
         absolute: true,
         ignore: [
-          '**/node_modules/**', 
-          '**/dist/**', 
-          '**/build/**', 
-          '**/out/**', 
-          '**/.next/**', 
+          '**/node_modules/**',
+          '**/dist/**',
+          '**/build/**',
+          '**/out/**',
+          '**/.next/**',
           '**/coverage/**',
           '**/android/**',
           '**/ios/**',
-          '**/.git/**'
-        ]
+          '**/.git/**',
+        ],
       });
       allFiles = files.map((f) => normalize(f));
     }
-    
+
     const concurrency = Math.max(1, os.cpus().length - 1);
 
     await pMap(
@@ -67,10 +74,18 @@ export class DependencyGraph {
     );
   }
 
+  /**
+   * 특정 파일을 임포트하고 있는 상위 파일(Dependents) 목록을 가져옵니다.
+   * @param filePath 대상 파일 경로
+   */
   getDependents(filePath: string): string[] {
     return this.dependentMap.get(normalize(filePath)) || [];
   }
 
+  /**
+   * 프로젝트 내의 순환 참조(Circular Dependency)를 탐지합니다.
+   * v3.3.2: 고성능 스택 기반 DFS 알고리즘을 사용하여 분석 속도를 높였습니다.
+   */
   detectCycles(): string[][] {
     const visited = new Set<string>();
     const stack = new Set<string>();
@@ -105,6 +120,11 @@ export class DependencyGraph {
     return cycles;
   }
 
+  /**
+   * 특정 파일의 임포트/익스포트 구문을 분석하여 의존 경로를 추출합니다.
+   * @param filePath 분석할 소스 파일 경로
+   * @param allFiles 프로젝트 내 전체 파일 목록 (경로 해소용)
+   */
   private async extractImports(filePath: string, allFiles: string[]): Promise<string[]> {
     try {
       const root = AstCacheManager.getInstance().getRootNode(filePath);

@@ -12,10 +12,10 @@ export async function countTechDebt(
 ): Promise<number> {
   try {
     // 분석 대상 파일을 탐색합니다. (src/에 국한되지 않고 전체를 보되, ignorePatterns를 엄격히 적용)
-    const files = await glob(['**/*.{ts,js,tsx,jsx}'], { 
-      cwd: workspacePath, 
+    const files = await glob(['**/*.{ts,js,tsx,jsx}'], {
+      cwd: workspacePath,
       absolute: true,
-      ignore: ignorePatterns
+      ignore: ignorePatterns,
     });
 
     // 추적할 기술 부채 키워드 정의

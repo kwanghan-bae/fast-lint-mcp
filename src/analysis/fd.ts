@@ -1,100 +1,85 @@
+import { readFileSync, existsSync } from 'fs';
+import { Lang, parse, SgNode } from '@ast-grep/napi';
+import { dirname, join, normalize, isAbsolute } from 'path';
 import glob from 'fast-glob';
-import { readFile } from 'fs';
 import { promisify } from 'util';
-import { Lang, parse } from '@ast-grep/napi';
-import { join, dirname, normalize } from 'path';
+import { readFile } from 'fs';
 import { resolveModulePath } from '../utils/PathResolver.js';
-import pMap from 'p-map';
-import os from 'os';
 
+/** 프로미스 기반 파일 읽기 헬퍼 */
 const readFileAsync = promisify(readFile);
 
 /**
- * 프로젝트 내의 모든 의존성 관계를 추출하여 맵(Map) 형태로 생성합니다.
- * p-map을 사용하여 비동기 병렬로 의존성 정보를 수집합니다.
+ * 프로젝트 내의 미사용 파일(Orphan Files)을 탐지하기 위한 의존성 맵을 생성합니다.
  * @param workspacePath 프로젝트 루트 경로
- * @returns 파일 경로를 키로 하고, 해당 파일이 임포트하는 대상 목록을 값으로 하는 Map
+ * @param allFiles 프로젝트 내 전체 파일 목록
  */
-export async function getDependencyMap(
-  workspacePath: string = process.cwd()
-): Promise<Map<string, string[]>> {
-  const rawFiles = await glob(['src/**/*.{ts,js,tsx,jsx}'], { cwd: workspacePath });
-  const allFiles = rawFiles.map((f) => normalize(f));
-
-  const depMap = new Map<string, string[]>();
-  const concurrency = Math.max(1, os.cpus().length - 1);
-
-  await pMap(allFiles, async (filePath) => {
-    try {
-      const fullPath = join(workspacePath, filePath);
-      const content = await readFileAsync(fullPath, 'utf-8');
-      const lang =
-        filePath.endsWith('.ts') || filePath.endsWith('.tsx') ? Lang.TypeScript : Lang.JavaScript;
-
-      const ast = parse(lang, content);
-      const root = ast.root();
-      const deps: string[] = [];
-
-      const patterns = [
-        "import $CLAUSE from '$SOURCE'",
-        "import { $$$ } from '$SOURCE'",
-        "import * as $NS from '$SOURCE'",
-        "import '$SOURCE'",
-        "export $$$ARGS from '$SOURCE'",
-        "export { $$$ } from '$SOURCE'",
-        'import($SOURCE)',
-        'require($SOURCE)',
-      ];
-
-      for (const pattern of patterns) {
-        try {
-          const matches = root.findAll(pattern);
-          for (const match of matches) {
-            let importPath = match.getMatch('SOURCE')?.text();
-            if (importPath) {
-              importPath = importPath.replace(/^['"]|['"]$/g, '').trim();
-            }
-            if (importPath && importPath.startsWith('.')) {
-              const resolved = resolveModulePath(dirname(filePath), importPath, allFiles);
-              if (resolved) deps.push(normalize(resolved));
-            }
-          }
-        } catch (e) {}
-      }
-      depMap.set(filePath, [...new Set(deps)]);
-    } catch (e) {}
-  }, { concurrency });
-
-  return depMap;
+export async function getDependencyMap(workspacePath: string, allFiles: string[]): Promise<Map<string, string[]>> {
+  const dependencyMap = new Map<string, string[]>();
+  
+  for (const filePath of allFiles) {
+    const imports = await extractImportsFromFile(filePath, allFiles);
+    dependencyMap.set(filePath, imports);
+  }
+  return dependencyMap;
 }
 
 /**
- * 프로젝트 내의 어떤 파일에서도 참조되지 않는 '고아 파일(Orphan Files)'을 찾아냅니다.
+ * 특정 파일로부터 임포트 구문을 분석하여 의존 경로 목록을 추출합니다.
  */
-export async function findOrphanFiles(workspacePath: string = process.cwd()): Promise<string[]> {
-  const depMap = await getDependencyMap(workspacePath);
-  const referenced = new Set<string>();
+async function extractImportsFromFile(filePath: string, allFiles: string[]): Promise<string[]> {
+  try {
+    const content = await readFileAsync(filePath, 'utf-8');
+    const lang = filePath.endsWith('.ts') || filePath.endsWith('.tsx') ? Lang.TypeScript : Lang.JavaScript;
+    const root = parse(lang, content).root();
+    const imports: string[] = [];
+    const dir = dirname(filePath);
 
-  for (const deps of depMap.values()) {
+    // 주요 임포트 패턴 정의
+    const importRule = {
+      any: [
+        { pattern: "import $A from '$B'" },
+        { pattern: 'import $A from "$B"' },
+        { pattern: "import { $$$ } from '$B'" },
+        { pattern: 'import { $$$ } from "$B"' },
+        { pattern: "import '$B'" },
+        { pattern: 'import "$B"' }
+      ]
+    };
+
+    root.findAll({ rule: importRule }).forEach(m => {
+      const source = m.getMatch('B')?.text();
+      if (source) {
+        const resolved = resolveModulePath(dir, source, allFiles);
+        if (resolved) imports.push(resolved);
+      }
+    });
+    return [...new Set(imports)];
+  } catch (e) {
+    return [];
+  }
+}
+
+/**
+ * 의존성 맵을 바탕으로 프로젝트 내에서 아무 곳에서도 참조되지 않는 고립된 파일들을 찾습니다.
+ * @param dependencyMap 파일별 의존 관계 맵
+ * @param entryPoints 진입점 파일 목록 (예: index.ts)
+ */
+export async function findOrphanFiles(dependencyMap: Map<string, string[]>, entryPoints: string[] = []): Promise<string[]> {
+  const visited = new Set<string>();
+  const stack = [...(entryPoints || []).map(e => normalize(e))];
+
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    if (visited.has(current)) continue;
+    visited.add(current);
+
+    const deps = dependencyMap.get(current) || [];
     for (const dep of deps) {
-      referenced.add(dep);
+      if (!visited.has(dep)) stack.push(dep);
     }
   }
 
-  const entryPoints = [
-    normalize('src/index.ts'),
-    normalize('src/index.js'),
-    normalize('src/main.ts'),
-    normalize('src/main.js'),
-  ];
-
-  for (const entry of entryPoints) {
-    if (depMap.has(entry)) referenced.add(entry);
-  }
-
-  const orphans: string[] = [];
-  for (const file of depMap.keys()) {
-    if (!referenced.has(file)) orphans.push(file);
-  }
-  return orphans;
+  const allFiles = Array.from(dependencyMap.keys());
+  return allFiles.filter(f => !visited.has(f));
 }

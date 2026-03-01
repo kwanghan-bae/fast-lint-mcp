@@ -11,6 +11,7 @@ import { AstCacheManager } from '../utils/AstCacheManager.js';
 import { checkTestValidity } from '../analysis/test-check.js';
 
 // AST 패턴 정의 (v3.0 Semantic)
+/** UI 렌더링 및 프레임워크 관련 AST 패턴 목록 */
 const UI_AST_PATTERNS = [
   'use$A($$$)', // Hooks
   '< $A $$$ />', // JSX
@@ -18,6 +19,7 @@ const UI_AST_PATTERNS = [
   'render($$$)',
 ];
 
+/** 고도의 비즈니스 로직 및 연산 관련 AST 패턴 목록 */
 const LOGIC_AST_PATTERNS = [
   'Math.$A($$$)',
   'new Map($$$)',
@@ -47,7 +49,10 @@ export class JavascriptProvider extends BaseQualityProvider {
     const customRules = this.config.customRules;
 
     // 테스트 파일 여부 판별 (v3.0)
-    const isTestFile = filePath.match(/\.(test|spec)\.[tj]sx?$/) || filePath.includes('/tests/') || filePath.includes('/__tests__/');
+    const isTestFile =
+      filePath.match(/\.(test|spec)\.[tj]sx?$/) ||
+      filePath.includes('/tests/') ||
+      filePath.includes('/__tests__/');
 
     if (isTestFile) {
       const testResult = checkTestValidity(filePath);
@@ -79,29 +84,33 @@ export class JavascriptProvider extends BaseQualityProvider {
 
     if (!isDataFile && metrics.complexity > maxComplexity) {
       // 이름이 너무 짧은(3자 이하) 심볼은 내부 구현이거나 미니파이된 코드일 확률이 높으므로 제외
-      const validSymbols = metrics.topComplexSymbols.filter(s => s.name.length > 3);
-      
+      const validSymbols = metrics.topComplexSymbols.filter((s) => s.name.length > 3);
+
       if (validSymbols.length > 0) {
         const blueprint = validSymbols
-          .map(s => `- [${s.kind}] ${s.name} (Complexity: ${s.complexity}, L${s.line})`)
+          .map((s) => `- [${s.kind}] ${s.name} (Complexity: ${s.complexity}, L${s.line})`)
           .join('\n');
-        
+
         const root = AstCacheManager.getInstance().getRootNode(filePath);
         let hasUIPatterns = false;
         let hasLogicPatterns = false;
 
         if (root) {
-          hasUIPatterns = UI_AST_PATTERNS.some(p => root.findAll(p).length > 0);
-          hasLogicPatterns = LOGIC_AST_PATTERNS.some(p => root.findAll(p).length > 0);
+          hasUIPatterns = UI_AST_PATTERNS.some((p) => root.findAll(p).length > 0);
+          hasLogicPatterns = LOGIC_AST_PATTERNS.some((p) => root.findAll(p).length > 0);
         }
 
-        let advice = '코드 복잡도가 기준을 초과했습니다. 로직을 더 작은 함수나 클래스로 분리하세요.';
+        let advice =
+          '코드 복잡도가 기준을 초과했습니다. 로직을 더 작은 함수나 클래스로 분리하세요.';
         if (hasUIPatterns && !hasLogicPatterns) {
-          advice = '이 컴포넌트에는 UI 렌더링과 복잡한 상태 관리가 혼재되어 있습니다. Business Logic을 Custom Hook으로 추출하거나, Presentational Component로 UI를 분리하세요.';
+          advice =
+            '이 컴포넌트에는 UI 렌더링과 복잡한 상태 관리가 혼재되어 있습니다. Business Logic을 Custom Hook으로 추출하거나, Presentational Component로 UI를 분리하세요.';
         } else if (hasLogicPatterns && !hasUIPatterns) {
-          advice = '이 파일에는 고도의 연산 로직이 포함되어 있습니다. 서비스 레이어나 순수 함수 기반의 유틸리티 라이브러리로 로직을 캡슐화하는 것이 좋겠습니다.';
+          advice =
+            '이 파일에는 고도의 연산 로직이 포함되어 있습니다. 서비스 레이어나 순수 함수 기반의 유틸리티 라이브러리로 로직을 캡슐화하는 것이 좋겠습니다.';
         } else if (hasUIPatterns && hasLogicPatterns) {
-          advice = '렌더링 코드와 복잡한 계산 로직이 강하게 결합되어 있습니다. 유지보수를 위해 렌더링부와 로직부를 엄격히 분리(SOC: Separation of Concerns)하세요.';
+          advice =
+            '렌더링 코드와 복잡한 계산 로직이 강하게 결합되어 있습니다. 유지보수를 위해 렌더링부와 로직부를 엄격히 분리(SOC: Separation of Concerns)하세요.';
         }
 
         violations.push({
@@ -115,7 +124,11 @@ export class JavascriptProvider extends BaseQualityProvider {
     }
 
     // 2. AI 환각(Hallucination) 체크: 존재하지 않는 파일이나 라이브러리 임포트를 탐지합니다.
-    const hallucinationViolations = await checkHallucination(filePath, process.cwd(), this.config.exclude);
+    const hallucinationViolations = await checkHallucination(
+      filePath,
+      process.cwd(),
+      this.config.exclude
+    );
     hallucinationViolations.forEach((hv) => {
       violations.push({
         type: 'HALLUCINATION',
@@ -133,7 +146,12 @@ export class JavascriptProvider extends BaseQualityProvider {
     // 4. 아키텍처 가드레일 체크: 레이어 간 의존성 방향 규칙 위반 여부를 검사합니다.
     const architectureRules = this.config.architectureRules;
     if (architectureRules && architectureRules.length > 0) {
-      const archViolations = await checkArchitecture(filePath, architectureRules, process.cwd(), this.config.exclude);
+      const archViolations = await checkArchitecture(
+        filePath,
+        architectureRules,
+        process.cwd(),
+        this.config.exclude
+      );
       archViolations.forEach((av) => {
         violations.push({
           type: 'ARCHITECTURE',

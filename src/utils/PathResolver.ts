@@ -48,7 +48,9 @@ export function loadProjectAliases(pathContext?: string): Record<string, string>
   if (pathContext) {
     try {
       // isDirectory 체크 시 발생하는 statSync 병목 방어
-      workspacePath = pathContext.includes('.') ? findNearestProjectRoot(dirname(pathContext)) : pathContext;
+      workspacePath = pathContext.includes('.')
+        ? findNearestProjectRoot(dirname(pathContext))
+        : pathContext;
     } catch (e) {
       workspacePath = findNearestProjectRoot(pathContext);
     }
@@ -107,10 +109,8 @@ export function resolveModulePath(
   const aliases = loadProjectAliases(filePath);
   for (const [alias, target] of Object.entries(aliases)) {
     if (importPath === alias || importPath.startsWith(alias + '/')) {
-      resolvedImportPath = importPath === alias 
-        ? target 
-        : target + importPath.slice(alias.length);
-      
+      resolvedImportPath = importPath === alias ? target : target + importPath.slice(alias.length);
+
       if (!isAbsolute(resolvedImportPath)) {
         resolvedImportPath = join(projectRoot, resolvedImportPath);
       }
@@ -133,7 +133,9 @@ export function resolveModulePath(
     if (fileSet.has(withExt)) return withExt;
   }
 
-  const originalPath = normalize(isAbsolute(resolvedImportPath) ? resolvedImportPath : join(currentDir, resolvedImportPath));
+  const originalPath = normalize(
+    isAbsolute(resolvedImportPath) ? resolvedImportPath : join(currentDir, resolvedImportPath)
+  );
   if (fileSet.has(originalPath)) return originalPath;
 
   for (const ext of extensions) {

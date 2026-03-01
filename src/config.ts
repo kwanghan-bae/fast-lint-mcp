@@ -4,62 +4,81 @@ import { z } from 'zod';
 
 /**
  * 사용자 정의 검사 규칙을 정의하는 스키마입니다.
- * 특정 AST 패턴을 감지하여 사용자 지정 메시지와 심각도를 출력할 수 있습니다.
  */
 export const CustomRuleSchema = z.object({
-  id: z.string(), // 규칙 식별자 (예: 'NO_UNDEFINED_CHECK')
-  pattern: z.string(), // ast-grep 패턴 (예: 'if ($A === undefined)')
-  message: z.string(), // 위반 시 출력할 메시지
-  severity: z.enum(['error', 'warning']).default('error'), // 규칙의 중요도
+  /** 규칙의 고유 식별자 */
+  id: z.string(),
+  /** 탐지할 AST 패턴 */
+  pattern: z.string(),
+  /** 위반 시 출력할 안내 메시지 */
+  message: z.string(),
 });
 
 /**
- * 프로젝트 아키텍처 규칙(의존성 방향)을 정의하는 스키마입니다.
- * 특정 디렉토리가 다른 디렉토리를 참조하지 못하도록 제한할 수 있습니다.
+ * 아키텍처 의존성 규칙을 정의하는 스키마입니다.
  */
 export const ArchitectureRuleSchema = z.object({
-  from: z.string(), // 소스 패턴 (예: 'src/domain/**')
-  to: z.string(), // 허용되지 않는 대상 패턴 (예: 'src/infrastructure/**')
-  message: z.string(), // 위반 시 출력할 안내 메시지
+  /** 소스 패턴 */
+  from: z.string(),
+  /** 금지된 대상 패턴 */
+  to: z.string(),
+  /** 규칙 위반 메시지 */
+  message: z.string(),
 });
+
+/**
+ * Fast-Lint-MCP의 전체 설정 구조를 정의하는 스키마입니다.
+ */
 export const ConfigSchema = z.object({
-  rules: z.object({
-    maxLineCount: z.number().default(500),
-    maxComplexity: z.number().default(25),
-    coveragePath: z.string().optional(),
-    coverageDirectory: z.string().default('coverage'),
-    minCoverage: z.number().default(80),
-    techDebtLimit: z.number().default(20),
-  }).default({}),
+  /** 세부 품질 측정 규칙 */
+  rules: z
+    .object({
+      maxLineCount: z.number().default(500),
+      maxComplexity: z.number().default(25),
+      coveragePath: z.string().optional(),
+      coverageDirectory: z.string().default('coverage'),
+      minCoverage: z.number().default(80),
+      techDebtLimit: z.number().default(20),
+    })
+    .default({}),
+  /** 증분 분석 사용 여부 */
   incremental: z.boolean().default(true),
+  /** 변이 테스트 활성화 여부 */
   enableMutationTest: z.boolean().default(false),
-  exclude: z.array(z.string()).default([
-// ...
-    'node_modules/**', 
-    'dist/**', 
-    'out/**',
-    'build/**',
-    '.next/**',
-    'coverage/**',
-    'android/**',
-    'ios/**',
-    'tests/**'
-  ]),
+  /** 분석 제외 경로 */
+  exclude: z
+    .array(z.string())
+    .default([
+      'node_modules/**',
+      'dist/**',
+      'out/**',
+      'build/**',
+      '.next/**',
+      'coverage/**',
+      'android/**',
+      'ios/**',
+      'tests/**',
+    ]),
+  /** 커스텀 규칙 목록 */
   customRules: z.array(CustomRuleSchema).default([]),
+  /** 아키텍처 규칙 목록 */
   architectureRules: z.array(ArchitectureRuleSchema).default([]),
 });
 
-// TypeScript 타입 추출
+/** 설정 타입 추출 */
 export type Config = z.infer<typeof ConfigSchema>;
+/** 커스텀 규칙 타입 추출 */
 export type CustomRule = z.infer<typeof CustomRuleSchema>;
+/** 아키텍처 규칙 타입 추출 */
 export type ArchitectureRule = z.infer<typeof ArchitectureRuleSchema>;
 
 /**
- * 프로젝트 설정 파일(.fast-lintrc 등)을 로드하고 관리하는 서비스 클래스입니다.
+ * 프로젝트 설정 파일(.fast-lintrc 등)을 관리하는 서비스입니다.
  */
 export class ConfigService {
-  // 파싱 및 검증이 완료된 최종 설정 객체
+  /** 최종 설정 객체 */
   private config: Config;
+  /** 현재 프로젝트 절대 경로 */
   public workspacePath: string;
 
   /**
@@ -68,65 +87,60 @@ export class ConfigService {
    */
   constructor(workspacePath: string = process.cwd()) {
     this.workspacePath = workspacePath;
-    let userConfig = this.loadConfig(workspacePath);
-    
-    // Zod 스키마를 사용하여 기본값과 병합
-    // rules 객체 내부 필드들이 유실되지 않도록 Zod의 parse 결과를 활용
+    const userConfig = this.loadConfig(workspacePath);
     this.config = ConfigSchema.parse(userConfig);
   }
 
   /**
-   * 다양한 소스에서 설정을 탐색하여 로드합니다.
-   * 우선순위: .fast-lintrc.json > .fast-lintrc > package.json [fastLint]
-   * @param workspacePath 작업 디렉토리 경로
-   * @returns 원시 설정 객체
+   * 설정 파일을 탐색하여 객체로 로드합니다.
    */
-  private loadConfig(workspacePath: string): Record<string, unknown> {
-    const configPaths = ['.fast-lintrc.json', '.fast-lintrc'];
+  private loadConfig(workspacePath: string): any {
+    const configPaths = [
+      join(workspacePath, '.fast-lintrc.json'),
+      join(workspacePath, '.fast-lintrc'),
+      join(workspacePath, 'package.json'),
+    ];
 
-    // 1. 전용 설정 파일 탐색
-    for (const p of configPaths) {
-      const fullPath = join(workspacePath, p);
-      if (existsSync(fullPath)) {
+    for (const path of configPaths) {
+      if (existsSync(path)) {
         try {
-          return JSON.parse(readFileSync(fullPath, 'utf-8'));
+          const content = readFileSync(path, 'utf-8');
+          if (path.endsWith('package.json')) {
+            const pkg = JSON.parse(content);
+            const raw = pkg['fast-lint'] || pkg['fastLint'];
+            if (raw) return raw;
+          } else {
+            return JSON.parse(content);
+          }
         } catch (e) {
-          console.warn(`Warning: Failed to parse ${p}. JSON 형식을 확인하세요.`);
+          console.warn(`Warning: Failed to parse ${path}`);
         }
       }
     }
-
-    // 2. package.json 내부의 fastLint 항목 탐색
-    const pkgPath = join(workspacePath, 'package.json');
-    if (existsSync(pkgPath)) {
-      try {
-        const pkgContent = readFileSync(pkgPath, 'utf-8');
-        const pkg = JSON.parse(pkgContent);
-        if (pkg.fastLint) return pkg.fastLint;
-      } catch (e) {
-        // 파싱 오류 시 무시하고 빈 객체 반환
-      }
-    }
-
     return {};
   }
 
-  // 각 설정 항목에 대한 Getter 메소드들
+  /** 품질 측정 규칙 설정을 가져옵니다. */
   get rules() {
     return this.config.rules;
   }
+  /** 증분 분석 활성화 여부를 확인합니다. */
   get incremental() {
     return this.config.incremental;
   }
+  /** 변이 테스트 활성화 여부를 확인합니다. */
   get enableMutationTest() {
     return this.config.enableMutationTest;
   }
+  /** 제외할 경로 목록을 가져옵니다. */
   get exclude() {
     return this.config.exclude;
   }
+  /** 정의된 커스텀 규칙 목록을 가져옵니다. */
   get customRules() {
     return this.config.customRules;
   }
+  /** 정의된 아키텍처 규칙 목록을 가져옵니다. */
   get architectureRules() {
     return this.config.architectureRules;
   }

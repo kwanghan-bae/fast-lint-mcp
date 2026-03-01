@@ -6,12 +6,16 @@ import { readFileSync, existsSync } from 'fs';
  * 동일 세션 내 중복 파싱을 방지하고 성능을 극대화하는 매니저 클래스입니다. (v3.0 Core)
  */
 export class AstCacheManager {
+  /** 싱글톤 인스턴스 보관 */
   private static instance: AstCacheManager;
-  // 파일 경로를 키로, 파싱된 루트 노드를 값으로 하는 맵
+  /** 파일 경로별 AST 루트 노드 캐시 맵 */
   private cache: Map<string, SgNode> = new Map();
 
   private constructor() {}
 
+  /**
+   * AstCacheManager의 싱글톤 인스턴스를 반환합니다.
+   */
   public static getInstance(): AstCacheManager {
     if (!AstCacheManager.instance) {
       AstCacheManager.instance = new AstCacheManager();
@@ -37,7 +41,7 @@ export class AstCacheManager {
       } else if (filePath.endsWith('.kt') || filePath.endsWith('.kts')) {
         lang = Lang.Kotlin;
       }
-      
+
       const root = parse(lang, content).root();
       this.cache.set(filePath, root);
       return root;

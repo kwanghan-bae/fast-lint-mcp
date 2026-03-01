@@ -13,7 +13,7 @@ const SECRET_PATTERNS = [
     pattern: /(password|secret|token|key|api_key|auth_token)\s*[:=]\s*["'][a-zA-Z0-9_\-]{16,}["']/i,
     message: '하드코딩된 비밀번호나 토큰이 발견되었습니다!',
   },
-  { id: 'JWT_TOKEN', pattern: /eyJ[a-zA-Z0-9._\-]{10,}/, message: 'JWT 토큰이 노출되었습니다!' },
+  { id: 'JWT_TOKEN', pattern: /eyJ[a-zA-Z0-9\._\-]{10,}/, message: 'JWT 토큰이 노출되었습니다!' },
 ];
 
 /**
@@ -34,8 +34,12 @@ function calculateEntropy(str: string): number {
 }
 
 // 프리컴파일된 정규식 (v3.0 Performance)
+/** 16진수 색상 코드를 탐지하는 정규식 */
 const HEX_COLOR_REGEX = /^#([A-Fa-f0-9]{3}){1,2}$/;
-const SAFE_IDENTIFIER_REGEX = /(color|class|style|theme|name|id|type|path|identifier|key_id|key_type|save_key)/i;
+/** 보안 위협이 아닌 일반적인 식별자 패턴 목록 */
+const SAFE_IDENTIFIER_REGEX =
+  /(color|class|style|theme|name|id|type|path|identifier|key_id|key_type|save_key)/i;
+/** 대문자 상수로 정의된 키 식별자 패턴 (예: API_KEY = ...) */
 const CONSTANT_KEY_REGEX = /^[A-Z_]+_KEY\s*[:=]/;
 
 /**
@@ -45,34 +49,39 @@ export async function checkSecrets(filePath: string): Promise<Violation[]> {
   // v3.3.2: AstCacheManager 활용하여 중복 I/O 제거
   const root = AstCacheManager.getInstance().getRootNode(filePath);
   const content = root ? root.text() : readFileSync(filePath, 'utf-8');
-  
-  const violations: Violation[] = [];
 
+  const violations: Violation[] = [];
   for (const { id, pattern, message } of SECRET_PATTERNS) {
     const flags = pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g';
     const regex = new RegExp(pattern.source, flags);
-    const matches = content.matchAll(regex);
-    
-    for (const match of matches) {
+
+    let match;
+    while ((match = regex.exec(content)) !== null) {
       const fullMatch = match[0];
       if (HEX_COLOR_REGEX.test(fullMatch)) continue;
 
+      let keyName = '';
       let secretValue = fullMatch;
+      let hasAssignment = false;
+
       if (fullMatch.includes(':') || fullMatch.includes('=')) {
         const parts = fullMatch.split(/[:=]/);
+        keyName = parts[0].trim();
         secretValue = parts[parts.length - 1].replace(/["']/g, '').trim();
+        hasAssignment = true;
       } else {
         secretValue = fullMatch.replace(/["']/g, '').trim();
       }
 
       const entropy = calculateEntropy(secretValue);
-      const isLikelySafe = SAFE_IDENTIFIER_REGEX.test(fullMatch) || CONSTANT_KEY_REGEX.test(fullMatch);
+      const isLikelySafe =
+        hasAssignment && (SAFE_IDENTIFIER_REGEX.test(keyName) || CONSTANT_KEY_REGEX.test(keyName));
 
-      if (entropy > 3.0 && !isLikelySafe) {
+      if (id === 'JWT_TOKEN' || (entropy > 2.5 && !isLikelySafe)) {
         violations.push({
           type: 'SECURITY',
           file: filePath,
-          message: `[${id}] ${message} (엔트로피: ${entropy.toFixed(2)}) 민감 정보 노출 의심.`,
+          message: `[${id}] ${message}${id !== 'JWT_TOKEN' ? ` (엔트로피: ${entropy.toFixed(2)})` : ''} 민감 정보 노출 의심.`,
         });
       }
     }

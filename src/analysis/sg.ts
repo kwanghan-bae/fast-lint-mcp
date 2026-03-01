@@ -33,9 +33,9 @@ const COMPLEXITY_PATTERNS = [
 const DATA_PATTERNS = [
   '[$...]', // Array
   '{$...}', // Object
-  '"$A"',   // String
-  "'$A'",   // String
-  '/$A/',   // Number/Literal (General)
+  '"$A"', // String
+  "'$A'", // String
+  '/$A/', // Number/Literal (General)
 ];
 
 /**
@@ -53,7 +53,14 @@ export async function analyzeFile(
 
     if (!root) {
       // 파일이 없거나 파싱 실패 시 테스트 호환성을 위해 기본값 반환
-      return { path: filePath, lineCount: 5, complexity: 2, isDataFile: false, topComplexSymbols: [], customViolations: [] };
+      return {
+        path: filePath,
+        lineCount: 5,
+        complexity: 2,
+        isDataFile: false,
+        topComplexSymbols: [],
+        customViolations: [],
+      };
     }
 
     const text = root.text();
@@ -62,16 +69,18 @@ export async function analyzeFile(
     // 1. 데이터 파일 여부 판단 (주석 태그 + 리터럴 텍스트 비중 분석)
     const isTaggedData = text.includes('@data') || text.includes('@config');
     let dataTextLength = 0;
-    
+
     // 리터럴 노드들의 실제 텍스트 길이를 합산 (중복 방지를 위해 최상위 노드 위주 탐색 시도)
     for (const pattern of DATA_PATTERNS) {
       try {
         const matches = root.findAll(pattern);
-        matches.forEach(m => {
+        matches.forEach((m) => {
           // 중첩된 노드가 있을 수 있으므로 단순 합산 후 전체 길이와 비교하는 Heuristic 적용
           dataTextLength += m.text().length;
         });
-      } catch (e) { /* ignore */ }
+      } catch (e) {
+        /* ignore */
+      }
     }
 
     // 리터럴이 텍스트의 80% 이상을 차지하거나, 명시적 태그가 있는 경우 데이터 파일로 간주
@@ -87,10 +96,15 @@ export async function analyzeFile(
 
     // 3. 심볼별 복잡도 추출 및 TOP 3 선정 (Refactoring Blueprint)
     const symbols: { name: string; complexity: number; kind: string; line: number }[] = [];
-    const symbolKinds = ['function_declaration', 'class_declaration', 'method_definition', 'arrow_function'];
-    
+    const symbolKinds = [
+      'function_declaration',
+      'class_declaration',
+      'method_definition',
+      'arrow_function',
+    ];
+
     for (const kind of symbolKinds) {
-      root.findAll({ rule: { kind } }).forEach(node => {
+      root.findAll({ rule: { kind } }).forEach((node) => {
         let name = node.find({ rule: { kind: 'identifier' } })?.text() || 'anonymous';
         // 복잡도 계산: 해당 노드 하위의 제어문 개수
         let symbolComplexity = 0;
@@ -101,7 +115,7 @@ export async function analyzeFile(
           name,
           complexity: symbolComplexity,
           kind: kind.replace('_declaration', '').replace('_definition', ''),
-          line: node.range().start.line + 1
+          line: node.range().start.line + 1,
         });
       });
     }
@@ -115,7 +129,14 @@ export async function analyzeFile(
       }
     }
 
-    return { path: filePath, lineCount, complexity, isDataFile, topComplexSymbols, customViolations };
+    return {
+      path: filePath,
+      lineCount,
+      complexity,
+      isDataFile,
+      topComplexSymbols,
+      customViolations,
+    };
   } catch (error) {
     console.error(`Error analyzing file ${filePath}:`, error);
     throw error;

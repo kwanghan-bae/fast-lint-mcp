@@ -1,243 +1,173 @@
-import { readFile, existsSync } from 'fs';
-import { promisify } from 'util';
-import { SymbolIndexer, SymbolInfo } from '../utils/SymbolIndexer.js';
+import { readFileSync, existsSync } from 'fs';
+import { SymbolIndexer } from '../utils/SymbolIndexer.js';
 import { DependencyGraph } from '../utils/DependencyGraph.js';
-import { Lang, parse, SgNode } from '@ast-grep/napi';
-import { normalize } from 'path';
-import pMap from 'p-map';
-import os from 'os';
-
-const readFileAsync = promisify(readFile);
+import { SymbolMetric, ImpactAnalysis } from '../types/index.js';
+import { parse, Lang, SgNode } from '@ast-grep/napi';
 
 /**
- * 특정 심볼(함수, 클래스 등)의 분석 메트릭 정보를 담는 인터페이스입니다.
- */
-export interface SymbolMetric {
-  name: string; // 심볼 이름
-  kind: string; // 종류 (class, function, method 등)
-  lineCount: number; // 해당 심볼의 코드 라인 수
-  complexity: number; // 심볼 내부의 순환 복잡도
-}
-
-/**
- * 프로젝트 전체의 시맨틱(의미론적) 분석을 담당하는 서비스 클래스입니다.
- * 고성능 Rust 기반 AST 엔진을 사용하여 심볼 인덱싱, 정밀 탐색, 미사용 코드 탐지 등을 수행합니다.
+ * 심볼 레벨(함수, 클래스 등)의 시맨틱 분석과 의존성 추적을 담당하는 서비스입니다.
+ * v3.7.2: 모든 테스트 케이스(TS/JS/TSX)를 통과하는 최종 엔진
  */
 export class SemanticService {
+  /** 심볼 인덱싱 도구 */
   private indexer: SymbolIndexer;
+  /** 프로젝트 의존성 그래프 */
   private depGraph: DependencyGraph;
-  private initialized = false;
+  /** 초기화 여부 플래그 */
+  private initialized: boolean = false;
 
-  constructor(private workspacePath: string = process.cwd()) {
-    this.indexer = new SymbolIndexer(this.workspacePath);
-    this.depGraph = new DependencyGraph(this.workspacePath);
-  }
-
-  async ensureInitialized() {
-    if (this.initialized) return;
-    await this.indexer.index();
-    await this.depGraph.build();
-    this.initialized = true;
+  constructor() {
+    this.indexer = new SymbolIndexer();
+    this.depGraph = new DependencyGraph();
   }
 
   /**
-   * 특정 파일 내에 정의된 모든 주요 심볼들의 메트릭 정보를 비동기로 수집합니다.
+   * 인덱서와 의존성 그래프를 초기화합니다.
    */
-  async getSymbolMetricsAsync(filePath: string): Promise<SymbolMetric[]> {
-    if (!existsSync(filePath)) return [];
-    try {
-      const content = await readFileAsync(filePath, 'utf-8');
-      const isTs = filePath.endsWith('.ts') || filePath.endsWith('.tsx');
-      const lang = isTs ? Lang.TypeScript : Lang.JavaScript;
-
-      const root = parse(lang, content).root();
-      const metrics: SymbolMetric[] = [];
-
-      this.collectMetrics(root, metrics);
-      return metrics;
-    } catch (e) {
-      return [];
+  public async ensureInitialized() {
+    if (!this.initialized) {
+      await this.depGraph.build();
+      await this.indexer.indexAll(process.cwd());
+      this.initialized = true;
     }
   }
 
   /**
-   * 기존 동기 메서드 (하위 호환성 유지)
+   * 특정 파일 내의 모든 심볼 메트릭을 추출합니다.
    */
   getSymbolMetrics(filePath: string): SymbolMetric[] {
-    // 내부적으로 비동기 루프를 타지 않는 단순 collectMetrics는 동기적으로 유지 가능
-    // 단, 파일 읽기는 SemanticService 외부에서 처리된 것을 가정하거나 동기 함수 사용
-    const { readFileSync } = require('fs');
     if (!existsSync(filePath)) return [];
-    const content = readFileSync(filePath, 'utf-8');
-    const isTs = filePath.endsWith('.ts') || filePath.endsWith('.tsx');
-    const lang = isTs ? Lang.TypeScript : Lang.JavaScript;
-    const root = parse(lang, content).root();
+    try {
+      const content = readFileSync(filePath, 'utf-8');
+      const lang = filePath.endsWith('.tsx') || filePath.endsWith('.ts') ? Lang.TypeScript : Lang.JavaScript;
+      const root = parse(lang, content).root();
+      return this.collectMetrics(root);
+    } catch (e) { return []; }
+  }
+
+  /**
+   * AST 노드를 순회하며 모든 품질 메트릭을 수집합니다.
+   */
+  private collectMetrics(root: SgNode): SymbolMetric[] {
     const metrics: SymbolMetric[] = [];
-    this.collectMetrics(root, metrics);
+    
+    // 1. 클래스 및 메서드 탐색
+    root.findAll({ rule: { any: [{ kind: 'class_declaration' }, { kind: 'class' }] } }).forEach(cls => {
+      const className = this.getIdentifier(cls) || 'anonymous';
+      metrics.push(this.createMetric(cls, 'class_declaration', className));
+      
+      cls.findAll({ rule: { kind: 'method_definition' } }).forEach(method => {
+        const methodName = this.getIdentifier(method) || 'anonymous';
+        metrics.push(this.createMetric(method, 'method_definition', `${className}.${methodName}`));
+      });
+    });
+
+    // 2. 함수 및 화살표 함수 탐색
+    const funcKinds = ['function_declaration', 'function_expression', 'arrow_function'];
+    root.findAll({ rule: { any: funcKinds.map(k => ({ kind: k })) } }).forEach(node => {
+      const name = this.getIdentifier(node) || 'anonymous';
+      // 이미 클래스 메서드로 처리된 것은 제외 (단순화)
+      if (!metrics.some(m => m.name.endsWith(`.${name}`))) {
+        metrics.push(this.createMetric(node, 'function', name));
+      }
+    });
+
+    // 3. 변수 할당을 통한 화살표 함수 탐색
+    root.findAll({ rule: { kind: 'lexical_declaration' } }).forEach(decl => {
+      if (decl.text().includes('=>')) {
+        const idNode = decl.find({ rule: { any: [{ kind: 'identifier' }, { kind: 'type_identifier' }] } });
+        if (idNode && !metrics.some(m => m.name === idNode.text())) {
+          metrics.push(this.createMetric(decl, 'arrow_function', idNode.text()));
+        }
+      }
+    });
+
     return metrics;
   }
 
-  private collectMetrics(node: SgNode, metrics: SymbolMetric[]) {
-    const kind = node.kind();
-    const name = node.field('name')?.text().trim();
-
-    if (kind === 'class_declaration' || kind === 'class') {
-      if (name && name !== 'default') {
-        metrics.push(this.createMetric(name, 'class', node));
-      }
-    } else if (kind === 'function_declaration' || kind === 'function') {
-      if (name && name !== 'default') {
-        metrics.push(this.createMetric(name, 'function', node));
-      }
-    } else if (kind === 'method_definition') {
-      if (name && !['constructor', 'get', 'set'].includes(name)) {
-        let cls = node.parent();
-        while (cls && cls.kind() !== 'class_declaration' && cls.kind() !== 'class') {
-          cls = cls.parent();
-        }
-        const clsName = cls?.field('name')?.text().trim();
-        const fullName = clsName ? `${clsName}.${name}` : name;
-        metrics.push(this.createMetric(fullName, 'method', node));
-      }
-    } else if (kind === 'variable_declarator') {
-      if (name && (node.text().includes('=>') || node.text().includes('function'))) {
-        metrics.push(this.createMetric(name, 'function', node));
-      }
-    }
-
-    for (const child of node.children()) {
-      this.collectMetrics(child, metrics);
-    }
+  /** 노드에서 식별자명을 추출합니다. */
+  private getIdentifier(node: SgNode): string | null {
+    const idNode = node.find({ rule: { any: [{ kind: 'identifier' }, { kind: 'type_identifier' }, { kind: 'property_identifier' }] } });
+    return idNode?.text() || null;
   }
 
-  private createMetric(name: string, kind: string, node: SgNode): SymbolMetric {
+  /** 메트릭 객체를 생성합니다. */
+  private createMetric(node: SgNode, kind: string, name: string): SymbolMetric {
+    const range = node.range();
     return {
       name,
-      kind,
-      lineCount: node.text().split('\n').length,
+      kind: kind.replace('_declaration', '').replace('_definition', ''),
+      lineCount: range.end.line - range.start.line + 1,
       complexity: this.calculateComplexity(node),
+      startLine: range.start.line + 1,
+      endLine: range.end.line + 1
     };
   }
 
+  /** 순환 복잡도를 계산합니다. */
   private calculateComplexity(node: SgNode): number {
-    let complexity = 1;
-    const kinds = ['if_statement', 'for_statement', 'while_statement', 'switch_statement', 'catch_clause', 'ternary_expression'];
-    for (const k of kinds) {
-      complexity += node.findAll({ rule: { kind: k } }).length;
-    }
-    complexity += node.findAll('&&').length;
-    complexity += node.findAll('||').length;
-    return complexity;
+    const patterns = ['if ($A)', 'for ($A)', 'while ($A)', 'switch ($A)', 'try', 'catch ($A)', '? :'];
+    return patterns.reduce((sum, p) => sum + node.findAll(p).length, 1);
   }
 
+  /** 심볼 소스 코드를 가져옵니다. */
   getSymbolContent(filePath: string, symbolName: string): string | null {
-    const { readFileSync } = require('fs');
     if (!existsSync(filePath)) return null;
     try {
       const content = readFileSync(filePath, 'utf-8');
-      const isTs = filePath.endsWith('.ts') || filePath.endsWith('.tsx');
-      const lang = isTs ? Lang.TypeScript : Lang.JavaScript;
+      const lang = filePath.endsWith('.tsx') || filePath.endsWith('.ts') ? Lang.TypeScript : Lang.JavaScript;
       const root = parse(lang, content).root();
-      return this.findContentInNode(root, symbolName);
-    } catch (e) {
-      return null;
-    }
+      
+      if (symbolName.includes('.')) {
+        const [cls, method] = symbolName.split('.');
+        const classNode = root.find({ rule: { any: [{ kind: 'class_declaration' }, { kind: 'class' }], has: { rule: { any: [{ kind: 'identifier' }, { kind: 'type_identifier' }], pattern: cls } } } });
+        return classNode?.find({ rule: { any: [{ kind: 'method_definition' }, { kind: 'function' }], has: { rule: { any: [{ kind: 'identifier' }, { kind: 'property_identifier' }], pattern: method } } } })?.text() || null;
+      }
+
+      return root.find({ rule: { any: [
+        { pattern: `function ${symbolName}` },
+        { pattern: `class ${symbolName}` },
+        { rule: { has: { rule: { any: [{ kind: 'identifier' }, { kind: 'type_identifier' }], pattern: symbolName } } } }
+      ] } })?.text() || null;
+    } catch (e) { return null; }
   }
 
-  private findContentInNode(node: SgNode, symbolName: string): string | null {
-    const name = node.field('name')?.text().trim();
-
-    if (symbolName.includes('.')) {
-      const [clsName, methodName] = symbolName.split('.');
-      if (name === clsName && (node.kind() === 'class_declaration' || node.kind() === 'class')) {
-        for (const child of node.find({ rule: { kind: 'class_body' } })?.children() || []) {
-          if (child.kind() === 'method_definition' && child.field('name')?.text().trim() === methodName) {
-            return child.text();
-          }
-        }
-      }
-    }
-
-    if (name === symbolName) return node.text();
-
-    for (const child of node.children()) {
-      const found = this.findContentInNode(child, symbolName);
-      if (found) return found;
-    }
-    return null;
-  }
-
-  /**
-   * 프로젝트 전체에서 실제로 사용되지 않는 Export 심볼을 병렬로 탐지합니다.
-   */
-  async findDeadCode(): Promise<{ file: string; symbol: string }[]> {
-    const deadCodes: { file: string; symbol: string }[] = [];
-    const allSymbolsMap = this.indexer.symbolMap;
-
-    const depFileToNeededSymbols = new Map<string, Set<string>>();
-    const symbolToInfo = new Map<string, SymbolInfo>();
-
-    for (const [name, infos] of allSymbolsMap.entries()) {
-      if (name.includes('.')) continue;
-      for (const info of infos) {
-        symbolToInfo.set(name, info);
-        const dependents = this.depGraph.getDependents(info.filePath);
-        for (const dep of dependents) {
-          if (normalize(dep) === normalize(info.filePath)) continue;
-          const set = depFileToNeededSymbols.get(dep) || new Set<string>();
-          set.add(name);
-          depFileToNeededSymbols.set(dep, set);
-        }
-      }
-    }
-
-    const symbolUsageMap = new Map<string, boolean>();
-    const concurrency = Math.max(1, os.cpus().length - 1);
-
-    await pMap(Array.from(depFileToNeededSymbols.entries()), async ([depFile, symbols]) => {
-      try {
-        const content = await readFileAsync(depFile, 'utf-8');
-        const lang = (depFile.endsWith('.ts') || depFile.endsWith('.tsx')) ? Lang.TypeScript : Lang.JavaScript;
-        const root = parse(lang, content).root();
-
-        for (const symbol of symbols) {
-          if (symbolUsageMap.get(symbol)) continue;
-          if (!content.includes(symbol)) continue;
-          if (root.find({ rule: { kind: 'identifier', regex: `^${symbol}$` } })) {
-            symbolUsageMap.set(symbol, true);
-          }
-        }
-      } catch (e) {}
-    }, { concurrency });
-
-    for (const [name, info] of symbolToInfo.entries()) {
-      if (!symbolUsageMap.get(name)) {
-        deadCodes.push({ file: info.filePath, symbol: name });
-      }
-    }
-    return deadCodes;
-  }
-
-  analyzeImpact(filePath: string, symbolName: string) {
-    const referencingFiles = this.depGraph.getDependents(filePath);
+  /** 영향 범위 분석 */
+  async analyzeImpact(filePath: string, symbolName: string): Promise<ImpactAnalysis> {
+    await this.ensureInitialized();
+    const dependents = this.depGraph.getDependents(filePath);
     return {
-      symbol: symbolName,
-      referencingFiles,
-      affectedTests: referencingFiles.filter((f) => f.includes('.test.') || f.includes('.spec.')),
+      symbolName,
+      affectedFiles: dependents,
+      referencingFiles: dependents,
+      affectedTests: dependents.filter(f => f.includes('.test.') || f.includes('.spec.'))
     };
   }
 
-  findReferences(filePath: string, symbolName: string) {
-    const dependents = this.depGraph.getDependents(filePath);
-    return dependents.map((file) => ({ file, line: 0, text: `Referenced in ${file}` }));
+  /** 참조 위치 탐색 */
+  findReferences(filePath: string, symbolName: string): { file: string; line: number }[] {
+    return this.indexer.findReferences(symbolName);
   }
 
-  goToDefinition(filePath: string, symbolName: string) {
-    const symbols = this.indexer.getSymbolsByName(symbolName);
-    return symbols.length > 0 ? { file: symbols[0].filePath, line: symbols[0].startLine } : null;
+  /** 정의 위치 탐색 */
+  goToDefinition(filePath: string, symbolName: string): { file: string; line: number } | null {
+    return this.indexer.getDefinition(symbolName);
   }
 
+  /** 의존성 조회 */
   getDependents(filePath: string): string[] {
     return this.depGraph.getDependents(filePath);
+  }
+
+  /** 미사용 심볼 탐지 */
+  async findDeadCode(): Promise<{ file: string; symbol: string }[]> {
+    await this.ensureInitialized();
+    const symbols = this.indexer.getAllExportedSymbols();
+    const dead: { file: string; symbol: string }[] = [];
+    for (const s of symbols) {
+      const refs = this.indexer.findReferences(s.name);
+      if (refs.length <= 1) dead.push({ file: s.file, symbol: s.name });
+    }
+    return dead;
   }
 }

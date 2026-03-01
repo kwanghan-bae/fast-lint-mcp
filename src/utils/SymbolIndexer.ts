@@ -1,139 +1,91 @@
-import { readFile, existsSync } from 'fs';
+import { readFileSync, readFile } from 'fs';
 import { promisify } from 'util';
-import { join, normalize, isAbsolute } from 'path';
 import glob from 'fast-glob';
-import { Lang, parse, SgNode } from '@ast-grep/napi';
+import { parse, Lang, SgNode } from '@ast-grep/napi';
+import { normalize, join } from 'path';
 import pMap from 'p-map';
 import os from 'os';
 
+/** 프로미스 기반 파일 읽기 헬퍼 */
 const readFileAsync = promisify(readFile);
 
 /**
- * 추출된 개별 심볼의 메타데이터를 담는 인터페이스입니다.
- */
-export interface SymbolInfo {
-  name: string; // 심볼의 식별자 이름
-  filePath: string; // 심볼이 정의된 파일의 절대 경로
-  kind: 'function' | 'class' | 'method' | 'variable'; // 심볼의 종류
-  startLine: number; // 정의가 시작되는 라인 번호 (1-based)
-}
-
-/**
- * 프로젝트 전체의 소스 코드를 스캔하여 모든 주요 심볼의 위치 정보를 인덱싱하는 클래스입니다.
- * p-map과 비동기 I/O를 활용하여 수천 개의 심볼을 병렬로 초고속 인덱싱합니다.
+ * 심볼(클래스, 함수, 메서드 등)의 정의 위치와 참조 정보를 인덱싱하여 고속 탐색을 지원하는 클래스입니다.
+ * v3.7.2: 모든 선언 방식을 지원하는 최종 인덱싱 엔진
  */
 export class SymbolIndexer {
-  // 전역 심볼명을 키로 하고, 해당 심볼의 위치 정보 목록을 값으로 가지는 맵
-  public symbolMap: Map<string, SymbolInfo[]> = new Map();
+  /** 심볼 정의 위치 맵 */
+  private definitions = new Map<string, { file: string; line: number }>();
+  /** 심볼 참조 위치 맵 */
+  private references = new Map<string, { file: string; line: number }[]>();
+  /** 공개된 심볼 목록 */
+  private exportedSymbols: { name: string; file: string }[] = [];
 
   /**
-   * SymbolIndexer 인스턴스를 생성합니다.
-   * @param workspacePath 프로젝트 루트 경로
+   * 프로젝트 전체를 스캔하여 심볼 인덱스를 구축합니다.
    */
-  constructor(private workspacePath: string = process.cwd()) {}
+  async indexAll(workspacePath: string) {
+    this.definitions.clear();
+    this.references.clear();
+    this.exportedSymbols = [];
 
-  /**
-   * 프로젝트 내의 모든 소스 파일을 비동기 병렬로 읽어 심볼 인덱스를 구축합니다.
-   */
-  async index() {
-    this.symbolMap.clear();
-    const pattern = '**/*.{ts,js,tsx,jsx}';
-
-    // 분석 대상 파일 목록 획득
-    const files = await glob([pattern], {
-      cwd: this.workspacePath,
+    const files = await glob(['**/*.{ts,js,tsx,jsx}'], {
+      cwd: workspacePath,
       absolute: true,
-      ignore: ['**/node_modules/**', '**/dist/**'],
+      ignore: ['**/node_modules/**', '**/dist/**', '**/tests/**', '**/coverage/**']
     });
 
     const concurrency = Math.max(1, os.cpus().length - 1);
-
-    await pMap(
-      files,
-      async (file) => {
-        try {
-          const content = await readFileAsync(file, 'utf-8');
-          const lang = (file.endsWith('.ts') || file.endsWith('.tsx')) ? Lang.TypeScript : Lang.JavaScript;
-          const root = parse(lang, content).root();
-          const normalizedPath = normalize(file);
-
-          // 개별 파일의 AST를 순회하며 심볼 추출
-          this.traverse(root, normalizedPath);
-        } catch (e) {
-          // 개별 파일 처리 실패 시 해당 파일만 건너뜀
-        }
-      },
-      { concurrency }
-    );
+    await pMap(files, async (file) => {
+      try {
+        await this.indexFile(file);
+      } catch (e) {}
+    }, { concurrency });
   }
 
-  /**
-   * AST 노드 트리를 재귀적으로 순회하며 클래스, 함수, 메소드 등을 찾아 인덱스에 추가합니다.
-   */
-  private traverse(node: SgNode, filePath: string) {
-    const kind = node.kind();
-    const name = node.field('name')?.text().trim();
+  /** 단일 파일을 분석하여 인덱스에 추가합니다. */
+  private async indexFile(filePath: string) {
+    const content = await readFileAsync(filePath, 'utf-8');
+    const lang = filePath.endsWith('.tsx') || filePath.endsWith('.ts') ? Lang.TypeScript : Lang.JavaScript;
+    const root = parse(lang, content).root();
 
-    if (kind === 'class_declaration' || kind === 'class') {
-      if (name && name !== 'default') {
-        this.addSymbol(name, filePath, 'class', node);
-      }
-    } else if (kind === 'function_declaration' || kind === 'function') {
-      if (name && name !== 'default') {
-        this.addSymbol(name, filePath, 'function', node);
-      }
-    } else if (kind === 'method_definition') {
-      if (name && !['constructor', 'get', 'set'].includes(name)) {
-        this.addSymbol(name, filePath, 'method', node);
-
-        // 클래스명.메소드명 형태의 복합 키 생성
-        let cls = node.parent();
-        while (cls && cls.kind() !== 'class_declaration' && cls.kind() !== 'class') {
-          cls = cls.parent();
+    // 1. 모든 선언(Declaration) 탐색
+    const declKinds = ['class_declaration', 'function_declaration', 'method_definition', 'variable_declarator', 'lexical_declaration'];
+    root.findAll({ rule: { any: declKinds.map(k => ({ kind: k })) } }).forEach(node => {
+      const idNode = node.find({ rule: { any: [{ kind: 'identifier' }, { kind: 'type_identifier' }, { kind: 'property_identifier' }] } });
+      if (idNode) {
+        const name = idNode.text();
+        const line = node.range().start.line + 1;
+        
+        let fullName = name;
+        // 메서드명 정규화 (ClassName.methodName)
+        if (node.kind() === 'method_definition') {
+          const cls = node.parent()?.parent();
+          if (cls && (cls.kind() === 'class_declaration' || cls.kind() === 'class')) {
+            const clsName = cls.find({ rule: { any: [{ kind: 'identifier' }, { kind: 'type_identifier' }] } })?.text();
+            if (clsName) fullName = `${clsName}.${name}`;
+          }
         }
-        if (cls) {
-          const clsName = cls.field('name')?.text().trim();
-          if (clsName) this.addSymbol(`${clsName}.${name}`, filePath, 'method', node);
+
+        this.definitions.set(fullName, { file: filePath, line });
+        if (node.text().includes('export ')) {
+          this.exportedSymbols.push({ name: fullName, file: filePath });
         }
       }
-    } else if (kind === 'variable_declarator') {
-      if (name && (node.text().includes('=>') || node.text().includes('function'))) {
-        this.addSymbol(name, filePath, 'function', node);
-      }
-    }
+    });
 
-    for (const child of node.children()) {
-      this.traverse(child, filePath);
-    }
+    // 2. 모든 식별자 참조 탐색
+    root.findAll({ rule: { kind: 'identifier' } }).forEach(node => {
+      const name = node.text();
+      if (!this.references.has(name)) this.references.set(name, []);
+      this.references.get(name)!.push({ file: filePath, line: node.range().start.line + 1 });
+    });
   }
 
-  /**
-   * 특정 이름을 가진 심볼들의 위치 정보를 검색합니다.
-   */
-  getSymbolsByName(name: string): SymbolInfo[] {
-    return this.symbolMap.get(name) || [];
-  }
-
-  /**
-   * 발견된 심볼 정보를 맵에 추가합니다 (동시성 안전).
-   */
-  private addSymbol(
-    name: string,
-    filePath: string,
-    kind: 'function' | 'class' | 'method' | 'variable',
-    node: SgNode
-  ) {
-    const info: SymbolInfo = {
-      name,
-      filePath,
-      kind,
-      startLine: node.range().start.line + 1,
-    };
-
-    const list = this.symbolMap.get(name) || [];
-    if (!list.some((s) => s.filePath === info.filePath && s.startLine === info.startLine)) {
-      list.push(info);
-      this.symbolMap.set(name, list);
-    }
-  }
+  /** 정의 위치 반환 */
+  getDefinition(name: string) { return this.definitions.get(name) || null; }
+  /** 참조 위치 목록 반환 */
+  findReferences(name: string) { return this.references.get(name) || []; }
+  /** 모든 수출 심볼 반환 */
+  getAllExportedSymbols() { return this.exportedSymbols; }
 }
