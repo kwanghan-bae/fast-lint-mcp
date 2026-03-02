@@ -14,7 +14,7 @@ import { Violation, QualityReport, QualityProvider } from '../types/index.js';
 import { checkStructuralIntegrity } from '../utils/AnalysisUtils.js';
 import { clearProjectFilesCache, getProjectFiles } from '../analysis/import-check.js';
 import { clearPathCache } from '../utils/PathResolver.js';
-import { join, extname, relative, isAbsolute } from 'path';
+import { join, extname, relative, isAbsolute, dirname, normalize } from 'path';
 import os from 'os';
 import { AstCacheManager } from '../utils/AstCacheManager.js';
 
@@ -264,6 +264,7 @@ export class AnalysisService {
     let currentCoverage = 0;
     let coverageFreshness: 'fresh' | 'stale' | 'missing' = 'missing';
     let coverageLastUpdated = '';
+    const fileCoverageMap = new Map<string, { total: number; hit: number }>();
 
     // v3.9.0: 재귀적 커버리지 탐색 및 수동 경로 지원
     let coveragePath = '';
@@ -320,16 +321,41 @@ export class AnalysisService {
         coverageFreshness = isStale ? 'stale' : 'fresh';
 
         const content = readFileSync(coveragePath, 'utf-8');
+
         if (coveragePath.endsWith('.json')) {
           const coverageData = JSON.parse(content);
           currentCoverage = coverageData.total?.lines?.pct ?? 0;
         } else if (coveragePath.endsWith('lcov.info')) {
-          const lines = content.split('\n');
+          // v4.1.0: 파일별 상세 커버리지 맵 구축
+          const lines = content.split(/\r?\n/);
+          let currentFile = '';
           let totalLines = 0;
           let hitLines = 0;
+
           for (const line of lines) {
-            if (line.startsWith('LF:')) totalLines += parseInt(line.split(':')[1]);
-            if (line.startsWith('LH:')) hitLines += parseInt(line.split(':')[1]);
+            const trimmedLine = line.trim();
+            if (trimmedLine.startsWith('SF:')) {
+              const rawPath = trimmedLine.split(':')[1];
+              currentFile = normalize(isAbsolute(rawPath) ? rawPath : join(dirname(coveragePath), '..', rawPath));
+            } else if (trimmedLine.startsWith('LF:')) {
+              const val = parseInt(trimmedLine.split(':')[1].trim());
+              if (!isNaN(val)) {
+                totalLines += val;
+                if (currentFile) {
+                  if (!fileCoverageMap.has(currentFile)) fileCoverageMap.set(currentFile, { total: 0, hit: 0 });
+                  fileCoverageMap.get(currentFile)!.total = val;
+                }
+              }
+            } else if (trimmedLine.startsWith('LH:')) {
+              const val = parseInt(trimmedLine.split(':')[1].trim());
+              if (!isNaN(val)) {
+                hitLines += val;
+                if (currentFile) {
+                  if (!fileCoverageMap.has(currentFile)) fileCoverageMap.set(currentFile, { total: 0, hit: 0 });
+                  fileCoverageMap.get(currentFile)!.hit = val;
+                }
+              }
+            }
           }
           currentCoverage = totalLines > 0 ? (hitLines / totalLines) * 100 : 0;
         }
@@ -351,11 +377,24 @@ export class AnalysisService {
     }
 
     if (currentCoverage < rules.minCoverage && coveragePath !== '') {
+      // v4.1.0: 취약 파일(Low Coverage) 분석 및 리포팅
+      const lowCoverageFiles = Array.from(fileCoverageMap.entries())
+        .map(([file, data]) => ({
+          file: relative(this.workspacePath, file),
+          pct: data.total > 0 ? (data.hit / data.total) * 100 : 0
+        }))
+        .filter(f => !f.file.includes('node_modules') && !f.file.includes('tests/'))
+        .sort((a, b) => a.pct - b.pct)
+        .slice(0, 5);
+
+      const fileList = lowCoverageFiles.map(f => `${f.file.split('/').pop()}(${f.pct.toFixed(1)}%)`).join(', ');
+
       violations.push({
         type: 'COVERAGE',
-        value: `${currentCoverage}%`,
+        value: `${currentCoverage.toFixed(1)}%`,
         limit: `${rules.minCoverage}%`,
         message: `테스트 커버리지가 기준(${rules.minCoverage}%)에 미달합니다.`,
+        rationale: `현재: ${currentCoverage.toFixed(1)}% / 기준: ${rules.minCoverage}% (취약: ${fileList || 'N/A'})`,
       });
     }
 
@@ -378,7 +417,7 @@ export class AnalysisService {
       violations,
       suggestion: pass ? '모든 품질 기준을 통과했습니다.' : '위반 사항을 조치하세요.',
       metadata: {
-        version: 'v4.0.0', // Stability & Reliability Milestone
+        version: 'v4.1.0', // Intelligent Coverage Analytics
         timestamp: new Date().toISOString(),
         coverageFreshness,
         coverageLastUpdated,
