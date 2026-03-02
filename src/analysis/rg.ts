@@ -4,18 +4,32 @@ import pMap from 'p-map';
 import os from 'os';
 
 /**
- * 프로젝트 내의 기술 부채(TODO, FIXME 등)를 고속으로 스캔하여 개수를 반환합니다. (v2.2.2 Exclude Sync)
+ * 프로젝트 내의 기술 부채(TODO, FIXME 등)를 고속으로 스캔하여 개수를 반환합니다.
+ * v4.0.0: 제외 패턴 엄격화 (.git, build, coverage 등) 및 Kotlin 지원 확대
  */
 export async function countTechDebt(
   workspacePath: string = process.cwd(),
-  ignorePatterns: string[] = ['**/node_modules/**', '**/dist/**']
+  ignorePatterns: string[] = []
 ): Promise<number> {
   try {
-    // 분석 대상 파일을 탐색합니다. (src/에 국한되지 않고 전체를 보되, ignorePatterns를 엄격히 적용)
-    const files = await glob(['**/*.{ts,js,tsx,jsx}'], {
+    const defaultIgnores = [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/build/**',
+      '**/out/**',
+      '**/.next/**',
+      '**/coverage/**',
+      '**/.git/**',
+      '**/.idea/**',
+      '**/.vscode/**',
+    ];
+    const combinedIgnores = [...new Set([...defaultIgnores, ...ignorePatterns])];
+
+    // 분석 대상 파일을 탐색합니다. (Kotlin 포함)
+    const files = await glob(['**/*.{ts,js,tsx,jsx,kt,kts}'], {
       cwd: workspacePath,
       absolute: true,
-      ignore: ignorePatterns,
+      ignore: combinedIgnores,
     });
 
     // 추적할 기술 부채 키워드 정의

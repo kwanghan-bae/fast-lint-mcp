@@ -128,6 +128,9 @@ export async function checkHallucination(
   );
 }
 
+/** 모듈 설치 여부 확인 결과를 저장하는 메모리 캐시 (v3.9.1 Performance) */
+const moduleExistenceCache = new Map<string, boolean>();
+
 /**
  * 임포트 구문을 순회하며 파일/라이브러리 환각 여부를 정밀 스캔합니다.
  */
@@ -172,29 +175,36 @@ function scanImportsForHallucination(
           : source.split('/')[0];
           
         if (!nodeBuiltins.has(libName) && !dependencies.includes(libName)) {
-          // v3.8.1: 트랜지티브(Transitive) 의존성 방어 - node_modules에 물리적으로 존재하는지 확인
-          let isInstalled = false;
-          let currentDir = dirname(absPath);
-          while (currentDir.length >= workspacePath.length) {
-            if (existsSync(join(currentDir, 'node_modules', libName))) {
-              isInstalled = true;
-              break;
+          // v3.9.1: 캐시 확인
+          const cacheKey = `${workspacePath}:${libName}`;
+          if (moduleExistenceCache.has(cacheKey)) {
+            if (moduleExistenceCache.get(cacheKey)) return;
+          } else {
+            // v3.8.1: 트랜지티브(Transitive) 의존성 방어 - node_modules에 물리적으로 존재하는지 확인
+            let isInstalled = false;
+            let currentDir = dirname(absPath);
+            while (currentDir.length >= workspacePath.length) {
+              if (existsSync(join(currentDir, 'node_modules', libName))) {
+                isInstalled = true;
+                break;
+              }
+              const parent = dirname(currentDir);
+              if (parent === currentDir) break;
+              currentDir = parent;
             }
-            const parent = dirname(currentDir);
-            if (parent === currentDir) break;
-            currentDir = parent;
-          }
-          if (!isInstalled && existsSync(join(workspacePath, 'node_modules', libName))) {
-            isInstalled = true;
+            if (!isInstalled && existsSync(join(workspacePath, 'node_modules', libName))) {
+              isInstalled = true;
+            }
+
+            moduleExistenceCache.set(cacheKey, isInstalled);
+            if (isInstalled) return;
           }
 
-          if (!isInstalled) {
-            violations.push({
-              id: 'HALLUCINATION_LIB',
-              line,
-              message: `설치되지 않은 라이브러리 참조: ${libName}`,
-            });
-          }
+          violations.push({
+            id: 'HALLUCINATION_LIB',
+            line,
+            message: `설치되지 않은 라이브러리 참조: ${libName}`,
+          });
         }
       }
     });
@@ -281,7 +291,7 @@ export async function checkFakeLogic(
         paramsNode = m.child(0); // 첫 번째 자식이 파라미터일 확률이 높음
       }
 
-      if (paramsNode && body.includes('return ')) {
+      if (paramsNode && bodyNode && body.includes('return ')) {
         const paramNames = new Set<string>();
 
         // 1. 일반 식별자 추출 (타입 선언 내부 제외)
@@ -307,11 +317,18 @@ export async function checkFakeLogic(
           (p) => p.length > 0 && !['props', 'req', 'res', 'next', 'ctx'].includes(p)
         );
 
-        // 파라미터가 하나라도 사용되지 않았는지 검사 (단어 경계 기반)
+        // v4.0.0: AST 기반 정밀 식별자 추적 (텍스트 매칭 오탐 해결)
         if (pList.length > 0) {
           const allUnused = pList.every((p) => {
-            const regex = new RegExp(`\\b${p}\\b`);
-            return !regex.test(body);
+            try {
+              // bodyNode 전체 트리를 뒤져서 해당 파라미터 식별자가 참조되는지 확인
+              const usageMatches = bodyNode.findAll({ rule: { kind: 'identifier', pattern: p } });
+              return usageMatches.length === 0;
+            } catch (e) {
+              // AST 검색 실패 시 텍스트 기반 폴백
+              const regex = new RegExp(`\\b${p}\\b`);
+              return !regex.test(body);
+            }
           });
 
           if (allUnused) {

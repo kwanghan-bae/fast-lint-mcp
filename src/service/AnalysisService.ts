@@ -97,6 +97,9 @@ export class AnalysisService {
       files,
       async (file) => {
         try {
+          // v4.0.0: 이벤트 루프 차단 방지를 위한 양보 (Responsive MCP)
+          await new Promise((resolve) => setImmediate(resolve));
+
           const fullPath = isAbsolute(file) ? file : join(this.workspacePath, file);
           const ext = extname(fullPath);
           const provider = this.providers.find((p) => p.extensions.includes(ext));
@@ -221,18 +224,24 @@ export class AnalysisService {
       files = allProjectFiles.filter((f) => supportedExts.includes(extname(f)));
     }
 
-    // 5. 소스 파일 최신 수정 시간 기록
+    // 5. 소스 파일 최신 수정 시간 기록 (v3.9.1: 병렬 처리로 성능 개선)
     const lastSrcUpdate =
       files.length > 0
-        ? files.reduce((max, f) => {
-            try {
-              const mtime = statSync(isAbsolute(f) ? f : join(this.workspacePath, f)).mtimeMs;
-              return Math.max(max, mtime);
-            } catch (e) {
-              return max;
-            }
-          }, 0)
+        ? Math.max(
+            ...(await pMap(
+              files,
+              async (f) => {
+                try {
+                  return statSync(isAbsolute(f) ? f : join(this.workspacePath, f)).mtimeMs;
+                } catch (e) {
+                  return 0;
+                }
+              },
+              { concurrency: os.cpus().length }
+            ))
+          )
         : 0;
+
 
     // 6. 자가 치유 및 정적 분석 수행
     // v3.8: 프로바이더에게 런타임 옵션 전달 로직 추가 예정
@@ -286,13 +295,14 @@ export class AnalysisService {
       }
     }
 
-    // 여전히 못 찾았다면 하위 디렉토리 재귀적 검색 (Monorepo 지원)
+    // 여전히 못 찾았다면 하위 디렉토리 재귀적 검색 (v3.9.1: 탐색 범위 최적화)
     if (!coveragePath) {
       try {
-        const foundReports = await glob(['**/lcov.info', '**/coverage-summary.json', '**/clover.xml'], {
+        const foundReports = await glob(['**/lcov.info', '**/coverage-summary.json'], {
           cwd: this.workspacePath,
           absolute: true,
-          ignore: ['**/node_modules/**', '**/dist/**', '**/build/**']
+          ignore: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/out/**', '**/.next/**'],
+          deep: 5 // 깊이 제한으로 성능 보호
         });
         
         if (foundReports.length > 0) {
@@ -368,7 +378,7 @@ export class AnalysisService {
       violations,
       suggestion: pass ? '모든 품질 기준을 통과했습니다.' : '위반 사항을 조치하세요.',
       metadata: {
-        version: 'v3.9.0', // 동적 주입된 단일 버전 정보
+        version: 'v4.0.0', // Stability & Reliability Milestone
         timestamp: new Date().toISOString(),
         coverageFreshness,
         coverageLastUpdated,

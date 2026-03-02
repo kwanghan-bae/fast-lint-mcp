@@ -8,10 +8,11 @@ let fileSetCache: Set<string> | null = null;
 
 /**
  * 프로젝트 내의 모든 파일을 Set으로 관리하여 O(1) 조회를 지원합니다.
+ * v3.9.1: 모든 경로를 정규화하여 대소문자 및 경로 구분자 이슈 해결
  */
 function getFileSet(allFiles: string[]): Set<string> {
   if (!fileSetCache || fileSetCache.size !== allFiles.length) {
-    fileSetCache = new Set(allFiles);
+    fileSetCache = new Set(allFiles.map((f) => normalize(f)));
   }
   return fileSetCache;
 }
@@ -128,20 +129,23 @@ export function resolveModulePath(
   const targetBase = normalize(isAbsolute(cleanPath) ? cleanPath : join(currentDir, cleanPath));
   const extensions = ['.ts', '.tsx', '.js', '.jsx', '.json'];
 
+  // 1. 확장자 순차 탐색 (가장 흔한 케이스)
   for (const ext of extensions) {
     const withExt = targetBase + ext;
     if (fileSet.has(withExt)) return withExt;
   }
 
-  const originalPath = normalize(
-    isAbsolute(resolvedImportPath) ? resolvedImportPath : join(currentDir, resolvedImportPath)
-  );
-  if (fileSet.has(originalPath)) return originalPath;
-
+  // 2. 디렉토리 내부 index 파일 탐색
   for (const ext of extensions) {
     const withIndex = normalize(join(targetBase, 'index' + ext));
     if (fileSet.has(withIndex)) return withIndex;
   }
+
+  // 3. 원본 경로 그대로 확인 (확장자가 이미 포함된 경우 등)
+  const originalPath = normalize(
+    isAbsolute(resolvedImportPath) ? resolvedImportPath : join(currentDir, resolvedImportPath)
+  );
+  if (fileSet.has(originalPath)) return originalPath;
 
   return null;
 }

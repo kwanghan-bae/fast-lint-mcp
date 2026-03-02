@@ -99,38 +99,51 @@ export class DependencyGraph {
 
   /**
    * 프로젝트 내의 순환 참조(Circular Dependency)를 탐지합니다.
-   * v3.3.2: 고성능 스택 기반 DFS 알고리즘을 사용하여 분석 속도를 높였습니다.
+   * v4.0.0: 재귀 호출을 제거하고 반복문 기반 DFS를 도입하여 Stack Overflow 원천 차단.
    */
   detectCycles(): string[][] {
     const visited = new Set<string>();
-    const stack = new Set<string>();
-    const currentPath: string[] = [];
     const cycles: string[][] = [];
 
-    const dfs = (node: string) => {
-      if (node.includes('node_modules')) return;
-      if (stack.has(node)) {
-        const cycleStartIdx = currentPath.indexOf(node);
-        cycles.push([...currentPath.slice(cycleStartIdx), node]);
-        return;
+    for (const startNode of this.importMap.keys()) {
+      if (visited.has(startNode)) continue;
+
+      const stack: { node: string; path: string[]; neighborIdx: number }[] = [
+        { node: startNode, path: [startNode], neighborIdx: 0 },
+      ];
+      const onStack = new Set<string>([startNode]);
+
+      while (stack.length > 0) {
+        const current = stack[stack.length - 1];
+        const neighbors = this.importMap.get(current.node) || [];
+
+        if (current.neighborIdx < neighbors.length) {
+          const neighbor = neighbors[current.neighborIdx];
+          current.neighborIdx++;
+
+          if (neighbor.includes('node_modules')) continue;
+
+          if (onStack.has(neighbor)) {
+            const cycleStartIdx = current.path.indexOf(neighbor);
+            cycles.push([...current.path.slice(cycleStartIdx), neighbor]);
+            continue;
+          }
+
+          if (!visited.has(neighbor)) {
+            visited.add(neighbor);
+            onStack.add(neighbor);
+            stack.push({
+              node: neighbor,
+              path: [...current.path, neighbor],
+              neighborIdx: 0,
+            });
+          }
+        } else {
+          onStack.delete(current.node);
+          stack.pop();
+        }
       }
-      if (visited.has(node)) return;
-
-      visited.add(node);
-      stack.add(node);
-      currentPath.push(node);
-
-      const neighbors = this.importMap.get(node) || [];
-      for (const neighbor of neighbors) {
-        dfs(neighbor);
-      }
-
-      currentPath.pop();
-      stack.delete(node);
-    };
-
-    for (const node of this.importMap.keys()) {
-      dfs(node);
+      visited.add(startNode);
     }
     return cycles;
   }
