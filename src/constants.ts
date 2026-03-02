@@ -36,8 +36,8 @@ export const READABILITY = {
 };
 
 export const COVERAGE = {
-  /** 소스 수정 대비 리포트 만료 허용 시간 (밀리초, 5분) */
-  STALE_BUFFER_MS: 300000,
+  /** 소스 수정 대비 리포트 만료 허용 시간 (밀리초, 15분) */
+  STALE_BUFFER_MS: 900000,
   /** 모노레포 리포트 재귀 탐색 최대 깊이 */
   RECURSIVE_SEARCH_DEPTH: 5,
   /** 리포트에 표시할 취약 파일(Low Coverage) 최대 개수 */

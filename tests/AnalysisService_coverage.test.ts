@@ -62,10 +62,10 @@ describe('AnalysisService Extra (Coverage & Error)', () => {
     vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify({ total: { lines: { pct: 90 } } }));
     
     const now = Date.now();
-    // 리포트는 10분 전 (버퍼 5분을 넘겨야 함), 소스는 방금 수정됨
+    // v4.8.0: 유예 기간 15분을 넘기기 위해 20분 전으로 설정
     vi.spyOn(fs, 'statSync').mockImplementation((path: any) => {
       if (path.toString().includes('coverage')) {
-        return { mtimeMs: now - 600000, mtime: new Date(now - 600000) } as any;
+        return { mtimeMs: now - 1200000, mtime: new Date(now - 1200000) } as any;
       }
       return { mtimeMs: now, mtime: new Date() } as any;
     });

@@ -53,7 +53,7 @@ let agent: AgentWorkflow;
  */
 function getAnalyzer(targetPath?: string) {
   const workspace = targetPath || process.env.FAST_LINT_WORKSPACE || process.cwd();
-  
+
   if (!analyzer || analyzer['workspacePath'] !== workspace) {
     stateManager = new StateManager(workspace);
     config = new ConfigService(workspace);
@@ -85,8 +85,7 @@ function getToolDefinitions() {
   return [
     {
       name: 'quality-check',
-      description:
-        `Performs a comprehensive code quality check. Supports dynamic tuning of thresholds. (${VERSION} Evolution)`,
+      description: `Performs a comprehensive code quality check. Supports dynamic tuning of thresholds. (${VERSION} Evolution)`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -112,7 +111,8 @@ function getToolDefinitions() {
           },
           coveragePath: {
             type: 'string',
-            description: 'Manual path to the coverage report file (optional, e.g., "coverage/lcov.info")',
+            description:
+              'Manual path to the coverage report file (optional, e.g., "coverage/lcov.info")',
           },
         },
       },
