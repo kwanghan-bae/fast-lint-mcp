@@ -131,25 +131,35 @@ export function resolveModulePath(
   }
 
   const targetBase = normalize(isAbsolute(cleanPath) ? cleanPath : join(currentDir, cleanPath));
-  const extensions = ['.ts', '.tsx', '.js', '.jsx', '.json'];
+  const extensions = ['.ts', '.tsx', '.js', '.jsx', '.json', '.d.ts'];
 
-  // 1. 확장자 순차 탐색 (가장 흔한 케이스)
+  // 1. 확장자 순차 탐색 (가장 흔한 케이스: auth.service -> auth.service.ts)
   for (const ext of extensions) {
     const withExt = targetBase + ext;
     if (fileSet.has(withExt)) return withExt;
   }
 
-  // 2. 디렉토리 내부 index 파일 탐색
+  // 2. 디렉토리 내부 index 파일 탐색 (auth -> auth/index.ts)
   for (const ext of extensions) {
     const withIndex = normalize(join(targetBase, 'index' + ext));
     if (fileSet.has(withIndex)) return withIndex;
   }
 
-  // 3. 원본 경로 그대로 확인 (확장자가 이미 포함된 경우 등)
+  // 3. 원본 경로 그대로 확인 (확장자가 이미 포함된 경우)
   const originalPath = normalize(
     isAbsolute(resolvedImportPath) ? resolvedImportPath : join(currentDir, resolvedImportPath)
   );
   if (fileSet.has(originalPath)) return originalPath;
+
+  // 4. v4.9.0: 최후의 수단 - 워크스페이스 내에서 해당 상대 경로로 끝나는 파일 탐색 (모노레포 유연성)
+  if (!isAbsolute(cleanPath)) {
+    const fuzzyMatch = Array.from(fileSet).find(f => 
+      f.endsWith(cleanPath + '.ts') || 
+      f.endsWith(cleanPath + '.tsx') || 
+      f.endsWith(cleanPath + '/index.ts')
+    );
+    if (fuzzyMatch) return fuzzyMatch;
+  }
 
   return null;
 }

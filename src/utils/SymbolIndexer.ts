@@ -86,7 +86,21 @@ export class SymbolIndexer {
         }
 
         this.definitions.set(fullName, { file: filePath, line });
-        if (node.text().includes('export ')) {
+        
+        // v4.0.0: export 여부 확인 로직 강화 (부모 노드 탐색)
+        let isExported = node.text().includes('export ');
+        let curr = node;
+        while (curr.parent()) {
+          const pk = curr.parent()?.kind();
+          if (pk === 'export_statement' || pk === 'export_item') {
+            isExported = true;
+            break;
+          }
+          if (pk === 'program' || pk === 'class_body') break;
+          curr = curr.parent()!;
+        }
+
+        if (isExported) {
           this.exportedSymbols.push({ name: fullName, file: filePath });
         }
       }
