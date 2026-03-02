@@ -27,6 +27,8 @@ describe('AnalysisService', () => {
     vi.mocked(importCheck.getProjectFiles).mockResolvedValue(['src/index.ts', 'src/config.ts']);
     vi.mocked(DependencyGraph).prototype.build = vi.fn().mockResolvedValue(undefined);
     vi.mocked(DependencyGraph).prototype.getDependents = vi.fn().mockReturnValue([]);
+    vi.mocked(DependencyGraph).prototype.getDependencies = vi.fn().mockReturnValue([]);
+    vi.mocked(DependencyGraph).prototype.getAllFiles = vi.fn().mockReturnValue([]);
     vi.mocked(DependencyGraph).prototype.detectCycles = vi.fn().mockReturnValue([]);
     
     stateManager = {
@@ -87,7 +89,7 @@ describe('AnalysisService', () => {
     vi.mocked(DependencyGraph).prototype.getDependents.mockReturnValue(['src/index.ts']);
 
     const report = await service.runAllChecks();
-    expect(report.suggestion).toContain('증분 분석');
+    expect(report.metadata?.analysisMode).toBe('incremental');
   });
 
   it('자가 치유 결과가 리포트에 포함되어야 한다', async () => {

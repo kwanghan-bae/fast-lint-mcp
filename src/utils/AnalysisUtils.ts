@@ -86,11 +86,16 @@ export function formatCLITable(report: QualityReport): string {
     output += chalk.green('\n🎉 발견된 위반 사항이 없습니다. 완벽합니다!\n');
   }
 
-  // 메타데이터 및 조치 가이드 추가
+  // 메타데이터 추가
   if (report.metadata) {
     const meta = report.metadata;
     const modeLabel = meta.analysisMode === 'incremental' ? '증분 분석' : '전체 분석';
     output += chalk.gray(`\n[Metadata] Mode: ${modeLabel} | Analyzed: ${meta.filesAnalyzed} files | Coverage: ${meta.coverageFreshness}\n`);
+  }
+
+  // 조치 가이드 추가 (복구)
+  if (report.suggestion) {
+    output += `\n${chalk.blue.bold('💡 Suggestion:')}\n${report.suggestion}\n`;
   }
 
   return output;

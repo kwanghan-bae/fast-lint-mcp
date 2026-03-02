@@ -22,6 +22,8 @@ describe('AnalysisService Extra (Coverage & Error)', () => {
     vi.clearAllMocks();
     vi.mocked(DependencyGraph).prototype.build = vi.fn().mockResolvedValue(undefined);
     vi.mocked(DependencyGraph).prototype.getDependents = vi.fn().mockReturnValue([]);
+    vi.mocked(DependencyGraph).prototype.getDependencies = vi.fn().mockReturnValue([]);
+    vi.mocked(DependencyGraph).prototype.getAllFiles = vi.fn().mockReturnValue([]);
     vi.mocked(DependencyGraph).prototype.detectCycles = vi.fn().mockReturnValue([]);
     vi.mocked(glob).mockResolvedValue(['src/test.ts'] as any);
     
@@ -48,9 +50,10 @@ describe('AnalysisService Extra (Coverage & Error)', () => {
     const lcovContent = 'LF:100\nLH:90\n'; // 90% coverage
     vi.spyOn(fs, 'existsSync').mockReturnValue(true);
     vi.spyOn(fs, 'readFileSync').mockReturnValue(lcovContent);
-    vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: Date.now() } as any);
+    vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: Date.now(), mtime: new Date() } as any);
 
-    const report = await service.runAllChecks();
+    // v3.9.0: 명시적인 경로 전달로 탐색 로직 우회
+    const report = await service.runAllChecks({ coveragePath: 'coverage/lcov.info' });
     expect(report.violations.filter(v => v.type === 'COVERAGE').length).toBe(0);
   });
 
@@ -59,13 +62,15 @@ describe('AnalysisService Extra (Coverage & Error)', () => {
     vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify({ total: { lines: { pct: 90 } } }));
     
     const now = Date.now();
-    // 리포트는 1시간 전, 소스는 방금 수정됨
+    // 리포트는 10분 전 (버퍼 5분을 넘겨야 함), 소스는 방금 수정됨
     vi.spyOn(fs, 'statSync').mockImplementation((path: any) => {
-      if (path.toString().includes('coverage')) return { mtimeMs: now - 3600000 } as any;
-      return { mtimeMs: now } as any;
+      if (path.toString().includes('coverage')) {
+        return { mtimeMs: now - 600000, mtime: new Date(now - 600000) } as any;
+      }
+      return { mtimeMs: now, mtime: new Date() } as any;
     });
 
-    const report = await service.runAllChecks();
+    const report = await service.runAllChecks({ coveragePath: 'coverage/coverage-summary.json' });
     expect(report.violations.some(v => v.message.includes('만료'))).toBe(true);
   });
 });

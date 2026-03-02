@@ -36,7 +36,9 @@ describe('AnalysisUtils Extra', () => {
 
   it('checkStructuralIntegrity: 순환 참조를 감지하여 위반 사항을 반환해야 한다', () => {
     const mockDg = {
-      detectCycles: vi.fn().mockReturnValue([['fileA.ts', 'fileB.ts', 'fileA.ts']])
+      detectCycles: vi.fn().mockReturnValue([['fileA.ts', 'fileB.ts', 'fileA.ts']]),
+      getAllFiles: vi.fn().mockReturnValue([]),
+      getDependencies: vi.fn().mockReturnValue([])
     };
     const violations = checkStructuralIntegrity(mockDg as any);
     expect(violations.length).toBe(1);

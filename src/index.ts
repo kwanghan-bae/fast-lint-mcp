@@ -101,7 +101,11 @@ function getToolDefinitions() {
           },
           targetPath: {
             type: 'string',
-            description: 'Absolute path to the project directory to analyze (optional, defaults to current working directory)',
+            description: 'Absolute path to the project directory to analyze (optional)',
+          },
+          coveragePath: {
+            type: 'string',
+            description: 'Manual path to the coverage report file (optional, e.g., "coverage/lcov.info")',
           },
         },
       },

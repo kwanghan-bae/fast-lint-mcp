@@ -118,7 +118,7 @@ export class AnalysisService {
   }
 
   /**
-   * 전체 품질 체크 파이프라인을 실행합니다. (v3.8 Evolution)
+   * 전체 품질 체크 파이프라인을 실행합니다. (v3.9.0 Multi-Module Pro)
    * 동적 파라미터를 지원하며, 상세한 메타데이터와 추론 근거를 포함한 리포트를 생성합니다.
    * @param options 동적 임계값 및 분석 옵션
    */
@@ -127,6 +127,7 @@ export class AnalysisService {
     maxLines?: number;
     maxComplexity?: number;
     incremental?: boolean;
+    coveragePath?: string;
   } = {}): Promise<QualityReport> {
     // 1. 레거시 상태 파일 청소
     const legacyStateFile = join(this.workspacePath, '.fast-lint-state.json');
@@ -255,20 +256,50 @@ export class AnalysisService {
     let coverageFreshness: 'fresh' | 'stale' | 'missing' = 'missing';
     let coverageLastUpdated = '';
 
-    const coverageCandidates = [
-      rules.coveragePath,
-      join(this.workspacePath, rules.coverageDirectory, 'coverage-summary.json'),
-      join(this.workspacePath, 'coverage', 'coverage-summary.json'),
-      join(this.workspacePath, 'coverage-summary.json'),
-    ].filter(Boolean) as string[];
-
+    // v3.9.0: 재귀적 커버리지 탐색 및 수동 경로 지원
     let coveragePath = '';
-    for (const cand of coverageCandidates) {
-      const fullCand = isAbsolute(cand) ? cand : join(this.workspacePath, cand);
-      if (existsSync(fullCand)) {
-        coveragePath = fullCand;
-        break;
+    
+    if (options.coveragePath) {
+      const manualPath = isAbsolute(options.coveragePath) 
+        ? options.coveragePath 
+        : join(this.workspacePath, options.coveragePath);
+      if (existsSync(manualPath)) {
+        coveragePath = manualPath;
       }
+    }
+
+    if (!coveragePath) {
+      const fastCandidates = [
+        rules.coveragePath,
+        join(this.workspacePath, rules.coverageDirectory, 'coverage-summary.json'),
+        join(this.workspacePath, rules.coverageDirectory, 'lcov.info'),
+        join(this.workspacePath, 'coverage', 'lcov.info'),
+        join(this.workspacePath, 'lcov.info'),
+      ].filter(Boolean) as string[];
+
+      for (const cand of fastCandidates) {
+        const fullCand = isAbsolute(cand) ? cand : join(this.workspacePath, cand);
+        if (existsSync(fullCand)) {
+          coveragePath = fullCand;
+          break;
+        }
+      }
+    }
+
+    // 여전히 못 찾았다면 하위 디렉토리 재귀적 검색 (Monorepo 지원)
+    if (!coveragePath) {
+      try {
+        const foundReports = await glob(['**/lcov.info', '**/coverage-summary.json', '**/clover.xml'], {
+          cwd: this.workspacePath,
+          absolute: true,
+          ignore: ['**/node_modules/**', '**/dist/**', '**/build/**']
+        });
+        
+        if (foundReports.length > 0) {
+          const sorted = foundReports.sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs);
+          coveragePath = sorted[0];
+        }
+      } catch (e) {}
     }
 
     if (coveragePath) {
@@ -282,20 +313,30 @@ export class AnalysisService {
         if (coveragePath.endsWith('.json')) {
           const coverageData = JSON.parse(content);
           currentCoverage = coverageData.total?.lines?.pct ?? 0;
+        } else if (coveragePath.endsWith('lcov.info')) {
+          const lines = content.split('\n');
+          let totalLines = 0;
+          let hitLines = 0;
+          for (const line of lines) {
+            if (line.startsWith('LF:')) totalLines += parseInt(line.split(':')[1]);
+            if (line.startsWith('LH:')) hitLines += parseInt(line.split(':')[1]);
+          }
+          currentCoverage = totalLines > 0 ? (hitLines / totalLines) * 100 : 0;
         }
 
         if (isStale && rules.minCoverage > 0) {
           violations.push({
             type: 'COVERAGE',
             message: `테스트 리포트가 소스 코드보다 오래되었습니다 (만료됨). 최신 커버리지를 반영하려면 'npm test'를 실행하세요.`,
-            rationale: `리포트 시각: ${coverageLastUpdated}, 소스 최신 수정: ${new Date(lastSrcUpdate).toISOString()}`,
+            rationale: `리포트: ${coveragePath.split('/').pop()}, 시각: ${coverageLastUpdated}`,
           });
         }
       } catch (e) {}
     } else if (rules.minCoverage > 0) {
       violations.push({
         type: 'COVERAGE',
-        message: `테스트 커버리지 리포트를 찾을 수 없습니다. 'npm test'를 실행하여 리포트를 생성하세요.`,
+        message: `테스트 커버리지 리포트를 찾을 수 없습니다. 다중 모듈 프로젝트라면 'coveragePath' 옵션을 사용하거나 각 모듈에서 테스트를 실행하세요.`,
+        rationale: `검색 루트: ${this.workspacePath}`,
       });
     }
 
@@ -327,7 +368,7 @@ export class AnalysisService {
       violations,
       suggestion: pass ? '모든 품질 기준을 통과했습니다.' : '위반 사항을 조치하세요.',
       metadata: {
-        version: 'v3.8.0', // 동적 주입된 단일 버전 정보
+        version: 'v3.9.0', // 동적 주입된 단일 버전 정보
         timestamp: new Date().toISOString(),
         coverageFreshness,
         coverageLastUpdated,
