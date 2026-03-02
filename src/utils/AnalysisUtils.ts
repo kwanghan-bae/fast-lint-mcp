@@ -24,7 +24,8 @@ export function formatReport(report: QualityReport): string {
     const meta = report.metadata;
     const freshnessIcon = meta.coverageFreshness === 'fresh' ? '🟢' : meta.coverageFreshness === 'stale' ? '🟠' : '⚪';
     const modeLabel = meta.analysisMode === 'incremental' ? '증분 분석' : '전체 분석';
-    output += `> **분석 모드**: \`${modeLabel}\` | **분석된 파일**: \`${meta.filesAnalyzed}개\` | **커버리지**: ${freshnessIcon} \`${meta.coverageFreshness || 'unknown'}\`\n\n`;
+    const coverageVal = meta.coveragePercentage !== undefined ? ` (${meta.coveragePercentage.toFixed(1)}%)` : '';
+    output += `> **분석 모드**: \`${modeLabel}\` | **분석된 파일**: \`${meta.filesAnalyzed}개\` | **커버리지**: ${freshnessIcon} \`${meta.coverageFreshness || 'unknown'}\`${coverageVal}\n\n`;
   }
 
   if (report.violations.length > 0) {
@@ -90,7 +91,8 @@ export function formatCLITable(report: QualityReport): string {
   if (report.metadata) {
     const meta = report.metadata;
     const modeLabel = meta.analysisMode === 'incremental' ? '증분 분석' : '전체 분석';
-    output += chalk.gray(`\n[Metadata] Mode: ${modeLabel} | Analyzed: ${meta.filesAnalyzed} files | Coverage: ${meta.coverageFreshness}\n`);
+    const coverageVal = meta.coveragePercentage !== undefined ? ` (${meta.coveragePercentage.toFixed(1)}%)` : '';
+    output += chalk.gray(`\n[Metadata] Mode: ${modeLabel} | Analyzed: ${meta.filesAnalyzed} files | Coverage: ${meta.coverageFreshness}${coverageVal}\n`);
   }
 
   // 조치 가이드 추가 (복구)

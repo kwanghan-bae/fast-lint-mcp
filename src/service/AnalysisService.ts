@@ -402,10 +402,24 @@ export class AnalysisService {
     const lastCoverage = await this.stateManager.getLastCoverage();
     let pass = violations.length === 0;
 
+    // v4.2.0: 커버리지 인사이트 (Top 3 취약 파일) 추출 로직
+    const allFileCoverage = Array.from(fileCoverageMap.entries())
+      .map(([file, data]) => ({
+        file: relative(this.workspacePath, file),
+        pct: data.total > 0 ? (data.hit / data.total) * 100 : 0
+      }))
+      .filter(f => !f.file.includes('node_modules') && !f.file.includes('tests/'))
+      .sort((a, b) => a.pct - b.pct)
+      .slice(0, 3);
+
+    const coverageInsight = allFileCoverage.length > 0
+      ? `\n### 💡 Coverage Insights (Top 3 Vulnerable Files)\n${allFileCoverage.map(f => `- \`${f.file}\`: **${f.pct.toFixed(1)}%**`).join('\n')}\n`
+      : '';
+
     if (lastCoverage !== null && currentCoverage < lastCoverage) {
       violations.push({
         type: 'COVERAGE',
-        value: `${currentCoverage}%`,
+        value: `${currentCoverage.toFixed(1)}%`,
         limit: `${lastCoverage}%`,
         message: `이전 세션보다 커버리지가 하락했습니다.`,
       });
@@ -415,16 +429,18 @@ export class AnalysisService {
     const report: QualityReport = {
       pass,
       violations,
-      suggestion: pass ? '모든 품질 기준을 통과했습니다.' : '위반 사항을 조치하세요.',
+      suggestion: (pass ? '모든 품질 기준을 통과했습니다.' : '위반 사항을 조치하세요.') + (coverageInsight ? `\n${coverageInsight}` : ''),
       metadata: {
-        version: 'v4.1.0', // Intelligent Coverage Analytics
+        version: 'v4.2.0', // Full Coverage Transparency
         timestamp: new Date().toISOString(),
         coverageFreshness,
         coverageLastUpdated,
+        coveragePercentage: currentCoverage,
         analysisMode: incrementalMode ? 'incremental' : 'full',
         filesAnalyzed: files.length,
       },
     };
+
 
     // 캐시 정리 및 상태 저장
     AstCacheManager.getInstance().clear();

@@ -47,6 +47,7 @@ export interface QualityReport {
     timestamp: string; // 분석 수행 시각
     coverageFreshness?: 'fresh' | 'stale' | 'missing'; // 커버리지 리포트의 신선도 상태
     coverageLastUpdated?: string; // 커버리지 리포트의 마지막 수정 시각
+    coveragePercentage?: number; // 전체 커버리지 백분율 (0-100)
     analysisMode: 'full' | 'incremental'; // 분석 모드
     filesAnalyzed: number; // 이번 분석에서 스캔/갱신된 파일 수
   };
