@@ -346,8 +346,17 @@ export class AnalysisService {
           for (const line of lines) {
             const trimmedLine = line.trim();
             if (trimmedLine.startsWith('SF:')) {
-              const rawPath = trimmedLine.split(':')[1];
-              currentFile = normalize(isAbsolute(rawPath) ? rawPath : join(dirname(coveragePath), '..', rawPath));
+              const rawPath = trimmedLine.split(':').slice(1).join(':').trim();
+              const standardPath = normalize(isAbsolute(rawPath) ? rawPath : join(dirname(coveragePath), '..', rawPath));
+              const workspacePath = normalize(join(this.workspacePath, rawPath));
+              
+              const candidates = [standardPath, workspacePath];
+              
+              // v4.7.0: 프로젝트 파일 목록에서 가장 유사한 경로 탐색 (모노레포 대응)
+              // allProjectFiles가 비어있는 경우(일부 테스트) standardPath를 기본값으로 사용
+              currentFile = (allProjectFiles.length > 0) 
+                ? (candidates.find(c => allProjectFiles.includes(c)) || allProjectFiles.find(f => f.endsWith(rawPath)) || '')
+                : standardPath;
             } else if (trimmedLine.startsWith('LF:')) {
               const val = parseInt(trimmedLine.split(':')[1].trim());
               if (!isNaN(val)) {
@@ -375,7 +384,7 @@ export class AnalysisService {
           violations.push({
             type: 'COVERAGE',
             message: `테스트 리포트가 소스 코드보다 오래되었습니다 (만료됨). 최신 커버리지를 반영하려면 'npm test'를 실행하세요.`,
-            rationale: `리포트: ${coveragePath.split('/').pop()}, 시각: ${coverageLastUpdated}`,
+            rationale: `리포트: ${coveragePath.split('/').pop()}, 시각: ${coverageLastUpdated}, 소스최신: ${new Date(lastSrcUpdate).toISOString()}`,
           });
         }
       } catch (e) {}

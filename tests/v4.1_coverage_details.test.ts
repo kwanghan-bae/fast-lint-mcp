@@ -35,6 +35,13 @@ describe('v4.1 커버리지 상세 분석 검증', () => {
     
     const covDir = join(testDir, 'coverage');
     mkdirSync(covDir);
+    const srcDir = join(testDir, 'src');
+    mkdirSync(srcDir);
+    
+    // 실제 파일 생성 (매핑을 위해 필요)
+    writeFileSync(join(srcDir, 'good.ts'), '// good');
+    writeFileSync(join(srcDir, 'bad.ts'), '// bad');
+
     writeFileSync(join(covDir, 'lcov.info'), lcovContent);
     writeFileSync(join(testDir, 'package.json'), JSON.stringify({ name: 'test' }));
 

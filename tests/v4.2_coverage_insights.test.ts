@@ -28,6 +28,15 @@ describe('v4.2 커버리지 인사이트 및 상시 노출 검증', () => {
     
     const covDir = join(testDir, 'coverage');
     mkdirSync(covDir);
+    const srcDir = join(testDir, 'src');
+    mkdirSync(srcDir);
+    
+    // 파일 생성
+    writeFileSync(join(srcDir, 'perfect.ts'), '//');
+    writeFileSync(join(srcDir, 'weak1.ts'), '//');
+    writeFileSync(join(srcDir, 'weak2.ts'), '//');
+    writeFileSync(join(srcDir, 'weak3.ts'), '//');
+
     writeFileSync(join(covDir, 'lcov.info'), lcovContent);
     writeFileSync(join(testDir, 'package.json'), JSON.stringify({ name: 'test' }));
 
