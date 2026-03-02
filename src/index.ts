@@ -8,22 +8,26 @@ import { SemanticService } from './service/SemanticService.js';
 import { AgentWorkflow } from './agent/workflow.js';
 import { formatReport, formatCLITable } from './utils/AnalysisUtils.js';
 import { join, dirname } from 'path';
-import { existsSync, statSync } from 'fs';
+import { existsSync, statSync, readFileSync } from 'fs';
+import { SYSTEM, SECURITY } from './constants.js';
 
-/**
- * Fast-Lint-MCP 서버의 엔트리 포인트입니다.
- * v3.7.2: 도구 핸들러 고도화 및 가독성 최적화
- */
-
-if (process.env.FAST_LINT_WORKSPACE) {
-  process.chdir(process.env.FAST_LINT_WORKSPACE);
+// v4.3.1: 단일 소스(package.json)로부터 버전 정보 획득
+let pkg = { version: '0.0.0-unknown' };
+try {
+  const pkgPath = join(dirname(new URL(import.meta.url).pathname), '..', 'package.json');
+  if (existsSync(pkgPath)) {
+    pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+  }
+} catch (e) {
+  // 테스트 환경이거나 package.json 접근 불가 시 기본값 사용
 }
+export const VERSION = `${SYSTEM.VERSION_PREFIX}${pkg.version}`;
 
 /** MCP 서버 인스턴스 설정 및 초기화 */
 const server = new Server(
   {
     name: 'fast-lint-mcp',
-    version: '3.0.0',
+    version: pkg.version,
   },
   {
     capabilities: {
@@ -44,12 +48,15 @@ let semantic: SemanticService;
 let agent: AgentWorkflow;
 
 /**
- * AnalysisService 인스턴스를 지연 로딩(Lazy Loading) 방식으로 제공합니다.
+ * AnalysisService 인스턴스를 컨텍스트에 맞게 제공합니다. (v4.5.0)
+ * targetPath가 변경되면 인스턴스를 새로 생성하여 컨텍스트 불일치를 방지합니다.
  */
-function getAnalyzer() {
-  if (!analyzer) {
-    stateManager = new StateManager();
-    config = new ConfigService();
+function getAnalyzer(targetPath?: string) {
+  const workspace = targetPath || process.env.FAST_LINT_WORKSPACE || process.cwd();
+  
+  if (!analyzer || analyzer['workspacePath'] !== workspace) {
+    stateManager = new StateManager(workspace);
+    config = new ConfigService(workspace);
     analyzer = new AnalysisService(stateManager, config, getSemantic());
   }
   return analyzer;
@@ -79,13 +86,13 @@ function getToolDefinitions() {
     {
       name: 'quality-check',
       description:
-        'Performs a comprehensive code quality check. Supports dynamic tuning of thresholds. (v3.8 Evolution)',
+        `Performs a comprehensive code quality check. Supports dynamic tuning of thresholds. (${VERSION} Evolution)`,
       inputSchema: {
         type: 'object',
         properties: {
           securityThreshold: {
             type: 'number',
-            description: 'Minimum entropy for secret detection (default: 4.0)',
+            description: `Minimum entropy for secret detection (default: ${SECURITY.DEFAULT_ENTROPY_THRESHOLD})`,
           },
           maxLines: {
             type: 'number',
@@ -209,7 +216,7 @@ async function handleToolCall(name: string, args: any) {
 
   switch (name) {
     case 'quality-check': {
-      const report = await getAnalyzer().runAllChecks(args);
+      const report = await getAnalyzer(workspace).runAllChecks(args);
       return { content: [{ type: 'text', text: formatReport(report) }] };
     }
     case 'get-symbol-metrics': {

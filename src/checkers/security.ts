@@ -2,6 +2,7 @@ import { execSync } from 'child_process';
 import { readFileSync } from 'fs';
 import { Violation } from '../types/index.js';
 import { AstCacheManager } from '../utils/AstCacheManager.js';
+import { SECURITY } from '../constants.js';
 
 /**
  * 소스 코드 내에 실수로 포함될 수 있는 민감 정보(API Key, Secret, Token 등)를 탐지하기 위한 정규식 패턴 목록입니다.
@@ -33,12 +34,7 @@ function calculateEntropy(str: string): number {
   }, 0);
 }
 
-// 프리컴파일된 정규식 (v3.0 Performance)
-/** 16진수 색상 코드를 탐지하는 정규식 (v3.0 Extended) */
-const HEX_COLOR_REGEX = /^(#|0x)([A-Fa-f0-9]{3,4}|[A-Fa-f0-9]{6}|[A-Fa-f0-9]{8})$/;
-/** 보안 위협이 아닌 일반적인 식별자 패턴 목록 */
-const SAFE_IDENTIFIER_REGEX =
-  /(color|class|style|theme|name|id|type|path|identifier|key_id|key_type|save_key|offset|width|height|opacity|padding)/i;
+// v4.4.0: 매직넘버 중앙화 (SECURITY 상수 활용)
 /** 대문자 상수로 정의된 키 식별자 패턴 (예: API_KEY = ...) */
 const CONSTANT_KEY_REGEX = /^[A-Z_]+_KEY\s*[:=]/;
 
@@ -51,7 +47,7 @@ export async function checkSecrets(filePath: string, securityThreshold?: number)
   const root = AstCacheManager.getInstance().getRootNode(filePath);
   const content = root ? root.text() : readFileSync(filePath, 'utf-8');
   
-  const threshold = securityThreshold ?? 4.0;
+  const threshold = securityThreshold ?? SECURITY.DEFAULT_ENTROPY_THRESHOLD;
 
   const violations: Violation[] = [];
   for (const { id, pattern, message } of SECRET_PATTERNS) {
@@ -76,12 +72,12 @@ export async function checkSecrets(filePath: string, securityThreshold?: number)
         secretValue = fullMatch.replace(/["']/g, '').trim();
       }
 
-      // 16진수 색상 코드(0x, #)인 경우 즉시 제외
-      if (HEX_COLOR_REGEX.test(secretValue)) continue;
+      // 16진수 색상 코드(0x, #)인 경우 즉시 제외 (v4.4.0 상수 사용)
+      if (SECURITY.HEX_COLOR_REGEX.test(secretValue)) continue;
 
       const entropy = calculateEntropy(secretValue);
       const isLikelySafe =
-        hasAssignment && (SAFE_IDENTIFIER_REGEX.test(keyName) || CONSTANT_KEY_REGEX.test(keyName));
+        hasAssignment && (SECURITY.SAFE_IDENTIFIER_REGEX.test(keyName) || CONSTANT_KEY_REGEX.test(keyName));
 
       if (id === 'JWT_TOKEN' || (entropy > threshold && !isLikelySafe)) {
         const lines = content.substring(0, matchIndex).split('\n');

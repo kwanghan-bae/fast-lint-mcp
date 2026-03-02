@@ -17,6 +17,8 @@ import { clearPathCache } from '../utils/PathResolver.js';
 import { join, extname, relative, isAbsolute, dirname, normalize } from 'path';
 import os from 'os';
 import { AstCacheManager } from '../utils/AstCacheManager.js';
+import { VERSION } from '../index.js';
+import { SYSTEM, COVERAGE } from '../constants.js';
 
 /**
  * 개별 파일 분석 결과를 담는 내부 인터페이스입니다.
@@ -110,7 +112,7 @@ export class AnalysisService {
           return null;
         }
       },
-      { concurrency: Math.max(1, cpuCount - 1) }
+      { concurrency: Math.max(1, cpuCount - SYSTEM.CONCURRENCY_MARGIN) }
     );
 
     const violations: Violation[] = [];
@@ -303,7 +305,7 @@ export class AnalysisService {
           cwd: this.workspacePath,
           absolute: true,
           ignore: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/out/**', '**/.next/**'],
-          deep: 5 // 깊이 제한으로 성능 보호
+          deep: COVERAGE.RECURSIVE_SEARCH_DEPTH // 상수화 (v4.4.0)
         });
         
         if (foundReports.length > 0) {
@@ -317,7 +319,8 @@ export class AnalysisService {
       try {
         const coverageStat = statSync(coveragePath);
         coverageLastUpdated = coverageStat.mtime.toISOString();
-        const isStale = coverageStat.mtimeMs < lastSrcUpdate - 300000;
+        // v4.4.0: 버퍼 시간 상수화
+        const isStale = coverageStat.mtimeMs < lastSrcUpdate - COVERAGE.STALE_BUFFER_MS;
         coverageFreshness = isStale ? 'stale' : 'fresh';
 
         const content = readFileSync(coveragePath, 'utf-8');
@@ -385,7 +388,7 @@ export class AnalysisService {
         }))
         .filter(f => !f.file.includes('node_modules') && !f.file.includes('tests/'))
         .sort((a, b) => a.pct - b.pct)
-        .slice(0, 5);
+        .slice(0, COVERAGE.TOP_VULNERABLE_FILES_COUNT);
 
       const fileList = lowCoverageFiles.map(f => `${f.file.split('/').pop()}(${f.pct.toFixed(1)}%)`).join(', ');
 
@@ -410,7 +413,7 @@ export class AnalysisService {
       }))
       .filter(f => !f.file.includes('node_modules') && !f.file.includes('tests/'))
       .sort((a, b) => a.pct - b.pct)
-      .slice(0, 3);
+      .slice(0, COVERAGE.INSIGHT_FILES_COUNT);
 
     const coverageInsight = allFileCoverage.length > 0
       ? `\n### 💡 Coverage Insights (Top 3 Vulnerable Files)\n${allFileCoverage.map(f => `- \`${f.file}\`: **${f.pct.toFixed(1)}%**`).join('\n')}\n`
@@ -431,8 +434,9 @@ export class AnalysisService {
       violations,
       suggestion: (pass ? '모든 품질 기준을 통과했습니다.' : '위반 사항을 조치하세요.') + (coverageInsight ? `\n${coverageInsight}` : ''),
       metadata: {
-        version: 'v4.2.0', // Full Coverage Transparency
+        version: VERSION, // v4.3.1 동적 버전 적용
         timestamp: new Date().toISOString(),
+
         coverageFreshness,
         coverageLastUpdated,
         coveragePercentage: currentCoverage,

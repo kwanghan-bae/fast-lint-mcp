@@ -4,17 +4,21 @@ import { readFileSync, existsSync, statSync } from 'fs';
 // 세션 내 모든 탐색 결과를 보관하는 메모리 캐시 (v3.3.2 Real-Time)
 const aliasCache = new Map<string, Record<string, string>>();
 const rootCache = new Map<string, string>();
-let fileSetCache: Set<string> | null = null;
+let fileSetCache: { set: Set<string>; sample: string } | null = null;
 
 /**
  * 프로젝트 내의 모든 파일을 Set으로 관리하여 O(1) 조회를 지원합니다.
- * v3.9.1: 모든 경로를 정규화하여 대소문자 및 경로 구분자 이슈 해결
+ * v4.5.0: 파일 개수와 샘플 경로를 동시에 체크하여 캐시 무효화 정확도 향상
  */
 function getFileSet(allFiles: string[]): Set<string> {
-  if (!fileSetCache || fileSetCache.size !== allFiles.length) {
-    fileSetCache = new Set(allFiles.map((f) => normalize(f)));
+  const currentSample = allFiles[0] || '';
+  if (!fileSetCache || fileSetCache.set.size !== allFiles.length || fileSetCache.sample !== currentSample) {
+    fileSetCache = {
+      set: new Set(allFiles.map((f) => normalize(f))),
+      sample: currentSample,
+    };
   }
-  return fileSetCache;
+  return fileSetCache.set;
 }
 
 /**

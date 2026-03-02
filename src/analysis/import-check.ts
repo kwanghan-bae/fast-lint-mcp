@@ -249,8 +249,15 @@ async function loadAllDependencies(filePath: string, workspacePath: string): Pro
 }
 
 /**
+ * 정규식 메타 문자를 이스케이프 처리합니다.
+ */
+function escapeRegExp(string: string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
  * 에이전트의 '가짜 구현(Fake Logic)' 여부를 탐지합니다.
- * v3.7.6: 화살표 함수 및 메서드 지원, 파라미터 사용 여부 정밀 체크.
+ * v4.3.0: AST + 텍스트 하이브리드 탐색으로 Shorthand Property 및 모든 식별자 참조 완벽 지원.
  */
 export async function checkFakeLogic(
   filePath: string
@@ -317,18 +324,33 @@ export async function checkFakeLogic(
           (p) => p.length > 0 && !['props', 'req', 'res', 'next', 'ctx'].includes(p)
         );
 
-        // v4.0.0: AST 기반 정밀 식별자 추적 (텍스트 매칭 오탐 해결)
+        // v4.3.0: 텍스트 기반 카운팅 + AST 하이브리드 탐색 (가장 견고함)
         if (pList.length > 0) {
+          const functionText = m.text();
+          const paramsText = paramsNode.text();
+          
           const allUnused = pList.every((p) => {
+            // 1. AST 정밀 탐색 시도
             try {
-              // bodyNode 전체 트리를 뒤져서 해당 파라미터 식별자가 참조되는지 확인
-              const usageMatches = bodyNode.findAll({ rule: { kind: 'identifier', pattern: p } });
-              return usageMatches.length === 0;
-            } catch (e) {
-              // AST 검색 실패 시 텍스트 기반 폴백
-              const regex = new RegExp(`\\b${p}\\b`);
-              return !regex.test(body);
-            }
+              const usageMatches = bodyNode.findAll({
+                rule: {
+                  any: [
+                    { kind: 'identifier', pattern: p },
+                    { kind: 'shorthand_property_identifier', pattern: p },
+                    { pattern: p }
+                  ]
+                }
+              });
+              if (usageMatches.length > 0) return false; // 사용됨
+            } catch (e) {}
+
+            // 2. 텍스트 카운팅 폴백 (AST가 놓치는 특수 구문 대응)
+            const reg = new RegExp(`\\b${escapeRegExp(p)}\\b`, 'g');
+            const countInParams = (paramsText.match(reg) || []).length;
+            const countInFunction = (functionText.match(reg) || []).length;
+            
+            // 본체에서의 발생 횟수가 선언부 발생 횟수보다 많으면 사용된 것으로 간주
+            return countInFunction <= countInParams;
           });
 
           if (allUnused) {
