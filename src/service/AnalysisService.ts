@@ -186,12 +186,17 @@ export class AnalysisService {
 
     await this.depGraph.build(allProjectFiles);
 
-    // 4. 분석 대상 파일 결정
+    // 4. 분석 대상 파일 결정 (v4.6.0: 엄격한 스코프 필터링)
     if (incrementalOption) {
       const changedFiles = await this.getChangedFiles();
       if (changedFiles.length > 0) {
         incrementalMode = true;
+        // 1) 전체 프로젝트 파일 중 Git에서 변경된 파일들만 1차 필터링
         const filteredChanges = changedFiles.filter((file) => {
+          const fullPath = isAbsolute(file) ? file : join(this.workspacePath, file);
+          // 현재 워크스페이스 하위 파일인지 확인
+          if (!fullPath.startsWith(this.workspacePath)) return false;
+          
           return !ignorePatterns.some((pattern) => {
             const regex = new RegExp(
               '^' + pattern.replace(/\*\*/g, '.*').replace(/\*/g, '[^/]*') + '$'
@@ -206,6 +211,9 @@ export class AnalysisService {
             const fullPath = isAbsolute(file) ? file : join(this.workspacePath, file);
             const dependents = this.depGraph.getDependents(fullPath);
             dependents.forEach((dep) => {
+              // 역의존성 파일도 현재 워크스페이스 하위인지 엄격히 검사 (v4.6.0)
+              if (!dep.startsWith(this.workspacePath)) return;
+              
               const relativeDep = relative(this.workspacePath, dep);
               const isIgnored = ignorePatterns.some((p) =>
                 new RegExp('^' + p.replace(/\*\*/g, '.*').replace(/\*/g, '[^/]*') + '$').test(

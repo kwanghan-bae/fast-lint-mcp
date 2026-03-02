@@ -12,27 +12,29 @@ import { builtinModules } from 'module';
 import { AstCacheManager } from '../utils/AstCacheManager.js';
 
 /** 프로젝트 파일 목록 캐시를 위한 내부 변수 */
-let projectFilesCache: { workspacePath: string; files: string[] } | null = null;
+let projectFilesCache: { key: string; files: string[] } | null = null;
 
 /**
- * 프로젝트 내의 모든 파일 목록을 가져옵니다. (v3.2 Cached Turbo)
+ * 프로젝트 내의 모든 파일 목록을 가져옵니다. (v4.6.0 Strict Scoping)
  */
 export async function getProjectFiles(
   workspacePath: string,
   ignorePatterns: string[] = ['**/node_modules/**', '**/dist/**']
 ): Promise<string[]> {
-  if (projectFilesCache && projectFilesCache.workspacePath === workspacePath) {
+  const cacheKey = `${workspacePath}:${ignorePatterns.sort().join(',')}`;
+  if (projectFilesCache && projectFilesCache.key === cacheKey) {
     return projectFilesCache.files;
   }
 
-  const rawFiles = await glob(['**/*.{ts,js,tsx,jsx,json,css,svg}'], {
+  // v4.6.0: workspacePath 하위로 탐색 범위를 엄격히 제한
+  const rawFiles = await glob(['**/*.{ts,js,tsx,jsx,json,css,svg,kt,kts}'], {
     cwd: workspacePath,
     absolute: true,
     ignore: ignorePatterns,
   });
   const files = rawFiles.map((f) => normalize(f));
 
-  projectFilesCache = { workspacePath, files };
+  projectFilesCache = { key: cacheKey, files };
   return files;
 }
 
