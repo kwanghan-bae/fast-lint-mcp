@@ -1,4 +1,4 @@
-# 🤖 AI 에이전트 지능형 활용 및 설치 가이드 (v3.2)
+# 🤖 AI 에이전트 지능형 활용 및 설치 가이드 (v3.3)
 
 이 문서는 AI 코딩 에이전트(Antigravity, Cursor, Claude Code 등)가 `fast-lint-mcp`를 통해 **노이즈 없는 정밀 분석**과 **데이터 기반 리팩토링**을 수행하도록 돕는 공식 가이드입니다.
 
@@ -21,7 +21,7 @@ npm run build
 Antigravity는 에이전트의 자율성을 극대화하기 위해 `autoApprove` 설정이 필수입니다.
 
 ### ✅ 최적화 설정 (`~/.gemini/antigravity/mcp_config.json`)
-아래의 JSON 설정을 통해 에이전트가 승인 팝업 없이 중단 없는 분석을 수행하도록 하십시오. (경로 `/Users/joel/Desktop/git/fast-lint-mcp` 부분은 실제 설치 경로로 확인 후 수정하십시오.)
+**v5.0.1 업데이트**: 이제 엔진 레벨에서 `node_modules`, `dist`, `target`, `venv` 등을 **자동으로 제외**하므로 별도의 필터링 설정이 필요 없습니다. (경로 `/Users/joel/Desktop/git/fast-lint-mcp` 부분은 실제 설치 경로로 수정하십시오.)
 
 ```json
 {
@@ -45,15 +45,14 @@ Antigravity는 에이전트의 자율성을 극대화하기 위해 `autoApprove`
 
 ---
 
-## 🧠 에이전트 지능형 워크플로우 (SOP)
+## 🧠 에이전트 지능형 워크플로우 (SOP) - [v3.3 Zero-Config]
 
-에이전트는 분석 시 다음의 **'노이즈 제거'** 및 **'경로 검증'** 규칙을 반드시 준수해야 합니다.
+에이전트는 분석 시 다음의 **'지능형 탐색'** 및 **'경로 검증'** 규칙을 준수하십시오.
 
-### Step 1: 노이즈 없는 종합 진단 (Clean Diagnosis)
+### Step 1: 지능형 종합 진단 (Intelligent Diagnosis)
 - **Tool**: `quality-check`
-- **Action**: 프로젝트 전체의 복잡도와 보안 취약점을 스캔하십시오. 이때 빌드 결과물이나 외부 라이브러리가 포함되지 않도록 `exclude_pattern`을 반드시 사용해야 합니다.
-- **필수 제외 패턴**: `dist/**`, `node_modules/**`, `.git/**`, `build/**`
-- **Tip**: 에이전트는 작성된 소스 코드의 품질에만 집중하고, 생성된 아티팩트는 분석 대상에서 제외하십시오.
+- **Feature**: 이제 엔진이 **Java, Python, Rust, Go, JS/TS** 등 모든 주요 언어의 빌드 결과물과 의존성 폴더를 자동으로 감지하고 제외합니다.
+- **Action**: 에이전트는 `node_modules`나 `dist`를 수동으로 제외할 필요 없이, 즉시 프로젝트 전체 진단을 수행하십시오. 오직 프로젝트 고유의 특수한 폴더만 `exclude_pattern`으로 추가하면 됩니다.
 
 ### Step 2: 정밀 타격 탐색 및 경로 교차 검증 (Surgical Discovery & Cross-Validation)
 - **Tools**: `get-symbol-metrics`, `get-symbol-content`
@@ -74,12 +73,13 @@ Antigravity는 에이전트의 자율성을 극대화하기 위해 `autoApprove`
 이 내용을 에이전트의 **Agent Instructions**나 **.cursorrules**에 복사해 넣으세요.
 
 ```text
-[Fast-Lint-MCP Priority Workflow v3.2]
-1. (진단) 분석 요청 시 `quality-check`를 호출하되, `dist`, `node_modules`는 분석 대상에서 명시적으로 제외하라.
-2. (압축) 코드 탐색 시 `get-symbol-content`를 우선 사용하여 토큰 사용량을 최소화하라.
-3. (경로 신뢰) 도구가 파일 경로 오류(HALLUCINATION)를 보고하면, 반드시 `ls` 명령어로 물리적 존재를 교차 검증한 뒤 보고하라.
-4. (아키텍처) `Senior Advice` 섹션을 활용해 단순 수정을 넘어선 '아키텍처 리팩토링 방향'을 제안하라.
-5. (검증) 모든 작업의 마무리는 `verify-fix` 호출 결과로 증명하라.
+[Fast-Lint-MCP Priority Workflow v3.3]
+1. (자동 필터) 엔진이 빌드/의존성 폴더를 자동으로 제외하므로, 별도의 제외 설정 없이 `quality-check`를 즉시 호출하라.
+2. (범용성) Java, Python, Rust 등 다국어 프로젝트에서도 동일한 품질 관리 도구를 사용하여 진단하라.
+3. (압축) 코드 탐색 시 `get-symbol-content`를 우선 사용하여 토큰 사용량을 최소화하라.
+4. (경로 신뢰) 도구가 파일 경로 오류(HALLUCINATION)를 보고하면, 반드시 `ls` 명령어로 물리적 존재를 교차 검증한 뒤 보고하라.
+5. (아키텍처) `Senior Advice` 섹션을 활용해 단순 수정을 넘어선 '아키텍처 리팩토링 방향'을 제안하라.
+6. (검증) 모든 작업의 마무리는 `verify-fix` 호출 결과로 증명하라.
 ```
 
 ---
@@ -93,4 +93,4 @@ Antigravity는 에이전트의 자율성을 극대화하기 위해 `autoApprove`
 
 ## ✅ 설치 검증 (Verification)
 에이전트에게 이렇게 질문하여 피드백 반영 여부를 확인하세요:
-> "이 프로젝트에서 `dist` 폴더를 제외하고(`exclude_pattern`), 복잡도가 가장 높은 파일을 찾아 `Senior Advice`를 바탕으로 리팩토링 계획을 세워줘."
+> "이 프로젝트의 전반적인 품질을 진단하고(`quality-check`), 복잡도가 가장 높은 함수를 찾아 `Senior Advice`를 바탕으로 리팩토링 계획을 세워줘."
