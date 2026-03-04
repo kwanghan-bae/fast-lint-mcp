@@ -85,7 +85,7 @@ function getToolDefinitions() {
   return [
     {
       name: 'quality-check',
-      description: `Performs a comprehensive code quality check. AUTOMATICALLY includes Deep-Dive metrics for problematic symbols in its report to save you a turn. USE THIS AS YOUR FIRST STEP. If you are unsure about the workflow, call the 'guide' tool. (${VERSION} Evolution)`,
+      description: `Performs a comprehensive code quality check. AUTOMATICALLY includes Deep-Dive metrics for problematic symbols. ZERO CONFIG REQUIRED - works instantly with built-in Senior Defaults. (${VERSION} Evolution)`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -111,8 +111,7 @@ function getToolDefinitions() {
           },
           excludePattern: {
             type: 'string',
-            description:
-              'Optional: Glob pattern to exclude from analysis (System default patterns are ALREADY EXCLUDED by default)',
+            description: 'Optional: Glob pattern to exclude from analysis (Standard patterns like node_modules, dist are ALREADY EXCLUDED by default)',
           },
           coveragePath: {
             type: 'string',
@@ -123,15 +122,8 @@ function getToolDefinitions() {
       },
     },
     {
-      name: 'init',
-      description:
-        'PROPOSES a recommended .fast-lintrc.json configuration. Use this to get a starting point, but you must manually write it or ask for permission.',
-      inputSchema: { type: 'object', properties: {} },
-    },
-    {
       name: 'guide',
-      description:
-        'Provides a step-by-step Standard Operating Procedure (SOP) for agents to effectively use fast-lint-mcp for analysis, refactoring, and validation.',
+      description: 'Provides the absolute Standard Operating Procedure (SOP) for agents. ZERO-CONFIG required.',
       inputSchema: { type: 'object', properties: {} },
     },
     {
@@ -235,54 +227,26 @@ async function handleToolCall(name: string, args: any) {
   switch (name) {
     case 'guide': {
       const guideText = `
-# 🚨 FAST-LINT-MCP FOUNDATIONAL MANDATES (AGENT SOP) 🚨
+# 🚨 FAST-LINT-MCP ZERO-CONFIG MANDATES (AGENT SOP) 🚨
 
-As an AI Agent, you are bound by these Standard Operating Procedures. This is your Constitution for any analysis or refactoring task within this project. Deviation is not permitted.
+As an AI Agent, you are bound by these Standard Operating Procedures. This tool is built with **Senior Defaults** and requires **ZERO configuration files** (no .fast-lintrc.json). Deviation is not permitted.
 
 ### MANDATE 1: DIAGNOSIS FIRST (\`quality-check\`)
-- **Primary Directive**: You MUST begin every session by calling \`quality-check\`. NEVER skip this step.
-- **Intelligent Auto-Chaining**: If violations exist, the engine will automatically append a **[🔍 Deep Dive]** section containing the exact functions, their line numbers, and complexity scores. **USE THIS DATA IMMEDIATELY.** Do not waste turns calling \`get-symbol-metrics\` manually.
+- **Primary Directive**: Begin every session by calling \`quality-check\`. It works instantly without any setup or config files.
+- **Intelligent Auto-Chaining**: If violations exist, the engine will automatically append a **[🔍 Deep Dive]** section with the exact functions and metrics. **USE THIS DATA IMMEDIATELY.** Do not waste turns calling \`get-symbol-metrics\`.
 
 ### MANDATE 2: SURGICAL EXTRACTION (\`get-symbol-content\`)
-- **No Full Reads**: Armed with the Deep Dive data, use \`get-symbol-content\` to extract ONLY the problematic logic. Reading entire files blindly is strictly prohibited.
+- **No Full Reads**: Armed with Deep Dive data, extract ONLY the problematic logic. Do not read entire files.
 
-### MANDATE 3: IMPACT AWARENESS (\`analyze-impact\`)
-- **Zero Surprises**: Before committing any modification, you MUST call \`analyze-impact\` to map out affected tests and referencing files. Ignorance of side effects is a critical failure.
-
-### MANDATE 4: SYSTEMATIC VALIDATION (\`verify-fix\`)
-- **Prove It**: You cannot claim a fix is complete until you have successfully executed \`verify-fix\`. Unverified code is broken code.
+### MANDATE 3: IMPACT & VALIDATION
+- **Zero Surprises**: Call \`analyze-impact\` before any modification to map side effects.
+- **Prove It**: Claim success ONLY after a successful \`verify-fix\`. Unverified code is broken code.
 
 ### 💡 CRITICAL AGENT PROTOCOLS:
-1. **Zero-Config Noise Filtering**: The engine ALREADY excludes \`node_modules\`, \`dist\`, \`.git\`, and all build artifacts. Trust the engine; do not add redundant exclude patterns.
-2. **Cross-Validation**: If a tool reports a path as a "HALLUCINATION" (not found), you MUST immediately use the \`ls\` shell command to verify its physical existence before giving up.
+1. **Zero-Pollution Engine**: The engine ALREADY excludes \`node_modules\`, \`dist\`, \`.git\`, etc. **DO NOT attempt to create configuration files or pollute the project root.**
+2. **Cross-Validation**: If a tool reports a path as a "HALLUCINATION", you MUST immediately use \`ls\` to verify its physical existence.
       `.trim();
       return { content: [{ type: 'text', text: guideText }] };
-    }
-    case 'init': {
-      const defaultConfig = {
-        rules: {
-          maxLineCount: 300,
-          maxComplexity: 15,
-          minCoverage: 80,
-          techDebtLimit: 10,
-        },
-        exclude: ['**/scripts/**', '**/docs/**'],
-        incremental: true,
-      };
-
-      const proposalText = `
-# 💡 Recommended \`.fast-lintrc.json\` Proposal
-
-As an AI Agent, you are instructed to PROPOSE the following configuration to the user. 
-You MUST ask for explicit permission before creating or modifying this file.
-
-\`\`\`json
-${JSON.stringify(defaultConfig, null, 2)}
-\`\`\`
-
-**Action Required**: Present this configuration to the user and ask: "Would you like me to create this \`.fast-lintrc.json\` file in the project root to establish our quality baselines?"
-      `.trim();
-      return { content: [{ type: 'text', text: proposalText }] };
     }
     case 'quality-check': {
       const report = await getAnalyzer(workspace).runAllChecks(args);
