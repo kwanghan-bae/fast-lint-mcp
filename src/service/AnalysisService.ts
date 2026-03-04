@@ -142,8 +142,12 @@ export class AnalysisService {
     const supportedExts = this.providers.flatMap((p) => p.extensions);
     const ignorePatterns = this.config.exclude;
 
-    // 2. 파일 스캔 및 의존성 그래프 구축
-    let allProjectFiles = await getProjectFiles(this.workspacePath, ignorePatterns);
+    // 2. 파일 스캔 및 의존성 그래프 구축 (v5.0: 시스템 기본 패턴 병합)
+    const combinedIgnorePatterns = [
+      ...SYSTEM.DEFAULT_IGNORE_PATTERNS,
+      ...(ignorePatterns || []),
+    ];
+    let allProjectFiles = await getProjectFiles(this.workspacePath, combinedIgnorePatterns);
     await this.depGraph.build(allProjectFiles);
 
     // 3. 분석 대상 파일 결정 (v4.6.0 Strict Scoping)

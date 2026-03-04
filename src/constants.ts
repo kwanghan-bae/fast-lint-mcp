@@ -7,6 +7,18 @@ export const SYSTEM = {
   VERSION_PREFIX: 'v',
   /** 기본 동시성 제어 (CPU 코어 대비 여유분) */
   CONCURRENCY_MARGIN: 1,
+  /** 시스템 레벨에서 자동으로 제외할 디렉토리 및 파일 패턴 */
+  DEFAULT_IGNORE_PATTERNS: [
+    '**/node_modules/**',
+    '**/.git/**',
+    '**/dist/**',
+    '**/build/**',
+    '**/.next/**',
+    '**/.cache/**',
+    '**/coverage/**',
+    '**/*.log',
+    '**/tmp/**',
+  ],
 };
 
 export const SECURITY = {

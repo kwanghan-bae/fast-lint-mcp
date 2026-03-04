@@ -11,17 +11,25 @@ import { ArchitectureRule } from '../config.js';
 import { builtinModules } from 'module';
 import { AstCacheManager } from '../utils/AstCacheManager.js';
 
+import { SYSTEM } from '../constants.js';
+
 /** 프로젝트 파일 목록 캐시를 위한 내부 변수 */
 let projectFilesCache: { key: string; files: string[] } | null = null;
 
 /**
- * 프로젝트 내의 모든 파일 목록을 가져옵니다. (v4.6.0 Strict Scoping)
+ * 프로젝트 내의 모든 파일 목록을 가져옵니다. (v5.0: 시스템 레벨 노이즈 차단 강화)
  */
 export async function getProjectFiles(
   workspacePath: string,
-  ignorePatterns: string[] = ['**/node_modules/**', '**/dist/**']
+  ignorePatterns: string[] = []
 ): Promise<string[]> {
-  const cacheKey = `${workspacePath}:${ignorePatterns.sort().join(',')}`;
+  // v5.0: 시스템 기본 패턴과 사용자가 제공한 패턴을 병합
+  const combinedPatterns = Array.from(new Set([
+    ...SYSTEM.DEFAULT_IGNORE_PATTERNS,
+    ...ignorePatterns
+  ]));
+
+  const cacheKey = `${workspacePath}:${combinedPatterns.sort().join(',')}`;
   if (projectFilesCache && projectFilesCache.key === cacheKey) {
     return projectFilesCache.files;
   }
@@ -30,7 +38,7 @@ export async function getProjectFiles(
   const rawFiles = await glob(['**/*.{ts,js,tsx,jsx,json,css,svg,kt,kts}'], {
     cwd: workspacePath,
     absolute: true,
-    ignore: ignorePatterns,
+    ignore: combinedPatterns,
   });
   const files = rawFiles.map((f) => normalize(f));
 
