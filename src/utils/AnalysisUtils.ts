@@ -51,6 +51,22 @@ export function formatReport(report: QualityReport): string {
     output += `\n### 💡 리팩토링 조치 가이드\n\n${report.suggestion}\n`;
   }
 
+  // 5. 지능형 딥다이브 (Deep Dive) 섹션 추가 (v5.1: Agent Turn Optimization)
+  if (report.deepDive && Object.keys(report.deepDive).length > 0) {
+    output += `\n### 🔍 Deep Dive: Problematic Symbols (Auto-Analyzed)\n`;
+    output += `> 위반 사항이 발견된 파일 내에서 복잡도나 크기가 임계치를 초과한 심볼들입니다.\n\n`;
+    output += `| 파일(File) | 심볼명(Symbol) | 라인수(Lines) | 복잡도(Complexity) | 범위(Range) |\n`;
+    output += `| :--- | :--- | :--- | :--- | :--- |\n`;
+
+    for (const [file, symbols] of Object.entries(report.deepDive)) {
+      symbols.forEach((s: any) => {
+        const fileName = file.split('/').pop();
+        output += `| \`${fileName}\` | **${s.name}** | ${s.lineCount} | \`${s.complexity}\` | L${s.startLine}-L${s.endLine} |\n`;
+      });
+    }
+    output += `\n*에이전트 팁: 위 심볼 정보를 바탕으로 \`get-symbol-content\`를 호출하여 즉시 수정을 시작하세요.*\n`;
+  }
+
   return output;
 }
 

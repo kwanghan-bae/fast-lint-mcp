@@ -340,7 +340,28 @@ export class AnalysisService {
       });
     }
 
-    // 8. 최종 리포트 및 메타데이터 구성
+    // 8. 지능형 자동 딥다이브 (Intelligent Auto-DeepDive v5.1)
+    // 에이전트가 추가 호출 없이 즉시 수정 계획을 세울 수 있도록 위반 파일의 심볼 정보를 자동 동봉합니다.
+    const deepDive: { [file: string]: any[] } = {};
+    const violationFiles = new Set<string>(
+      violations.map(v => v.file).filter(Boolean) as string[]
+    );
+
+    for (const vFile of Array.from(violationFiles)) {
+      try {
+        const fullPath = isAbsolute(vFile) ? vFile : join(this.workspacePath, vFile);
+        if (existsSync(fullPath)) {
+          const metrics = this.semantic.getSymbolMetrics(fullPath);
+          // 복잡도가 높거나 라인이 긴 '주의' 심볼만 필터링하여 노이즈 최소화
+          const problematicSymbols = metrics.filter(m => m.complexity > 10 || m.lineCount > 50);
+          if (problematicSymbols.length > 0) {
+            deepDive[vFile] = problematicSymbols;
+          }
+        }
+      } catch (e) { /* 무시 */ }
+    }
+
+    // 9. 최종 리포트 및 메타데이터 구성
     const lastCoverage = await this.stateManager.getLastCoverage();
     let pass = violations.length === 0;
 
@@ -367,6 +388,7 @@ export class AnalysisService {
     const report: QualityReport = {
       pass,
       violations,
+      deepDive,
       suggestion: baseSuggestion + (coverageInsight ? `\n${coverageInsight}` : ''),
       metadata: {
         version: VERSION,

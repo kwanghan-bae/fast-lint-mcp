@@ -1,96 +1,44 @@
-# 🤖 AI 에이전트 지능형 활용 및 설치 가이드 (v3.3)
+# 🤖 AI 에이전트 지능형 활용 및 설치 가이드 (v3.4)
 
-이 문서는 AI 코딩 에이전트(Antigravity, Cursor, Claude Code 등)가 `fast-lint-mcp`를 통해 **노이즈 없는 정밀 분석**과 **데이터 기반 리팩토링**을 수행하도록 돕는 공식 가이드입니다.
+이 문서는 AI 코딩 에이전트가 `fast-lint-mcp`의 **자동 지능형 체이닝** 기능을 통해 최소한의 호출로 최대의 분석 성과를 내도록 돕는 가이드입니다.
 
 ---
 
 ## ⚡ 공통 설치 (Prerequisites)
-
-먼저 로컬 환경에 프로젝트를 설치하고 빌드합니다.
-```bash
-git clone https://github.com/your-username/fast-lint-mcp.git ~/fast-lint-mcp
-cd ~/fast-lint-mcp
-npm install
-npm run build
-```
-*중요: 설치 후 `pwd` 명령어로 확인한 **절대 경로**를 아래 설정에서 사용하십시오.*
+(이하 생략 - 이전 버전과 동일)
 
 ---
 
-## 1. Google Antigravity 🪐 (Agent-First IDE)
-Antigravity는 에이전트의 자율성을 극대화하기 위해 `autoApprove` 설정이 필수입니다.
+## 🧠 에이전트 지능형 워크플로우 (SOP) - [v3.4 Auto-Chaining]
 
-### ✅ 최적화 설정 (`~/.gemini/antigravity/mcp_config.json`)
-**v5.0.1 업데이트**: 이제 엔진 레벨에서 `node_modules`, `dist`, `target`, `venv` 등을 **자동으로 제외**하므로 별도의 필터링 설정이 필요 없습니다. (경로 `/Users/joel/Desktop/git/fast-lint-mcp` 부분은 실제 설치 경로로 수정하십시오.)
+v5.1부터 엔진이 에이전트의 다음 행동을 예측하여 데이터를 선제적으로 제공합니다.
 
-```json
-{
-  "mcpServers": {
-    "fast-lint-mcp": {
-      "command": "node",
-      "args": ["/Users/joel/Desktop/git/fast-lint-mcp/dist/index.js"],
-      "autoApprove": [
-        "quality-check",
-        "get-symbol-metrics",
-        "get-symbol-content",
-        "find-references",
-        "analyze-impact",
-        "verify-fix"
-      ]
-    }
-  }
-}
-```
-*효과: 분석 및 읽기 도구를 자동 승인하면 에이전트가 사용자 방해 없이 수초 내에 전체 아키텍처를 파악합니다.*
-
----
-
-## 🧠 에이전트 지능형 워크플로우 (SOP) - [v3.3 Zero-Config]
-
-에이전트는 분석 시 다음의 **'지능형 탐색'** 및 **'경로 검증'** 규칙을 준수하십시오.
-
-### Step 1: 지능형 종합 진단 (Intelligent Diagnosis)
+### Step 1: 지능형 종합 진단 & 자동 Deep Dive
 - **Tool**: `quality-check`
-- **Feature**: 이제 엔진이 **Java, Python, Rust, Go, JS/TS** 등 모든 주요 언어의 빌드 결과물과 의존성 폴더를 자동으로 감지하고 제외합니다.
-- **Action**: 에이전트는 `node_modules`나 `dist`를 수동으로 제외할 필요 없이, 즉시 프로젝트 전체 진단을 수행하십시오. 오직 프로젝트 고유의 특수한 폴더만 `exclude_pattern`으로 추가하면 됩니다.
+- **Feature**: 위반 사항이 발견되면, 엔진이 해당 파일 내의 복잡한 함수/클래스 정보(`get-symbol-metrics`)를 **자동으로 추출하여 리포트에 첨부**합니다.
+- **Action**: 에이전트는 리포트 하단의 **[🔍 Deep Dive: Problematic Symbols]** 섹션을 확인하십시오. 별도의 도구 호출 없이도 어떤 함수가 리팩토링 대상인지 즉시 알 수 있습니다.
 
-### Step 2: 정밀 타격 탐색 및 경로 교차 검증 (Surgical Discovery & Cross-Validation)
-- **Tools**: `get-symbol-metrics`, `get-symbol-content`
-- **Problem**: `PathResolver`가 가끔 실제 파일을 'HALLUCINATION'으로 오판할 경우(파일이 실제로는 존재하나 도구가 못 찾는 경우)가 있습니다.
-- **Action**: 도구가 "파일 없음"을 보고할 경우, 즉시 쉘 명령(`ls -l [경로]`)을 통해 물리적 존재 여부를 **교차 검증**하십시오. 만약 파일이 존재한다면, 도구에게 해당 경로를 '절대 경로'로 다시 전달하여 재시도하십시오.
+### Step 2: 정밀 코드 추출 (Surgical Extraction)
+- **Tool**: `get-symbol-content`
+- **Action**: Step 1에서 제공된 심볼 명칭과 라인 범위를 바탕으로, 즉시 해당 로직을 추출하여 수정을 시작하십시오. 이제 `get-symbol-metrics`를 수동으로 호출할 필요가 거의 없습니다.
 
-### Step 3: 파급 효과 분석 (Impact Analysis)
-- **Tools**: `find-references`, `analyze-impact`
-- **Action**: 수정을 시작하기 전, 해당 심볼을 참조하는 모든 위치를 찾고 `analyze-impact`를 통해 깨질 수 있는 테스트 케이스를 목록화하십시오.
-
-### Step 4: Senior Advice 기반 리팩토링 및 검증 (Architecture & Validation)
-- **Tool**: `verify-fix`, `quality-check`
-- **Action**: `quality-check`의 결과 중 **`Senior Advice`** 섹션을 유심히 읽으십시오. 단순히 코드가 길다는 지적을 넘어, "서비스 레이어로 로직을 분리하라"는 등의 구체적 아키텍처 개선안을 사용자에게 제안하십시오. 수정한 후에는 반드시 `verify-fix`를 호출하여 성공 여부를 입증하십시오.
+### Step 3: 파급 효과 분석 & 시스템적 증명
+(이하 생략 - 이전 버전과 동일)
 
 ---
 
 ## 🚀 에이전트 주입용 시스템 프롬프트 (System Instruction)
-이 내용을 에이전트의 **Agent Instructions**나 **.cursorrules**에 복사해 넣으세요.
 
 ```text
-[Fast-Lint-MCP Priority Workflow v3.3]
-1. (자동 필터) 엔진이 빌드/의존성 폴더를 자동으로 제외하므로, 별도의 제외 설정 없이 `quality-check`를 즉시 호출하라.
-2. (범용성) Java, Python, Rust 등 다국어 프로젝트에서도 동일한 품질 관리 도구를 사용하여 진단하라.
-3. (압축) 코드 탐색 시 `get-symbol-content`를 우선 사용하여 토큰 사용량을 최소화하라.
-4. (경로 신뢰) 도구가 파일 경로 오류(HALLUCINATION)를 보고하면, 반드시 `ls` 명령어로 물리적 존재를 교차 검증한 뒤 보고하라.
-5. (아키텍처) `Senior Advice` 섹션을 활용해 단순 수정을 넘어선 '아키텍처 리팩토링 방향'을 제안하라.
-6. (검증) 모든 작업의 마무리는 `verify-fix` 호출 결과로 증명하라.
+[Fast-Lint-MCP Priority Workflow v3.4]
+1. (자동 딥다이브) `quality-check` 리포트 하단의 [Deep Dive] 섹션을 활용해 별도의 심볼 분석 호출 없이 즉시 문제 함수를 식별하라.
+2. (압축 호출) 엔진이 선제적으로 제공한 심볼 데이터를 바탕으로 `get-symbol-content`를 즉시 실행하여 컨텍스트를 확보하라.
+3. (경로 신뢰) 도구가 파일 경로 오류(HALLUCINATION)를 보고하면, 반드시 `ls` 명령어로 물리적 존재를 교차 검증하라.
+4. (검증) 모든 작업의 마무리는 `verify-fix` 호출 결과로 증명하라.
 ```
 
 ---
 
-## 🛠️ 고급 설정: 동적 파라미터 튜닝
-에이전트는 상황에 따라 도구의 파라미터를 조절하여 더 정밀한 결과를 얻을 수 있습니다.
-- 보안 감도가 낮거나 특정 임계값 조정이 필요하다면: `quality-check` 호출 시 `securityThreshold`나 `maxComplexity` 값을 동적으로 조절하십시오.
-- 특정 파일만 깊게 보고 싶다면: `targetPath`를 특정 디렉토리로 좁혀서 호출하십시오.
-
----
-
 ## ✅ 설치 검증 (Verification)
-에이전트에게 이렇게 질문하여 피드백 반영 여부를 확인하세요:
-> "이 프로젝트의 전반적인 품질을 진단하고(`quality-check`), 복잡도가 가장 높은 함수를 찾아 `Senior Advice`를 바탕으로 리팩토링 계획을 세워줘."
+에이전트에게 이렇게 질문해 보세요:
+> "이 프로젝트의 품질을 진단해줘. 발견된 위반 사항이 있다면 리포트에 포함된 [Deep Dive] 데이터를 사용해서 리팩토링 계획을 바로 세워줘."

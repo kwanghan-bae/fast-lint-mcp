@@ -42,6 +42,7 @@ export interface QualityReport {
   pass: boolean; // 품질 기준 통과 여부
   violations: Violation[]; // 발견된 위반 사항 목록
   suggestion?: string; // 개선을 위한 종합 조치 가이드
+  deepDive?: { [filePath: string]: SymbolMetric[] }; // 위반 파일의 심볼별 상세 지표 (자동 수집)
   metadata?: {
     version: string; // 도구 버전 (예: 'v3.8.0')
     timestamp: string; // 분석 수행 시각
