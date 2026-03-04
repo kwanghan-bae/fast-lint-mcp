@@ -7,17 +7,66 @@ export const SYSTEM = {
   VERSION_PREFIX: 'v',
   /** 기본 동시성 제어 (CPU 코어 대비 여유분) */
   CONCURRENCY_MARGIN: 1,
-  /** 시스템 레벨에서 자동으로 제외할 디렉토리 및 파일 패턴 */
+  /** 시스템 레벨에서 자동으로 제외할 디렉토리 및 파일 패턴 (v5.0.1 Multi-Language) */
   DEFAULT_IGNORE_PATTERNS: [
+    // 1. 의존성 및 패키지 매니저 (Dependencies)
     '**/node_modules/**',
+    '**/bower_components/**',
+    '**/vendor/**',      // Go, PHP 등
+    '**/.gradle/**',     // Java/Kotlin
+    '**/.m2/**',         // Maven
+    '**/Pods/**',        // iOS (CocoaPods)
+    '**/.venv/**',       // Python
+    '**/venv/**',        // Python
+    '**/env/**',         // Python
+
+    // 2. 빌드 결과물 및 아티팩트 (Build Artifacts)
+    '**/dist/**',        // JS/TS
+    '**/build/**',       // Java/Kotlin, React Native 등
+    '**/out/**',         // Java/IntelliJ
+    '**/target/**',      // Rust, Maven
+    '**/bin/**',         // C#, Java, Go 등
+    '**/obj/**',         // C# (.NET)
+    '**/.next/**',       // Next.js
+    '**/.nuxt/**',       // Nuxt.js
+    '**/.expo/**',       // Expo/React Native
+    '**/.cache/**',      // 각종 도구 캐시
+    '**/.parcel-cache/**',
+    '**/.turbo/**',      // Turborepo
+
+    // 3. 버전 관리 및 IDE 메타데이터 (VCS & IDE)
     '**/.git/**',
-    '**/dist/**',
-    '**/build/**',
-    '**/.next/**',
-    '**/.cache/**',
+    '**/.svn/**',
+    '**/.hg/**',
+    '**/.idea/**',       // JetBrains
+    '**/.vscode/**',     // VS Code
+    '**/.settings/**',   // Eclipse
+    '**/*.suo',          // Visual Studio
+    '**/*.user',         // Visual Studio
+
+    // 4. 테스트 및 커버리지 리포트 (Test & Coverage)
     '**/coverage/**',
+    '**/.nyc_output/**',
+    '**/.pytest_cache/**',
+    '**/.mypy_cache/**',
+
+    // 5. OS 및 시스템 로그 (OS & Logs)
     '**/*.log',
+    '**/.DS_Store',      // macOS
+    '**/Thumbs.db',      // Windows
     '**/tmp/**',
+    '**/.temp/**',
+
+    // 6. 언어별 컴파일된 바이너리/바이트코드 (Compiled Files)
+    '**/__pycache__/**', // Python
+    '**/*.pyc',          // Python
+    '**/*.pyo',
+    '**/*.pyd',
+    '**/*.class',        // Java
+    '**/*.o',            // C/C++
+    '**/*.obj',          // C/C++
+    '**/*.exe',          // Windows Binary
+    '**/*.dll',          // Windows Library
   ],
 };
 
