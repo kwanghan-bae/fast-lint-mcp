@@ -85,7 +85,7 @@ function getToolDefinitions() {
   return [
     {
       name: 'quality-check',
-      description: `Performs a comprehensive code quality check. Supports dynamic tuning of thresholds. (${VERSION} Evolution)`,
+      description: `Performs a comprehensive code quality check. AUTOMATICALLY includes Deep-Dive metrics for problematic symbols in its report to save you a turn. USE THIS AS YOUR FIRST STEP for any analysis. (${VERSION} Evolution)`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -109,6 +109,10 @@ function getToolDefinitions() {
             type: 'string',
             description: 'Absolute path to the project directory to analyze (optional)',
           },
+          excludePattern: {
+            type: 'string',
+            description: 'Optional: Glob pattern to exclude from analysis (System default patterns like node_modules, dist, .git are ALREADY EXCLUDED by default)',
+          },
           coveragePath: {
             type: 'string',
             description:
@@ -119,7 +123,7 @@ function getToolDefinitions() {
     },
     {
       name: 'get-symbol-metrics',
-      description: 'Analyzes complexity and line counts of functions/classes within a file.',
+      description: 'Analyzes complexity and line counts of functions/classes within a file. (Tip: Already included in quality-check deep-dive for problematic files)',
       inputSchema: {
         type: 'object',
         properties: { filePath: { type: 'string' } },
