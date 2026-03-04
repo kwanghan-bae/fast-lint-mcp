@@ -111,7 +111,8 @@ function getToolDefinitions() {
           },
           excludePattern: {
             type: 'string',
-            description: 'Optional: Glob pattern to exclude from analysis (System default patterns are ALREADY EXCLUDED by default)',
+            description:
+              'Optional: Glob pattern to exclude from analysis (System default patterns are ALREADY EXCLUDED by default)',
           },
           coveragePath: {
             type: 'string',
@@ -123,17 +124,20 @@ function getToolDefinitions() {
     },
     {
       name: 'init',
-      description: 'PROPOSES a recommended .fast-lintrc.json configuration. Use this to get a starting point, but you must manually write it or ask for permission.',
+      description:
+        'PROPOSES a recommended .fast-lintrc.json configuration. Use this to get a starting point, but you must manually write it or ask for permission.',
       inputSchema: { type: 'object', properties: {} },
     },
     {
       name: 'guide',
-      description: 'Provides a step-by-step Standard Operating Procedure (SOP) for agents to effectively use fast-lint-mcp for analysis, refactoring, and validation.',
+      description:
+        'Provides a step-by-step Standard Operating Procedure (SOP) for agents to effectively use fast-lint-mcp for analysis, refactoring, and validation.',
       inputSchema: { type: 'object', properties: {} },
     },
     {
       name: 'get-symbol-metrics',
-      description: 'Analyzes complexity and line counts of functions/classes within a file. (Tip: Already included in quality-check deep-dive for problematic files)',
+      description:
+        'Analyzes complexity and line counts of functions/classes within a file. (Tip: Already included in quality-check deep-dive for problematic files)',
       inputSchema: {
         type: 'object',
         properties: { filePath: { type: 'string' } },
@@ -231,26 +235,26 @@ async function handleToolCall(name: string, args: any) {
   switch (name) {
     case 'guide': {
       const guideText = `
-# 🛠️ Fast-Lint-MCP Intelligent Workflow (Agent SOP)
+# 🚨 FAST-LINT-MCP FOUNDATIONAL MANDATES (AGENT SOP) 🚨
 
-AI 에이전트인 당신은 본 도구를 사용하여 정밀한 코드 품질 관리와 리팩토링을 수행할 수 있습니다.
+As an AI Agent, you are bound by these Standard Operating Procedures. This is your Constitution for any analysis or refactoring task within this project. Deviation is not permitted.
 
-### 1. [진단] Step 1: quality-check (Primary Command)
-- **최우선 호출**: 프로젝트 투입 시 가장 먼저 \`quality-check\`를 실행하십시오.
-- **자동 체이닝**: 위반 사항이 발견되면 리포트 하단의 **[Deep Dive]** 섹션에서 문제 함수의 상세 지표(복잡도 등)를 즉시 확인하십시오. 별도의 호출이 필요 없습니다.
+### MANDATE 1: DIAGNOSIS FIRST (\`quality-check\`)
+- **Primary Directive**: You MUST begin every session by calling \`quality-check\`. NEVER skip this step.
+- **Intelligent Auto-Chaining**: If violations exist, the engine will automatically append a **[🔍 Deep Dive]** section containing the exact functions, their line numbers, and complexity scores. **USE THIS DATA IMMEDIATELY.** Do not waste turns calling \`get-symbol-metrics\` manually.
 
-### 2. [추출] Step 2: get-symbol-content
-- **정밀 타격**: Deep Dive에서 얻은 심볼 명칭을 바탕으로 \`get-symbol-content\`를 사용하여 필요한 로직만 정밀하게 추출하십시오. (전체 파일을 읽지 마십시오.)
+### MANDATE 2: SURGICAL EXTRACTION (\`get-symbol-content\`)
+- **No Full Reads**: Armed with the Deep Dive data, use \`get-symbol-content\` to extract ONLY the problematic logic. Reading entire files blindly is strictly prohibited.
 
-### 3. [분석] Step 3: analyze-impact
-- **안전 제일**: 수정 전 \`analyze-impact\`를 호출하여 부수 효과를 파악하고 사용자에게 보고하십시오.
+### MANDATE 3: IMPACT AWARENESS (\`analyze-impact\`)
+- **Zero Surprises**: Before committing any modification, you MUST call \`analyze-impact\` to map out affected tests and referencing files. Ignorance of side effects is a critical failure.
 
-### 4. [검증] Step 4: verify-fix
-- **증명 의무**: 수정을 마친 후에는 반드시 \`verify-fix\`를 호출하여 성공을 증명하십시오.
+### MANDATE 4: SYSTEMATIC VALIDATION (\`verify-fix\`)
+- **Prove It**: You cannot claim a fix is complete until you have successfully executed \`verify-fix\`. Unverified code is broken code.
 
-### 💡 Agent Tip:
-- 엔진이 \`node_modules\`, \`dist\` 등을 자동으로 제외하므로 노이즈 걱정 없이 즉시 분석하십시오.
-- 도구가 파일 경로를 찾지 못할 때(HALLUCINATION)는 즉시 \`ls\` 명령어로 실제 파일 존재 여부를 교차 검증하십시오.
+### 💡 CRITICAL AGENT PROTOCOLS:
+1. **Zero-Config Noise Filtering**: The engine ALREADY excludes \`node_modules\`, \`dist\`, \`.git\`, and all build artifacts. Trust the engine; do not add redundant exclude patterns.
+2. **Cross-Validation**: If a tool reports a path as a "HALLUCINATION" (not found), you MUST immediately use the \`ls\` shell command to verify its physical existence before giving up.
       `.trim();
       return { content: [{ type: 'text', text: guideText }] };
     }
@@ -260,22 +264,23 @@ AI 에이전트인 당신은 본 도구를 사용하여 정밀한 코드 품질 
           maxLineCount: 300,
           maxComplexity: 15,
           minCoverage: 80,
-          techDebtLimit: 10
+          techDebtLimit: 10,
         },
         exclude: ['**/scripts/**', '**/docs/**'],
-        incremental: true
+        incremental: true,
       };
-      
-      const proposalText = `
-# 💡 Recommended .fast-lintrc.json
 
-아래 설정을 프로젝트 루트에 생성하는 것을 추천합니다. 
+      const proposalText = `
+# 💡 Recommended \`.fast-lintrc.json\` Proposal
+
+As an AI Agent, you are instructed to PROPOSE the following configuration to the user. 
+You MUST ask for explicit permission before creating or modifying this file.
 
 \`\`\`json
 ${JSON.stringify(defaultConfig, null, 2)}
 \`\`\`
 
-에이전트는 위 내용을 바탕으로 사용자에게 승인을 받은 후 파일을 생성하거나, 사용자가 직접 추가하도록 안내하십시오.
+**Action Required**: Present this configuration to the user and ask: "Would you like me to create this \`.fast-lintrc.json\` file in the project root to establish our quality baselines?"
       `.trim();
       return { content: [{ type: 'text', text: proposalText }] };
     }
