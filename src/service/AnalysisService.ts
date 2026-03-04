@@ -347,6 +347,28 @@ export class AnalysisService {
       });
     }
 
+    // v5.4.0: 개별 파일 가드레일 (Individual File Guardrail)
+    // 전체 평균이 통과하더라도, 개별 파일의 커버리지가 50% 미만(Gap)이거나 0%(누락)인 경우 엄격히 관리
+    if (coveragePath !== '') {
+      const problematicFiles = Array.from(fileCoverageMap.entries())
+        .map(([file, data]) => ({ file: relative(this.workspacePath, file), pct: data.total > 0 ? (data.hit / data.total) * 100 : 0 }))
+        .filter(f => !f.file.includes('node_modules') && !f.file.includes('tests/') && !f.file.includes('dist/'))
+        .filter(f => f.pct < 50); // 개별 파일 하한선 50%
+
+      problematicFiles.forEach(f => {
+        violations.push({
+          type: 'COVERAGE',
+          file: f.file,
+          value: `${f.pct.toFixed(1)}%`,
+          limit: '50.0%',
+          message: f.pct === 0 
+            ? `[치명적] 테스트가 전혀 작성되지 않은 파일(0.0%)이 발견되었습니다.` 
+            : `개별 파일의 커버리지가 너무 낮습니다 (하한선: 50%).`,
+          rationale: `전체 평균에 가려진 품질 사각지대입니다. 해당 파일의 단위 테스트를 보강하십시오.`,
+        });
+      });
+    }
+
     // 8. 지능형 자동 딥다이브 (Intelligent Auto-DeepDive v5.1)
     // 에이전트가 추가 호출 없이 즉시 수정 계획을 세울 수 있도록 위반 파일의 심볼 정보를 자동 동봉합니다.
     const deepDive: { [file: string]: any[] } = {};
