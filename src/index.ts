@@ -85,7 +85,7 @@ function getToolDefinitions() {
   return [
     {
       name: 'quality-check',
-      description: `Performs a comprehensive code quality check. AUTOMATICALLY includes Deep-Dive metrics for problematic symbols in its report to save you a turn. USE THIS AS YOUR FIRST STEP for any analysis. (${VERSION} Evolution)`,
+      description: `Performs a comprehensive code quality check. AUTOMATICALLY includes Deep-Dive metrics for problematic symbols in its report to save you a turn. USE THIS AS YOUR FIRST STEP. If you are unsure about the workflow, call the 'guide' tool. (${VERSION} Evolution)`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -111,7 +111,7 @@ function getToolDefinitions() {
           },
           excludePattern: {
             type: 'string',
-            description: 'Optional: Glob pattern to exclude from analysis (System default patterns like node_modules, dist, .git are ALREADY EXCLUDED by default)',
+            description: 'Optional: Glob pattern to exclude from analysis (System default patterns are ALREADY EXCLUDED by default)',
           },
           coveragePath: {
             type: 'string',
@@ -120,6 +120,16 @@ function getToolDefinitions() {
           },
         },
       },
+    },
+    {
+      name: 'init',
+      description: 'Initializes the project with a recommended .fast-lintrc.json configuration and prepares the agent workflow.',
+      inputSchema: { type: 'object', properties: {} },
+    },
+    {
+      name: 'guide',
+      description: 'Provides a step-by-step Standard Operating Procedure (SOP) for agents to effectively use fast-lint-mcp for analysis, refactoring, and validation.',
+      inputSchema: { type: 'object', properties: {} },
     },
     {
       name: 'get-symbol-metrics',
@@ -219,6 +229,52 @@ async function handleToolCall(name: string, args: any) {
   const semanticSvc = getSemantic();
 
   switch (name) {
+    case 'guide': {
+      const guideText = `
+# 🛠️ Fast-Lint-MCP Intelligent Workflow (Agent SOP)
+
+AI 에이전트인 당신은 본 도구를 사용하여 정밀한 코드 품질 관리와 리팩토링을 수행할 수 있습니다.
+
+### 1. [진단] Step 1: quality-check (Primary Command)
+- **최우선 호출**: 프로젝트 투입 시 가장 먼저 \`quality-check\`를 실행하십시오.
+- **자동 체이닝**: 위반 사항이 발견되면 리포트 하단의 **[Deep Dive]** 섹션에서 문제 함수의 상세 지표(복잡도 등)를 즉시 확인하십시오. 별도의 호출이 필요 없습니다.
+
+### 2. [추출] Step 2: get-symbol-content
+- **정밀 타격**: Deep Dive에서 얻은 심볼 명칭을 바탕으로 \`get-symbol-content\`를 사용하여 필요한 로직만 정밀하게 추출하십시오. (전체 파일을 읽지 마십시오.)
+
+### 3. [분석] Step 3: analyze-impact
+- **안전 제일**: 수정 전 \`analyze-impact\`를 호출하여 부수 효과를 파악하고 사용자에게 보고하십시오.
+
+### 4. [검증] Step 4: verify-fix
+- **증명 의무**: 수정을 마친 후에는 반드시 \`verify-fix\`를 호출하여 성공을 증명하십시오.
+
+### 💡 Agent Tip:
+- 엔진이 \`node_modules\`, \`dist\` 등을 자동으로 제외하므로 노이즈 걱정 없이 즉시 분석하십시오.
+- 도구가 파일 경로를 찾지 못할 때(HALLUCINATION)는 즉시 \`ls\` 명령어로 실제 파일 존재 여부를 교차 검증하십시오.
+      `.trim();
+      return { content: [{ type: 'text', text: guideText }] };
+    }
+    case 'init': {
+      const configPath = join(workspace, '.fast-lintrc.json');
+      const defaultConfig = {
+        rules: {
+          maxLineCount: 300,
+          maxComplexity: 15,
+          minCoverage: 80,
+          techDebtLimit: 10
+        },
+        exclude: ['**/scripts/**', '**/docs/**'],
+        incremental: true
+      };
+      
+      const { writeFileSync, existsSync } = await import('fs');
+      if (existsSync(configPath)) {
+        return { content: [{ type: 'text', text: '`.fast-lintrc.json`이 이미 존재합니다. 설정을 건너뜁니다.' }] };
+      }
+      
+      writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2));
+      return { content: [{ type: 'text', text: '`.fast-lintrc.json`을 생성했습니다. 이제 `quality-check`로 분석을 시작하세요!' }] };
+    }
     case 'quality-check': {
       const report = await getAnalyzer(workspace).runAllChecks(args);
       return { content: [{ type: 'text', text: formatReport(report) }] };
