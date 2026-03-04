@@ -321,6 +321,13 @@ export class AnalysisService {
           });
         }
       } catch (e) {}
+    } else if (rules.minCoverage > 0) {
+      // v5.3.1: 리포트가 아예 없는 경우에도 기준치가 있다면 위반으로 간주 (Strict Gate)
+      violations.push({
+        type: 'COVERAGE',
+        message: `테스트 커버리지 리포트를 찾을 수 없습니다 (missing).`,
+        rationale: `최소 기준(${rules.minCoverage}%)이 설정되어 있으나 측정 데이터가 없습니다. 'npm test' 등을 통해 리포트를 먼저 생성하십시오.`,
+      });
     }
 
     if (currentCoverage < rules.minCoverage && coveragePath !== '') {
