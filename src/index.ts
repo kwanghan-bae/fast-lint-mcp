@@ -123,7 +123,7 @@ function getToolDefinitions() {
     },
     {
       name: 'init',
-      description: 'Initializes the project with a recommended .fast-lintrc.json configuration and prepares the agent workflow.',
+      description: 'PROPOSES a recommended .fast-lintrc.json configuration. Use this to get a starting point, but you must manually write it or ask for permission.',
       inputSchema: { type: 'object', properties: {} },
     },
     {
@@ -255,7 +255,6 @@ AI 에이전트인 당신은 본 도구를 사용하여 정밀한 코드 품질 
       return { content: [{ type: 'text', text: guideText }] };
     }
     case 'init': {
-      const configPath = join(workspace, '.fast-lintrc.json');
       const defaultConfig = {
         rules: {
           maxLineCount: 300,
@@ -267,13 +266,18 @@ AI 에이전트인 당신은 본 도구를 사용하여 정밀한 코드 품질 
         incremental: true
       };
       
-      const { writeFileSync, existsSync } = await import('fs');
-      if (existsSync(configPath)) {
-        return { content: [{ type: 'text', text: '`.fast-lintrc.json`이 이미 존재합니다. 설정을 건너뜁니다.' }] };
-      }
-      
-      writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2));
-      return { content: [{ type: 'text', text: '`.fast-lintrc.json`을 생성했습니다. 이제 `quality-check`로 분석을 시작하세요!' }] };
+      const proposalText = `
+# 💡 Recommended .fast-lintrc.json
+
+아래 설정을 프로젝트 루트에 생성하는 것을 추천합니다. 
+
+\`\`\`json
+${JSON.stringify(defaultConfig, null, 2)}
+\`\`\`
+
+에이전트는 위 내용을 바탕으로 사용자에게 승인을 받은 후 파일을 생성하거나, 사용자가 직접 추가하도록 안내하십시오.
+      `.trim();
+      return { content: [{ type: 'text', text: proposalText }] };
     }
     case 'quality-check': {
       const report = await getAnalyzer(workspace).runAllChecks(args);
