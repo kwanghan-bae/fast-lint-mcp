@@ -63,6 +63,7 @@ export class AnalysisService {
       maxLines?: number;
       maxComplexity?: number;
       incremental?: boolean;
+      forceFullScan?: boolean;
       coveragePath?: string;
     } = {}
   ): Promise<QualityReport> {
@@ -72,7 +73,11 @@ export class AnalysisService {
 
     const violations: Violation[] = [];
     const rules = this.resolveRules(options);
-    const incrementalOption = options.incremental ?? this.config.incremental;
+
+    // forceFullScan이 true이면 incrementalOption을 강제로 false로 설정
+    const incrementalOption = options.forceFullScan
+      ? false
+      : (options.incremental ?? this.config.incremental);
 
     // 2. 프로젝트 파일 스캔 및 의존성 구축
     const allProjectFiles = await this.scanProjectFiles();
@@ -258,9 +263,7 @@ export class AnalysisService {
   ): Promise<QualityReport> {
     // v6.1.0: 위반 사항 중복 제거 (Deduplication)
     const uniqueViolations = Array.from(
-      new Map(
-        violations.map((v) => [`${v.type}:${v.file}:${v.line}:${v.message}`, v])
-      ).values()
+      new Map(violations.map((v) => [`${v.type}:${v.file}:${v.line}:${v.message}`, v])).values()
     );
 
     const lastCoverage = await this.stateManager.getLastCoverage();

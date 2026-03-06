@@ -47,7 +47,9 @@ export async function verifyAPIContracts(
 
   // 2. 현재 파일의 임포트(Import) 목록 수집
   const imports = new Set<string>();
-  root.findAll({ rule: { kind: 'import_specifier' } }).forEach((node) => imports.add(node.text().trim()));
+  root
+    .findAll({ rule: { kind: 'import_specifier' } })
+    .forEach((node) => imports.add(node.text().trim()));
   root.findAll({ rule: { kind: 'import_clause' } }).forEach((node) => {
     const id = node.find({ rule: { kind: 'identifier' } });
     if (id) imports.add(id.text().trim());
@@ -55,10 +57,32 @@ export async function verifyAPIContracts(
 
   // 3. 표준 내장 객체 및 전역 변수 (Whitelist)
   const builtins = new Set([
-    'console', 'Math', 'JSON', 'Promise', 'process', 'Object', 'Array', 
-    'String', 'Number', 'Boolean', 'Date', 'RegExp', 'Error',
-    'setTimeout', 'setInterval', 'setImmediate', 'clearTimeout', 'clearInterval', 'clearImmediate',
-    'require', 'module', 'exports', 'global', '__dirname', '__filename', 'Buffer'
+    'console',
+    'Math',
+    'JSON',
+    'Promise',
+    'process',
+    'Object',
+    'Array',
+    'String',
+    'Number',
+    'Boolean',
+    'Date',
+    'RegExp',
+    'Error',
+    'setTimeout',
+    'setInterval',
+    'setImmediate',
+    'clearTimeout',
+    'clearInterval',
+    'clearImmediate',
+    'require',
+    'module',
+    'exports',
+    'global',
+    '__dirname',
+    '__filename',
+    'Buffer',
   ]);
 
   // 4. 함수 호출부 검증

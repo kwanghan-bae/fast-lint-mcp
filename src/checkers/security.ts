@@ -117,7 +117,7 @@ export async function checkSecrets(
         if (SECURITY.HEX_COLOR_REGEX.test(text)) return;
 
         const entropy = calculateEntropy(text);
-        
+
         // v6.1.1: 문자열 길이에 따른 동적 임계값 적용 (16자 미만은 더 엄격하게)
         const dynamicThreshold = text.length < 16 ? Math.max(threshold, 4.5) : threshold;
 

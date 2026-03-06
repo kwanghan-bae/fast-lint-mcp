@@ -58,10 +58,12 @@ Options:
       await semantic.ensureInitialized(true, workspacePath);
 
       const analyzer = new AnalysisService(stateManager, config, semantic);
-      const report = await analyzer.runAllChecks({ incremental: !isFull });
+      const report = await analyzer.runAllChecks({
+        incremental: !isFull,
+        forceFullScan: isFull,
+      });
 
       console.log(formatCLITable(report));
-
       if (!report.pass) {
         process.exit(1);
       }

@@ -143,7 +143,12 @@ export class JavascriptProvider extends BaseQualityProvider {
     const root = AstCacheManager.getInstance().getRootNode(filePath);
     if (root && this.semantic) {
       const exportedSymbols = this.semantic.getAllExportedSymbols();
-      const apiViolations = await verifyAPIContracts(root, filePath, exportedSymbols, Boolean(isTestFile));
+      const apiViolations = await verifyAPIContracts(
+        root,
+        filePath,
+        exportedSymbols,
+        Boolean(isTestFile)
+      );
       violations.push(...apiViolations);
     }
 
