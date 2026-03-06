@@ -30,7 +30,7 @@ const LOGIC_AST_PATTERNS = [
 
 /**
  * JavaScript 및 TypeScript 언어에 특화된 품질 분석을 수행하는 프로바이더 클래스입니다.
- * AST 파싱, 환각 탐지, 가짜 로직 검사, 보안 스캔 등 다양한 정적 분석 도구를 통합하여 실행합니다.
+ * v6.1.2: 테스트 파일에 대한 컨텍스트 인식 분석 강화.
  */
 export class JavascriptProvider extends BaseQualityProvider {
   // 프로바이더 이름 정의
@@ -40,9 +40,6 @@ export class JavascriptProvider extends BaseQualityProvider {
 
   /**
    * 지정된 파일에 대해 종합적인 품질 검사를 수행합니다.
-   * @param filePath 분석할 파일 경로
-   * @param options 동적 분석 옵션
-   * @returns 발견된 위반 사항들의 배열
    */
   async check(
     filePath: string,
@@ -72,11 +69,9 @@ export class JavascriptProvider extends BaseQualityProvider {
       }
     }
 
-    // 1. 기본 AST 메트릭 분석: 파일 크기, 복잡도 및 성격(Data vs Logic)을 검사합니다.
+    // 1. 기본 AST 메트릭 분석
     const metrics = await analyzeFile(filePath, customRules);
     const isDataFile = metrics.isDataFile;
-
-    // 데이터 파일 여부에 따른 임계치 자동 계산 (v3.0 Common)
     const { maxLines, maxComplexity } = this.getEffectiveLimits(isDataFile, options);
 
     if (!isDataFile && metrics.lineCount > maxLines) {
@@ -91,7 +86,6 @@ export class JavascriptProvider extends BaseQualityProvider {
     }
 
     if (!isDataFile && metrics.complexity > maxComplexity) {
-      // 이름이 너무 짧은(3자 이하) 심볼은 내부 구현이거나 미니파이된 코드일 확률이 높으므로 제외
       const validSymbols = metrics.topComplexSymbols.filter((s) => s.name.length > 3);
 
       if (validSymbols.length > 0) {
@@ -132,7 +126,7 @@ export class JavascriptProvider extends BaseQualityProvider {
       }
     }
 
-    // 2. AI 환각(Hallucination) 체크: 존재하지 않는 파일이나 라이브러리 임포트를 탐지합니다.
+    // 2. AI 환각(Hallucination) 체크
     const hallucinationViolations =
       (await checkHallucination(filePath, this.config.workspacePath, this.config.exclude)) || [];
     hallucinationViolations.forEach((hv: any) => {
@@ -145,27 +139,30 @@ export class JavascriptProvider extends BaseQualityProvider {
       });
     });
 
-    // 2.1 결정론적 API 계약 검증 (v6.0.0: AST Call Expression 분석)
+    // 2.1 결정론적 API 계약 검증 (v6.1.2: 테스트 파일 컨텍스트 전달)
     const root = AstCacheManager.getInstance().getRootNode(filePath);
     if (root && this.semantic) {
       const exportedSymbols = this.semantic.getAllExportedSymbols();
-      const apiViolations = await verifyAPIContracts(root, filePath, exportedSymbols);
+      const apiViolations = await verifyAPIContracts(root, filePath, exportedSymbols, Boolean(isTestFile));
       violations.push(...apiViolations);
     }
 
-    // 3. 가짜 구현(Fake Logic) 체크: 파라미터를 무시한 채 고정된 값을 반환하는 등의 의심스러운 로직을 찾습니다.
-    const fakeLogicViolations = (await checkFakeLogic(filePath)) || [];
-    fakeLogicViolations.forEach((fv: any) => {
-      violations.push({
-        type: 'FAKE_LOGIC',
-        file: filePath,
-        line: fv.line,
-        rationale: `심볼 타입 분석 및 파라미터 사용 추적`,
-        message: `[논리 의심] ${fv.message}`,
+    // 3. 가짜 구현(Fake Logic) 체크
+    // v6.1.2: 테스트 파일은 의도적인 가짜 로직이 많으므로 스킵합니다.
+    if (!isTestFile) {
+      const fakeLogicViolations = (await checkFakeLogic(filePath)) || [];
+      fakeLogicViolations.forEach((fv: any) => {
+        violations.push({
+          type: 'FAKE_LOGIC',
+          file: filePath,
+          line: fv.line,
+          rationale: `심볼 타입 분석 및 파라미터 사용 추적`,
+          message: `[논리 의심] ${fv.message}`,
+        });
       });
-    });
+    }
 
-    // 4. 아키텍처 가드레일 체크: 레이어 간 의존성 방향 규칙 위반 여부를 검사합니다.
+    // 4. 아키텍처 가드레일 체크
     const architectureRules = this.config.architectureRules;
     if (architectureRules && architectureRules.length > 0) {
       const archViolations = await checkArchitecture(
@@ -183,16 +180,17 @@ export class JavascriptProvider extends BaseQualityProvider {
       });
     }
 
-    // 5. 보안(Secret) 스캔: 하드코딩된 API Key나 토큰 노출 여부를 검사합니다.
-    const secretViolations = await checkSecrets(filePath, options?.securityThreshold);
+    // 5. 보안(Secret) 스캔
+    // v6.1.2: 테스트 파일은 보안 임계값을 완화합니다 (4.0 -> 5.0).
+    const effectiveSecurityThreshold = isTestFile ? 5.0 : options?.securityThreshold;
+    const secretViolations = await checkSecrets(filePath, effectiveSecurityThreshold);
     violations.push(...secretViolations);
 
-    // 6. 시맨틱 코드 리뷰: 중첩 깊이, 파라미터 개수, 한글 주석 준수 여부 등 가독성 규칙을 검사합니다.
-    // 데이터 파일인 경우 노이즈를 줄이기 위해 세맨틱 리뷰를 스킵합니다. (v2.2.1)
+    // 6. 시맨틱 코드 리뷰
     const reviewViolations = await runSemanticReview(filePath, isDataFile);
     violations.push(...reviewViolations);
 
-    // 7. 변이 테스트(Mutation Test): 테스트 코드의 견고함을 검증합니다 (설정 시에만 실행).
+    // 7. 변이 테스트(Mutation Test)
     if (this.config.enableMutationTest) {
       const mutationViolations = await runMutationTest(filePath);
       mutationViolations.forEach((mv) => {
@@ -214,7 +212,6 @@ export class JavascriptProvider extends BaseQualityProvider {
 
   /**
    * 발견된 사소한 오류들에 대해 자가 치유(Self-Healing) 프로세스를 실행합니다.
-   * ESLint 및 Prettier를 호출하여 자동으로 수정 가능한 항목들을 처리합니다.
    */
   override async fix(files: string[], workspacePath: string) {
     return runSelfHealing(files, workspacePath);

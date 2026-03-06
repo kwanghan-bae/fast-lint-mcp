@@ -11,13 +11,17 @@ const COMMENT_PATTERN_REGEX = /\/\/|\/\*|\*/g;
 
 /**
  * AST 기반의 결정론적 API 계약 검증을 수행하여 환각(Hallucination)을 탐지합니다.
- * v6.0.0: 존재하지 않는 함수 호출이나 잘못된 API 사용을 잡아냅니다.
+ * v6.1.2: 테스트 파일(isTestFile)인 경우 검증을 완화하여 오탐을 방지합니다.
  */
 export async function verifyAPIContracts(
   root: SgNode,
   filePath: string,
-  allExportedSymbols: { name: string; file: string }[] = []
+  allExportedSymbols: { name: string; file: string }[] = [],
+  isTestFile: boolean = false
 ): Promise<Violation[]> {
+  // v6.1.2: 테스트 파일은 더미 데이터와 목킹이 빈번하므로 환각 탐지를 최소화하거나 스킵 가능
+  if (isTestFile) return [];
+
   const violations: Violation[] = [];
   const calls = root.findAll({ rule: { kind: 'call_expression' } });
 
@@ -62,11 +66,8 @@ export async function verifyAPIContracts(
     const fnNode = call.child(0); // function name or identifier
     if (!fnNode) return;
 
-    // 단순 식별자 호출인 경우 (예: myFunc())
     if (fnNode.kind() === 'identifier') {
       const name = fnNode.text().trim();
-
-      // 지역 정의, 임포트, 표준 내장 객체, 전체 공개 심볼 중 어디에도 없는 경우
       const isExternalExport = allExportedSymbols.some((s) => s.name === name);
 
       if (!localDefs.has(name) && !imports.has(name) && !builtins.has(name) && !isExternalExport) {
@@ -79,7 +80,6 @@ export async function verifyAPIContracts(
         });
       }
     }
-    // 멤버 호출 (예: obj.method()) 등은 추후 정교화 가능 (v6.1 예정)
   });
 
   return violations;
@@ -118,12 +118,11 @@ export async function runSemanticReview(
 }
 
 /**
- * 심볼 이름이 노이즈인지 확인하여 판단합니다. (v4.4.0: 상수 활용)
+ * 심볼 이름이 노이즈인지 확인하여 판단합니다.
  */
 function isNoiseSymbol(name: string): boolean {
   const n = name.trim().toLowerCase();
   const commonNames = ['game', 'app', 'core', 'main', 'root', 'item', 'data', 'info', 'ctx'];
-  // anonymous는 예외로 하되, 임계값 이하이거나 표준 명칭은 주석 강제 대상에서 제외
   return (
     n === '' ||
     (n !== 'anonymous' &&
@@ -133,7 +132,6 @@ function isNoiseSymbol(name: string): boolean {
 
 /**
  * 특정 AST 노드 바로 위에 한글 주석이 존재하는지 검사하는 헬퍼 함수입니다.
- * v4.4.0: 탐색 깊이 상수화
  */
 function hasKoreanCommentAbove(
   node: SgNode,
@@ -220,7 +218,7 @@ function reviewClasses(
           file: filePath,
           line: m.range().start.line + 1,
           rationale: `심볼 타입: Class [${className}]`,
-          message: `[Senior Advice] 클래스 [${className}] 위에 한글 주석을 추가하여 역할을 설명하세요.`,
+          message: `[Senior Advice] 클래스 [${className}] 위에 한글 주석을 추가하여 역할을 설명하세요. (예: // [${className}] 클래스는 [역할/목적]을 담당합니다)`,
         });
       }
     });
@@ -250,7 +248,7 @@ function reviewFunctions(
 }
 
 /**
- * 단일 함수의 품질을 분석합니다. (v4.4.0: 상수 활용)
+ * 단일 함수의 품질을 분석합니다.
  */
 function analyzeSingleFunction(
   m: SgNode,
@@ -274,7 +272,7 @@ function analyzeSingleFunction(
       file: filePath,
       line: startLine,
       rationale: `심볼 타입: ${m.kind()} [${name}]`,
-      message: `[Senior Advice] 함수 [${name}] 위에 한글 주석을 추가하여 용도를 설명하세요.`,
+      message: `[Senior Advice] 함수 [${name}] 위에 한글 주석을 추가하여 용도를 설명하세요. (예: // [${name}] 함수는 [동작/기능]을 수행합니다)`,
     });
   }
 
@@ -299,7 +297,7 @@ function analyzeSingleFunction(
 }
 
 /**
- * 함수의 주석 밀도를 분석합니다. (v4.4.0: 상수 활용)
+ * 함수의 주석 밀도를 분석합니다.
  */
 function checkCommentDensity(
   m: SgNode,
@@ -325,7 +323,7 @@ function checkCommentDensity(
         file: path,
         line: startLine,
         rationale: `함수 길이: ${lines.length}줄, 주석 개수: ${commentCount}`,
-        message: `[Senior Advice] 함수 [${name}]에 한글 주석이 없습니다. 한글 주석을 추가하세요.`,
+        message: `[Senior Advice] 함수 [${name}]에 한글 주석이 없습니다. 한글 주석을 추가하세요. (예: // [${name}] 로직에 대한 한국어 설명을 추가하십시오)`,
       });
     }
   } else if (lines.length > READABILITY.DENSITY_THRESHOLD_HIGH && commentCount === 0) {
@@ -334,7 +332,7 @@ function checkCommentDensity(
       file: path,
       line: startLine,
       rationale: `함수 길이: ${lines.length}줄, 주석 0개`,
-      message: `[Senior Advice] 함수 [${name}]의 로직이 복잡하지만 주석이 없습니다. 한글 주석을 추가하세요.`,
+      message: `[Senior Advice] 함수 [${name}]의 로직이 복잡하지만 주석이 없습니다. 한글 주석을 추가하세요. (예: // 이 함수는 복잡한 [비즈니스 로직]을 처리합니다)`,
     });
   }
   return violations;
@@ -386,7 +384,7 @@ function reviewMembers(
             file: filePath,
             line: m.range().start.line + 1,
             rationale: `심볼 타입: ${kind} [${name}]`,
-            message: `[Senior Advice] ${label} [${name}] 위에 한글 주석을 추가하세요.`,
+            message: `[Senior Advice] ${label} [${name}] 위에 한글 주석을 추가하세요. (예: // [${name}] ${label}는 [상태/역할]을 관리합니다)`,
           });
         }
       }
@@ -458,8 +456,8 @@ function reviewGlobals(root: SgNode, filePath: string, allLines: string[]): Viol
 
     if (!hasKoreanCommentAbove(m, allLines)) {
       const advice = label.includes('테스트')
-        ? `[Senior Advice] 복잡한 ${label} [${name}] 구간의 의도(Intent)나 Mocking 구조를 설명하는 한글 주석을 추가하세요.`
-        : `[Senior Advice] ${label} [${name}] 위에 한글 주석을 추가하세요.`;
+        ? `[Senior Advice] 복잡한 ${label} [${name}] 구간의 의도(Intent)나 Mocking 구조를 설명하는 한글 주석을 추가하세요. (예: // [${name}] 구간은 [테스트 대상]의 [시나리오]를 검증합니다)`
+        : `[Senior Advice] ${label} [${name}] 위에 한글 주석을 추가하세요. (예: // [${name}] ${label}는 [역할]을 위해 정의되었습니다)`;
 
       violations.push({
         type: 'READABILITY',
@@ -474,7 +472,7 @@ function reviewGlobals(root: SgNode, filePath: string, allLines: string[]): Viol
 }
 
 /**
- * 복잡도 및 파라미터 개수를 리뷰합니다. (v4.4.0: 상수 활용)
+ * 복잡도 및 파라미터 개수를 리뷰합니다.
  */
 function reviewComplexity(root: SgNode, filePath: string, isTestFile: boolean): Violation[] {
   if (isTestFile) return [];
