@@ -22,7 +22,7 @@ describe('AnalysisService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    
+
     // v3.7 필수 모킹
     vi.mocked(importCheck.getProjectFiles).mockResolvedValue(['src/index.ts', 'src/config.ts']);
     vi.mocked(DependencyGraph).prototype.build = vi.fn().mockResolvedValue(undefined);
@@ -30,7 +30,7 @@ describe('AnalysisService', () => {
     vi.mocked(DependencyGraph).prototype.getDependencies = vi.fn().mockReturnValue([]);
     vi.mocked(DependencyGraph).prototype.getAllFiles = vi.fn().mockReturnValue([]);
     vi.mocked(DependencyGraph).prototype.detectCycles = vi.fn().mockReturnValue([]);
-    
+
     stateManager = {
       getLastCoverage: vi.fn().mockResolvedValue(null),
       saveCoverage: vi.fn().mockResolvedValue(undefined),
@@ -39,7 +39,7 @@ describe('AnalysisService', () => {
     config = {
       workspacePath: process.cwd(),
       rules: {
-        maxLineCount: 500,
+        maxLineCount: 300,
         maxComplexity: 15,
         minCoverage: 0,
         techDebtLimit: 20,
@@ -57,7 +57,11 @@ describe('AnalysisService', () => {
     vi.mocked(simpleGit).mockReturnValue({
       checkIsRepo: vi.fn().mockResolvedValue(true),
       status: vi.fn().mockResolvedValue({
-        modified: [], not_added: [], created: [], staged: [], renamed: []
+        modified: [],
+        not_added: [],
+        created: [],
+        staged: [],
+        renamed: [],
       }),
     } as any);
 
@@ -83,7 +87,10 @@ describe('AnalysisService', () => {
     config.incremental = true;
     vi.mocked(simpleGit().status).mockResolvedValue({
       modified: ['src/config.ts'],
-      not_added: [], created: [], staged: [], renamed: []
+      not_added: [],
+      created: [],
+      staged: [],
+      renamed: [],
     } as any);
 
     vi.mocked(DependencyGraph).prototype.getDependents.mockReturnValue(['src/index.ts']);
@@ -106,6 +113,6 @@ describe('AnalysisService', () => {
 
     const report = await service.runAllChecks();
     expect(report.pass).toBe(false);
-    expect(report.violations.some(v => v.type === 'COVERAGE')).toBe(true);
+    expect(report.violations.some((v) => v.type === 'COVERAGE')).toBe(true);
   });
 });

@@ -1,7 +1,24 @@
+import { readFileSync, existsSync } from 'fs';
+import { join, dirname } from 'path';
+
+// v4.3.1: 단일 소스(package.json)로부터 버전 정보 획득
+let pkg = { version: '0.0.0-unknown' };
+try {
+  // ESM 환경에서 package.json 경로 계산
+  const pkgPath = join(process.cwd(), 'package.json');
+  if (existsSync(pkgPath)) {
+    pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+  }
+} catch (e) {
+  // 무시
+}
+
+/** 프로젝트 전역 버전 상수 */
+export const VERSION = `v${pkg.version}`;
+
 /**
  * fast-lint-mcp 전역에서 사용하는 매직넘버 및 시스템 상수 정의 (v4.4.0)
  */
-
 export const SYSTEM = {
   /** 분석 엔진 버전 (package.json 동기화 용) */
   VERSION_PREFIX: 'v',
@@ -12,37 +29,37 @@ export const SYSTEM = {
     // 1. 의존성 및 패키지 매니저 (Dependencies)
     '**/node_modules/**',
     '**/bower_components/**',
-    '**/vendor/**',      // Go, PHP 등
-    '**/.gradle/**',     // Java/Kotlin
-    '**/.m2/**',         // Maven
-    '**/Pods/**',        // iOS (CocoaPods)
-    '**/.venv/**',       // Python
-    '**/venv/**',        // Python
-    '**/env/**',         // Python
+    '**/vendor/**', // Go, PHP 등
+    '**/.gradle/**', // Java/Kotlin
+    '**/.m2/**', // Maven
+    '**/Pods/**', // iOS (CocoaPods)
+    '**/.venv/**', // Python
+    '**/venv/**', // Python
+    '**/env/**', // Python
 
     // 2. 빌드 결과물 및 아티팩트 (Build Artifacts)
-    '**/dist/**',        // JS/TS
-    '**/build/**',       // Java/Kotlin, React Native 등
-    '**/out/**',         // Java/IntelliJ
-    '**/target/**',      // Rust, Maven
-    '**/bin/**',         // C#, Java, Go 등
-    '**/obj/**',         // C# (.NET)
-    '**/.next/**',       // Next.js
-    '**/.nuxt/**',       // Nuxt.js
-    '**/.expo/**',       // Expo/React Native
-    '**/.cache/**',      // 각종 도구 캐시
+    '**/dist/**', // JS/TS
+    '**/build/**', // Java/Kotlin, React Native 등
+    '**/out/**', // Java/IntelliJ
+    '**/target/**', // Rust, Maven
+    '**/bin/**', // C#, Java, Go 등
+    '**/obj/**', // C# (.NET)
+    '**/.next/**', // Next.js
+    '**/.nuxt/**', // Nuxt.js
+    '**/.expo/**', // Expo/React Native
+    '**/.cache/**', // 각종 도구 캐시
     '**/.parcel-cache/**',
-    '**/.turbo/**',      // Turborepo
+    '**/.turbo/**', // Turborepo
 
     // 3. 버전 관리 및 IDE 메타데이터 (VCS & IDE)
     '**/.git/**',
     '**/.svn/**',
     '**/.hg/**',
-    '**/.idea/**',       // JetBrains
-    '**/.vscode/**',     // VS Code
-    '**/.settings/**',   // Eclipse
-    '**/*.suo',          // Visual Studio
-    '**/*.user',         // Visual Studio
+    '**/.idea/**', // JetBrains
+    '**/.vscode/**', // VS Code
+    '**/.settings/**', // Eclipse
+    '**/*.suo', // Visual Studio
+    '**/*.user', // Visual Studio
 
     // 4. 테스트 및 커버리지 리포트 (Test & Coverage)
     '**/coverage/**',
@@ -52,21 +69,21 @@ export const SYSTEM = {
 
     // 5. OS 및 시스템 로그 (OS & Logs)
     '**/*.log',
-    '**/.DS_Store',      // macOS
-    '**/Thumbs.db',      // Windows
+    '**/.DS_Store', // macOS
+    '**/Thumbs.db', // Windows
     '**/tmp/**',
     '**/.temp/**',
 
     // 6. 언어별 컴파일된 바이너리/바이트코드 (Compiled Files)
     '**/__pycache__/**', // Python
-    '**/*.pyc',          // Python
+    '**/*.pyc', // Python
     '**/*.pyo',
     '**/*.pyd',
-    '**/*.class',        // Java
-    '**/*.o',            // C/C++
-    '**/*.obj',          // C/C++
-    '**/*.exe',          // Windows Binary
-    '**/*.dll',          // Windows Library
+    '**/*.class', // Java
+    '**/*.o', // C/C++
+    '**/*.obj', // C/C++
+    '**/*.exe', // Windows Binary
+    '**/*.dll', // Windows Library
   ],
 };
 
@@ -76,9 +93,9 @@ export const SECURITY = {
   /** 16진수 색상 코드 탐지를 위한 정규식 */
   HEX_COLOR_REGEX: /^(#|0x)([A-Fa-f0-9]{3,4}|[A-Fa-f0-9]{6}|[A-Fa-f0-9]{8})$/,
   /** 보안 위협이 아닌 일반적인 식별자 패턴 */
-  SAFE_IDENTIFIER_REGEX: /(color|class|style|theme|name|id|type|path|identifier|key_id|key_type|save_key|offset|width|height|opacity|padding)/i,
+  SAFE_IDENTIFIER_REGEX:
+    /(color|class|style|theme|name|id|type|path|identifier|key_id|key_type|save_key|offset|width|height|opacity|padding|scene|screen|manager|service|provider|utils|constant|action|reducer|hook|effect|state|props|request|response|error|message|result|data|item|list|table|view|button|text|input|form|dialog|modal|toast|popup|icon|image|svg|asset|resource|font|size|weight|align|justify|flex|wrap|direction|background|border|radius|shadow|margin|zindex|index|key|value|pair|entry|node|root|parent|child|sibling|next|prev|prev_state|next_state|loading|fetching|fetching_data|fetching_status|success|failure|failed|status|status_code|code|type|kind|mode|mode_type|analysis|check|lint|guard|gate|mandate|sop|guide|init|config|setting|rules|rules_list|rules_data|rules_config|select|scene_name|class_name|select_scene|class_select|ClassSelectScene|small_function|game_view)/i,
 };
-
 export const READABILITY = {
   /** 한글 주석 탐색 최대 깊이 (위로 몇 줄까지 볼 것인가) */
   KOREAN_COMMENT_SEARCH_DEPTH: 10,

@@ -87,11 +87,14 @@ export interface QualityProvider {
    * 지정된 파일의 품질을 분석합니다.
    * v3.8: 런타임에 동적으로 주입된 옵션을 지원합니다.
    */
-  check(filePath: string, options?: {
-    securityThreshold?: number;
-    maxLines?: number;
-    maxComplexity?: number;
-  }): Promise<Violation[]>;
+  check(
+    filePath: string,
+    options?: {
+      securityThreshold?: number;
+      maxLines?: number;
+      maxComplexity?: number;
+    }
+  ): Promise<Violation[]>;
 
   /**
    * (선택 사항) 발견된 오류에 대한 자동 수정 기능을 수행합니다.

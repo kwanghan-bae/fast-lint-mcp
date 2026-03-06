@@ -22,9 +22,11 @@ export function formatReport(report: QualityReport): string {
   // 메타데이터 출력 (v3.8)
   if (report.metadata) {
     const meta = report.metadata;
-    const freshnessIcon = meta.coverageFreshness === 'fresh' ? '🟢' : meta.coverageFreshness === 'stale' ? '🟠' : '⚪';
+    const freshnessIcon =
+      meta.coverageFreshness === 'fresh' ? '🟢' : meta.coverageFreshness === 'stale' ? '🟠' : '⚪';
     const modeLabel = meta.analysisMode === 'incremental' ? '증분 분석' : '전체 분석';
-    const coverageVal = meta.coveragePercentage !== undefined ? ` (${meta.coveragePercentage.toFixed(1)}%)` : '';
+    const coverageVal =
+      meta.coveragePercentage !== undefined ? ` (${meta.coveragePercentage.toFixed(1)}%)` : '';
     output += `> **분석 모드**: \`${modeLabel}\` | **분석된 파일**: \`${meta.filesAnalyzed}개\` | **커버리지**: ${freshnessIcon} \`${meta.coverageFreshness || 'unknown'}\`${coverageVal}\n\n`;
   }
 
@@ -88,7 +90,12 @@ export function formatCLITable(report: QualityReport): string {
   if (report.violations.length > 0) {
     // cli-table3를 사용하여 가독성 높은 표 생성
     const table = new Table({
-      head: [chalk.cyan('Type'), chalk.cyan('File'), chalk.cyan('Message'), chalk.cyan('Rationale')],
+      head: [
+        chalk.cyan('Type'),
+        chalk.cyan('File'),
+        chalk.cyan('Message'),
+        chalk.cyan('Rationale'),
+      ],
       colWidths: [12, 25, 40, 25],
       wordWrap: true,
     });
@@ -107,8 +114,11 @@ export function formatCLITable(report: QualityReport): string {
   if (report.metadata) {
     const meta = report.metadata;
     const modeLabel = meta.analysisMode === 'incremental' ? '증분 분석' : '전체 분석';
-    const coverageVal = meta.coveragePercentage !== undefined ? ` (${meta.coveragePercentage.toFixed(1)}%)` : '';
-    output += chalk.gray(`\n[Metadata] Mode: ${modeLabel} | Analyzed: ${meta.filesAnalyzed} files | Coverage: ${meta.coverageFreshness}${coverageVal}\n`);
+    const coverageVal =
+      meta.coveragePercentage !== undefined ? ` (${meta.coveragePercentage.toFixed(1)}%)` : '';
+    output += chalk.gray(
+      `\n[Metadata] Mode: ${modeLabel} | Analyzed: ${meta.filesAnalyzed} files | Coverage: ${meta.coverageFreshness}${coverageVal}\n`
+    );
   }
 
   // 조치 가이드 추가 (복구)
@@ -169,14 +179,14 @@ export function checkStructuralIntegrity(dg?: DependencyGraph): Violation[] {
   // 2. 단방향 레이어 아키텍처 흐름 검사 (Controller -> Service -> Repository)
   // v3.8.1: 파일 명명 규칙을 기반으로 역방향 참조를 탐지합니다.
   const allFiles = dg.getAllFiles();
-  
+
   for (const file of allFiles) {
     const deps = dg.getDependencies(file);
     const fileName = file.toLowerCase();
 
     for (const dep of deps) {
       const depName = dep.toLowerCase();
-      
+
       // Service가 Controller를 참조하는 경우 (역방향)
       if (fileName.includes('service') && depName.includes('controller')) {
         violations.push({
@@ -186,9 +196,12 @@ export function checkStructuralIntegrity(dg?: DependencyGraph): Violation[] {
           message: `[아키텍처 위반] Service 계층에서 Controller 계층을 참조할 수 없습니다 (${dep.split('/').pop()}).`,
         });
       }
-      
+
       // Repository가 Service나 Controller를 참조하는 경우 (역방향)
-      if (fileName.includes('repository') && (depName.includes('service') || depName.includes('controller'))) {
+      if (
+        fileName.includes('repository') &&
+        (depName.includes('service') || depName.includes('controller'))
+      ) {
         violations.push({
           type: 'ARCHITECTURE',
           file: file,

@@ -25,7 +25,10 @@ export abstract class BaseQualityProvider implements QualityProvider {
   /**
    * 데이터 파일 여부 및 런타임 옵션에 따라 실질적인 임계값을 계산합니다. (v3.8)
    */
-  protected getEffectiveLimits(isDataFile: boolean, options?: { maxLines?: number; maxComplexity?: number }) {
+  protected getEffectiveLimits(
+    isDataFile: boolean,
+    options?: { maxLines?: number; maxComplexity?: number }
+  ) {
     const rules = this.config.rules;
     return {
       maxLines: isDataFile ? Infinity : (options?.maxLines ?? rules.maxLineCount),
@@ -36,11 +39,14 @@ export abstract class BaseQualityProvider implements QualityProvider {
   /**
    * 대상 파일에 대해 정적 분석을 수행하여 품질 위반 사항을 찾아냅니다.
    */
-  abstract check(filePath: string, options?: {
-    securityThreshold?: number;
-    maxLines?: number;
-    maxComplexity?: number;
-  }): Promise<Violation[]>;
+  abstract check(
+    filePath: string,
+    options?: {
+      securityThreshold?: number;
+      maxLines?: number;
+      maxComplexity?: number;
+    }
+  ): Promise<Violation[]>;
 
   /**
    * 발견된 오류를 자동으로 수정하는 자가 치유(Self-Healing) 프로세스를 실행합니다.

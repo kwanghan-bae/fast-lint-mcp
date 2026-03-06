@@ -21,11 +21,11 @@ describe('v2.2 New Features Validation', () => {
   it('Path Alias: tsconfig.json의 별칭을 인식해야 한다', () => {
     const tsconfig = {
       compilerOptions: {
-        paths: { '@/utils/*': ['./src/utils/*'] }
-      }
+        paths: { '@/utils/*': ['./src/utils/*'] },
+      },
     };
     writeFileSync(join(workspace, 'tsconfig.json'), JSON.stringify(tsconfig));
-    
+
     const aliases = loadProjectAliases(workspace);
     expect(aliases['@/utils']).toBe('./src/utils');
 
@@ -33,7 +33,13 @@ describe('v2.2 New Features Validation', () => {
     const allFiles = [join(workspace, 'src/utils/Helper.ts')];
     // filePath를 명시적으로 전달하여 컨텍스트 기반 해소 테스트
     const testFilePath = join(workspace, 'src/main.ts');
-    const resolved = resolveModulePath(workspace, '@/utils/Helper', allFiles, workspace, testFilePath);
+    const resolved = resolveModulePath(
+      workspace,
+      '@/utils/Helper',
+      allFiles,
+      workspace,
+      testFilePath
+    );
     expect(resolved).toContain('src/utils/Helper.ts');
   });
 
@@ -46,15 +52,15 @@ describe('v2.2 New Features Validation', () => {
     expect(metrics.isDataFile).toBe(true);
 
     const provider = new JavascriptProvider({
-      rules: { maxLineCount: 100, maxComplexity: 10 }
+      rules: { maxLineCount: 100, maxComplexity: 10 },
     } as any);
 
     const violations = await provider.check(dataFile);
     // 원래 100줄 제한이지만 @data로 인해 1000줄까지 허용되어야 함 (현재 파일은 약 1001줄 이상일 수 있음)
     // 리터럴 비중 분석을 통해 통과 여부 확인
-    const sizeViolation = violations.find(v => v.type === 'SIZE');
+    const sizeViolation = violations.find((v) => v.type === 'SIZE');
     if (metrics.lineCount <= 1000) {
-        expect(sizeViolation).toBeUndefined();
+      expect(sizeViolation).toBeUndefined();
     }
   });
 
@@ -71,12 +77,12 @@ describe('v2.2 New Features Validation', () => {
     writeFileSync(logicFile, content);
 
     const provider = new JavascriptProvider({
-      rules: { maxLineCount: 500, maxComplexity: 5 }
+      rules: { maxLineCount: 300, maxComplexity: 5 },
     } as any);
 
     const violations = await provider.check(logicFile);
-    const complexityViolation = violations.find(v => v.type === 'COMPLEXITY');
-    
+    const complexityViolation = violations.find((v) => v.type === 'COMPLEXITY');
+
     expect(complexityViolation).toBeDefined();
     expect(complexityViolation?.message).toContain('[Refactoring Blueprint]');
     expect(complexityViolation?.message).toContain('heavyUIProcess');

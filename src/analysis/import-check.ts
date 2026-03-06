@@ -24,10 +24,9 @@ export async function getProjectFiles(
   ignorePatterns: string[] = []
 ): Promise<string[]> {
   // v5.0: 시스템 기본 패턴과 사용자가 제공한 패턴을 병합
-  const combinedPatterns = Array.from(new Set([
-    ...SYSTEM.DEFAULT_IGNORE_PATTERNS,
-    ...ignorePatterns
-  ]));
+  const combinedPatterns = Array.from(
+    new Set([...SYSTEM.DEFAULT_IGNORE_PATTERNS, ...ignorePatterns])
+  );
 
   const cacheKey = `${workspacePath}:${combinedPatterns.sort().join(',')}`;
   if (projectFilesCache && projectFilesCache.key === cacheKey) {
@@ -183,7 +182,7 @@ function scanImportsForHallucination(
         const libName = source.startsWith('@')
           ? source.split('/').slice(0, 2).join('/')
           : source.split('/')[0];
-          
+
         if (!nodeBuiltins.has(libName) && !dependencies.includes(libName)) {
           // v3.9.1: 캐시 확인
           const cacheKey = `${workspacePath}:${libName}`;
@@ -316,7 +315,11 @@ export async function checkFakeLogic(
           let isType = false;
           let p = idNode.parent();
           while (p && p !== paramsNode) {
-            if (p.kind() === 'type_annotation' || p.kind() === 'type_identifier' || p.kind() === 'type_parameters') {
+            if (
+              p.kind() === 'type_annotation' ||
+              p.kind() === 'type_identifier' ||
+              p.kind() === 'type_parameters'
+            ) {
               isType = true;
               break;
             }
@@ -326,9 +329,11 @@ export async function checkFakeLogic(
         });
 
         // 2. 구조 분해 할당의 단축 속성명 추출 (예: { id })
-        paramsNode.findAll({ rule: { kind: 'shorthand_property_identifier' } }).forEach((idNode) => {
-          paramNames.add(idNode.text().trim());
-        });
+        paramsNode
+          .findAll({ rule: { kind: 'shorthand_property_identifier' } })
+          .forEach((idNode) => {
+            paramNames.add(idNode.text().trim());
+          });
 
         const pList = Array.from(paramNames).filter(
           (p) => p.length > 0 && !['props', 'req', 'res', 'next', 'ctx'].includes(p)
@@ -338,7 +343,7 @@ export async function checkFakeLogic(
         if (pList.length > 0) {
           const functionText = m.text();
           const paramsText = paramsNode.text();
-          
+
           const allUnused = pList.every((p) => {
             // 1. AST 정밀 탐색 시도
             try {
@@ -347,9 +352,9 @@ export async function checkFakeLogic(
                   any: [
                     { kind: 'identifier', pattern: p },
                     { kind: 'shorthand_property_identifier', pattern: p },
-                    { pattern: p }
-                  ]
-                }
+                    { pattern: p },
+                  ],
+                },
               });
               if (usageMatches.length > 0) return false; // 사용됨
             } catch (e) {}
@@ -358,7 +363,7 @@ export async function checkFakeLogic(
             const reg = new RegExp(`\\b${escapeRegExp(p)}\\b`, 'g');
             const countInParams = (paramsText.match(reg) || []).length;
             const countInFunction = (functionText.match(reg) || []).length;
-            
+
             // 본체에서의 발생 횟수가 선언부 발생 횟수보다 많으면 사용된 것으로 간주
             return countInFunction <= countInParams;
           });

@@ -12,7 +12,11 @@ let fileSetCache: { set: Set<string>; sample: string } | null = null;
  */
 function getFileSet(allFiles: string[]): Set<string> {
   const currentSample = allFiles[0] || '';
-  if (!fileSetCache || fileSetCache.set.size !== allFiles.length || fileSetCache.sample !== currentSample) {
+  if (
+    !fileSetCache ||
+    fileSetCache.set.size !== allFiles.length ||
+    fileSetCache.sample !== currentSample
+  ) {
     fileSetCache = {
       set: new Set(allFiles.map((f) => normalize(f))),
       sample: currentSample,
@@ -153,10 +157,11 @@ export function resolveModulePath(
 
   // 4. v4.9.0: 최후의 수단 - 워크스페이스 내에서 해당 상대 경로로 끝나는 파일 탐색 (모노레포 유연성)
   if (!isAbsolute(cleanPath)) {
-    const fuzzyMatch = Array.from(fileSet).find(f => 
-      f.endsWith(cleanPath + '.ts') || 
-      f.endsWith(cleanPath + '.tsx') || 
-      f.endsWith(cleanPath + '/index.ts')
+    const fuzzyMatch = Array.from(fileSet).find(
+      (f) =>
+        f.endsWith(cleanPath + '.ts') ||
+        f.endsWith(cleanPath + '.tsx') ||
+        f.endsWith(cleanPath + '/index.ts')
     );
     if (fuzzyMatch) return fuzzyMatch;
   }

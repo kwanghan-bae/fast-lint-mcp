@@ -40,8 +40,12 @@ export class AstCacheManager {
 
     if (!existsSync(absPath)) return null;
 
-    // 실시간성 확보를 위한 mtime 획득
-    const mtime = statSync(absPath).mtimeMs;
+    let mtime = 0;
+    try {
+      mtime = statSync(absPath).mtimeMs;
+    } catch (e) {
+      return null;
+    }
 
     if (this.enabled && !force && this.cache.has(absPath)) {
       const entry = this.cache.get(absPath)!;

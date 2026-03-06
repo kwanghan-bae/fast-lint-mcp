@@ -1,0 +1,228 @@
+import { readFileSync, existsSync, statSync } from 'fs';
+import glob from 'fast-glob';
+import { join, normalize, isAbsolute, dirname, relative } from 'path';
+import { Violation } from '../types/index.js';
+import { COVERAGE } from '../constants.js';
+
+export class CoverageAnalyzer {
+  constructor(private workspacePath: string) {}
+
+  async analyze(
+    options: any,
+    rules: any,
+    lastSrcUpdate: number,
+    allProjectFiles: string[],
+    violations: Violation[]
+  ) {
+    const coveragePath = await this.findCoveragePath(options, rules);
+    if (!coveragePath && rules.minCoverage > 0) {
+      violations.push({
+        type: 'COVERAGE',
+        message: `테스트 커버리지 리포트를 찾을 수 없습니다 (missing).`,
+        rationale: `최소 기준(${rules.minCoverage}%)이 설정되어 있으나 측정 데이터가 없습니다.`,
+      });
+      return {
+        currentCoverage: 0,
+        coverageFreshness: 'missing' as any,
+        coverageLastUpdated: '',
+        coverageInsight: '',
+      };
+    }
+    if (!coveragePath)
+      return {
+        currentCoverage: 0,
+        coverageFreshness: 'missing' as any,
+        coverageLastUpdated: '',
+        coverageInsight: '',
+      };
+
+    const { total, hit, fileCoverageMap, lastUpdated } = this.parseCoverageFile(
+      coveragePath,
+      allProjectFiles
+    );
+    const currentCoverage = total > 0 ? (hit / total) * 100 : 0;
+
+    let coverageFreshness: any = 'missing';
+    try {
+      if (existsSync(coveragePath)) {
+        const coverageStat = statSync(coveragePath);
+        const isStale = coverageStat.mtimeMs < lastSrcUpdate - COVERAGE.STALE_BUFFER_MS;
+        coverageFreshness = isStale ? 'stale' : 'fresh';
+        if (isStale && rules.minCoverage > 0) {
+          violations.push({
+            type: 'COVERAGE',
+            message: `테스트 리포트가 만료되었습니다.`,
+            rationale: `리포트: ${new Date(coverageStat.mtimeMs).toLocaleTimeString()}, 소스최신: ${new Date(lastSrcUpdate).toLocaleTimeString()}`,
+          });
+        }
+      }
+    } catch (e) {}
+
+    this.applyGuardrails(currentCoverage, fileCoverageMap, rules, violations);
+    return {
+      currentCoverage,
+      coverageFreshness,
+      coverageLastUpdated: lastUpdated,
+      coverageInsight: this.generateInsight(fileCoverageMap),
+      coveragePath,
+    };
+  }
+
+  private async findCoveragePath(options: any, rules: any): Promise<string | undefined> {
+    let path = options.coveragePath || rules.coveragePath;
+    if (path) {
+      const full = isAbsolute(path) ? path : join(this.workspacePath, path);
+      if (existsSync(full)) return full;
+    }
+    const standardPaths = [
+      join(this.workspacePath, rules.coverageDirectory, 'lcov.info'),
+      join(this.workspacePath, 'coverage', 'lcov.info'),
+      join(this.workspacePath, 'coverage', 'coverage-summary.json'),
+    ];
+    for (const p of standardPaths) {
+      if (existsSync(p)) return p;
+    }
+    try {
+      const found = await glob(['**/lcov.info', '**/coverage-summary.json'], {
+        cwd: this.workspacePath,
+        absolute: true,
+        ignore: ['**/node_modules/**', '**/dist/**'],
+        deep: 5,
+      });
+      return found.sort((a, b) => {
+        try {
+          return (
+            (existsSync(b) ? statSync(b).mtimeMs : 0) - (existsSync(a) ? statSync(a).mtimeMs : 0)
+          );
+        } catch (e) {
+          return 0;
+        }
+      })[0];
+    } catch (e) {
+      return undefined;
+    }
+  }
+
+  private parseCoverageFile(path: string, allFiles: string[]) {
+    if (!existsSync(path)) return { total: 0, hit: 0, fileCoverageMap: new Map(), lastUpdated: '' };
+    const content = readFileSync(path, 'utf-8');
+    const fileCoverageMap = new Map<string, { total: number; hit: number }>();
+    let total = 0,
+      hit = 0;
+
+    if (path.endsWith('.json')) {
+      try {
+        const data = JSON.parse(content);
+        // v5.4.6: JSON 포맷 파싱 고정
+        total = 100;
+        hit = data.total?.lines?.pct ?? 0;
+      } catch (e) {}
+    } else {
+      const lines = content.split(/\r?\n/);
+      let currentFile = '';
+      for (const line of lines) {
+        if (line.startsWith('SF:')) {
+          const raw = line.split(':').slice(1).join(':').trim();
+          currentFile = allFiles.find((f) => normalize(f).endsWith(normalize(raw))) || raw;
+        } else if (line.startsWith('LF:') && currentFile) {
+          const val = parseInt(line.split(':')[1]);
+          if (!isNaN(val)) {
+            total += val;
+            if (!fileCoverageMap.has(currentFile))
+              fileCoverageMap.set(currentFile, { total: 0, hit: 0 });
+            fileCoverageMap.get(currentFile)!.total = val;
+          }
+        } else if (line.startsWith('LH:') && currentFile) {
+          const val = parseInt(line.split(':')[1]);
+          if (!isNaN(val) && fileCoverageMap.has(currentFile)) {
+            fileCoverageMap.get(currentFile)!.hit = val;
+            hit += val;
+          }
+        }
+      }
+      // v5.4.6: 파일 정보가 없는 테스트용 LCOV 지원
+      if (total === 0) {
+        lines.forEach((l) => {
+          if (l.startsWith('LF:')) total += parseInt(l.split(':')[1]) || 0;
+          if (l.startsWith('LH:')) hit += parseInt(l.split(':')[1]) || 0;
+        });
+      }
+    }
+    let lastUpdated = '';
+    try {
+      lastUpdated = statSync(path).mtime.toISOString();
+    } catch (e) {
+      lastUpdated = new Date().toISOString();
+    }
+    return { total, hit, fileCoverageMap, lastUpdated };
+  }
+
+  private applyGuardrails(
+    current: number,
+    map: Map<string, any>,
+    rules: any,
+    violations: Violation[]
+  ) {
+    if (current < rules.minCoverage) {
+      const lowFiles = Array.from(map.entries())
+        .map(([file, data]) => ({
+          file: relative(this.workspacePath, file),
+          pct: data.total > 0 ? (data.hit / data.total) * 100 : 0,
+        }))
+        .filter(
+          (f) =>
+            f.file &&
+            f.file !== '.' &&
+            !f.file.includes('node_modules') &&
+            !f.file.includes('tests/')
+        )
+        .sort((a, b) => a.pct - b.pct)
+        .slice(0, 5);
+      const fileList = lowFiles
+        .map((f) => `${f.file.split('/').pop()}(${f.pct.toFixed(1)}%)`)
+        .join(', ');
+      violations.push({
+        type: 'COVERAGE',
+        value: `${current.toFixed(1)}%`,
+        limit: `${rules.minCoverage}%`,
+        message: `전체 커버리지가 기준(${rules.minCoverage}%)에 미달합니다. (현재: ${current.toFixed(1)}%)`,
+        rationale: `현재: ${current.toFixed(1)}% / 기준: ${rules.minCoverage}% (취약: ${fileList || 'N/A'})`,
+      });
+    }
+    for (const [file, data] of map.entries()) {
+      const pct = data.total > 0 ? (data.hit / data.total) * 100 : 0;
+      const relFile = relative(this.workspacePath, file);
+      if (
+        relFile &&
+        relFile !== '.' &&
+        relFile !== 'unknown' &&
+        pct < 50 &&
+        !relFile.includes('tests/') &&
+        !relFile.includes('node_modules')
+      ) {
+        violations.push({
+          type: 'COVERAGE',
+          file: relFile,
+          message: pct === 0 ? `[치명적] 테스트 누락 (0%)` : `개별 커버리지 하한선(50%) 미달`,
+          rationale: `현재: ${pct.toFixed(1)}%. 해당 파일의 단위 테스트를 보강하십시오.`,
+        });
+      }
+    }
+  }
+
+  private generateInsight(map: Map<string, any>): string {
+    const lowFiles = Array.from(map.entries())
+      .map(([file, data]) => ({
+        file: relative(this.workspacePath, file),
+        pct: data.total > 0 ? (data.hit / data.total) * 100 : 0,
+      }))
+      .filter(
+        (f) =>
+          f.file && f.file !== '.' && !f.file.includes('node_modules') && !f.file.includes('tests/')
+      )
+      .sort((a, b) => a.pct - b.pct)
+      .slice(0, 3);
+    if (lowFiles.length === 0) return '';
+    return `\n### 💡 Coverage Insights (Top 3 Vulnerable Files)\n${lowFiles.map((f) => `- \`${f.file}\`: **${f.pct.toFixed(1)}%**`).join('\n')}\n`;
+  }
+}

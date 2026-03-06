@@ -49,65 +49,64 @@ export class SemanticService {
     const metrics: SymbolMetric[] = [];
 
     // 1. 클래스 선언 및 내보내기(Export) 포함 정밀 탐색
-    root.findAll({ 
-      rule: { 
-        any: [
-          { kind: 'class_declaration' }, 
-          { kind: 'class' },
-          { kind: 'export_statement' }
-        ] 
-      } 
-    }).forEach((node) => {
-      let clsNode = node;
-      if (node.kind() === 'export_statement') {
-        clsNode = node.find({ rule: { kind: 'class_declaration' } }) || node;
-      }
-      if (clsNode.kind() !== 'class_declaration' && clsNode.kind() !== 'class') return;
-
-      const className = this.getIdentifier(clsNode) || 'anonymous';
-      if (!metrics.some(m => m.name === className)) {
-        metrics.push(this.createMetric(clsNode, 'class', className));
-      }
-
-      // 메서드 정밀 탐색
-      clsNode.findAll({ rule: { kind: 'method_definition' } }).forEach((method) => {
-        const methodName = this.getIdentifier(method);
-        if (methodName) {
-          const fullName = `${className}.${methodName}`;
-          if (!metrics.some(m => m.name === fullName)) {
-            metrics.push(this.createMetric(method, 'method', fullName));
-          }
+    root
+      .findAll({
+        rule: {
+          any: [{ kind: 'class_declaration' }, { kind: 'class' }, { kind: 'export_statement' }],
+        },
+      })
+      .forEach((node) => {
+        let clsNode = node;
+        if (node.kind() === 'export_statement') {
+          clsNode = node.find({ rule: { kind: 'class_declaration' } }) || node;
         }
+        if (clsNode.kind() !== 'class_declaration' && clsNode.kind() !== 'class') return;
+
+        const className = this.getIdentifier(clsNode) || 'anonymous';
+        if (!metrics.some((m) => m.name === className)) {
+          metrics.push(this.createMetric(clsNode, 'class', className));
+        }
+
+        // 메서드 정밀 탐색
+        clsNode.findAll({ rule: { kind: 'method_definition' } }).forEach((method) => {
+          const methodName = this.getIdentifier(method);
+          if (methodName) {
+            const fullName = `${className}.${methodName}`;
+            if (!metrics.some((m) => m.name === fullName)) {
+              metrics.push(this.createMetric(method, 'method', fullName));
+            }
+          }
+        });
       });
-    });
 
     // 2. 함수 선언부 (일반 및 Export 포함)
-    root.findAll({ 
-      rule: { 
-        any: [
-          { kind: 'function_declaration' },
-          { kind: 'export_statement' }
-        ] 
-      } 
-    }).forEach((node) => {
-      let funcNode = node;
-      if (node.kind() === 'export_statement') {
-        funcNode = node.find({ rule: { kind: 'function_declaration' } }) || node;
-      }
-      if (funcNode.kind() !== 'function_declaration') return;
+    root
+      .findAll({
+        rule: {
+          any: [{ kind: 'function_declaration' }, { kind: 'export_statement' }],
+        },
+      })
+      .forEach((node) => {
+        let funcNode = node;
+        if (node.kind() === 'export_statement') {
+          funcNode = node.find({ rule: { kind: 'function_declaration' } }) || node;
+        }
+        if (funcNode.kind() !== 'function_declaration') return;
 
-      const name = this.getIdentifier(funcNode) || 'anonymous';
-      if (!metrics.some(m => m.name === name)) {
-        metrics.push(this.createMetric(funcNode, 'function', name));
-      }
-    });
+        const name = this.getIdentifier(funcNode) || 'anonymous';
+        if (!metrics.some((m) => m.name === name)) {
+          metrics.push(this.createMetric(funcNode, 'function', name));
+        }
+      });
 
     // 3. 변수 할당형 함수 (const a = () => {})
     root.findAll({ rule: { kind: 'variable_declarator' } }).forEach((decl) => {
-      const isFunc = decl.find({ rule: { any: [{ kind: 'arrow_function' }, { kind: 'function_expression' }] } });
+      const isFunc = decl.find({
+        rule: { any: [{ kind: 'arrow_function' }, { kind: 'function_expression' }] },
+      });
       if (isFunc) {
         const name = this.getIdentifier(decl) || 'anonymous';
-        if (!metrics.some(m => m.name === name)) {
+        if (!metrics.some((m) => m.name === name)) {
           metrics.push(this.createMetric(decl, 'function', name));
         }
       }
@@ -119,11 +118,7 @@ export class SemanticService {
   private getIdentifier(node: SgNode): string | null {
     const id = node.find({
       rule: {
-        any: [
-          { kind: 'identifier' }, 
-          { kind: 'type_identifier' }, 
-          { kind: 'property_identifier' }
-        ],
+        any: [{ kind: 'identifier' }, { kind: 'type_identifier' }, { kind: 'property_identifier' }],
       },
     });
     return id?.text().trim() || null;
@@ -152,11 +147,11 @@ export class SemanticService {
       { pattern: 'catch ($A) { $$$ }', id: 'catch' },
       { pattern: '$A ? $B : $C', id: 'ternary' },
       { pattern: '$A && $B', id: 'and' },
-      { pattern: '$A || $B', id: 'or' }
+      { pattern: '$A || $B', id: 'or' },
     ];
     let complexity = 1;
     const text = node.text();
-    
+
     for (const { pattern } of patterns) {
       try {
         const matches = node.findAll(pattern);
@@ -169,7 +164,7 @@ export class SemanticService {
   getSymbolContent(filePath: string, symbolName: string): string | null {
     const absPath = resolve(filePath);
     const metrics = this.getSymbolMetrics(absPath, true);
-    const target = metrics.find(m => m.name === symbolName);
+    const target = metrics.find((m) => m.name === symbolName);
     if (!target) return null;
 
     try {

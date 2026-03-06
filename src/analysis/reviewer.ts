@@ -48,14 +48,22 @@ function isNoiseSymbol(name: string): boolean {
   const n = name.trim().toLowerCase();
   const commonNames = ['game', 'app', 'core', 'main', 'root', 'item', 'data', 'info', 'ctx'];
   // anonymous는 예외로 하되, 임계값 이하이거나 표준 명칭은 주석 강제 대상에서 제외
-  return n === '' || (n !== 'anonymous' && (n.length <= READABILITY.NOISE_SYMBOL_LENGTH_LIMIT || commonNames.includes(n)));
+  return (
+    n === '' ||
+    (n !== 'anonymous' &&
+      (n.length <= READABILITY.NOISE_SYMBOL_LENGTH_LIMIT || commonNames.includes(n)))
+  );
 }
 
 /**
  * 특정 AST 노드 바로 위에 한글 주석이 존재하는지 검사하는 헬퍼 함수입니다.
  * v4.4.0: 탐색 깊이 상수화
  */
-function hasKoreanCommentAbove(node: SgNode, allLines: string[], depth = READABILITY.KOREAN_COMMENT_SEARCH_DEPTH): boolean {
+function hasKoreanCommentAbove(
+  node: SgNode,
+  allLines: string[],
+  depth = READABILITY.KOREAN_COMMENT_SEARCH_DEPTH
+): boolean {
   let targetNode = node;
   let current = node;
 
@@ -267,7 +275,8 @@ function reviewMembers(
 ): Violation[] {
   if (isTestFile) return [];
   const violations: Violation[] = [];
-  const isDtoOrEntity = filePath.toLowerCase().includes('dto') || filePath.toLowerCase().includes('entity');
+  const isDtoOrEntity =
+    filePath.toLowerCase().includes('dto') || filePath.toLowerCase().includes('entity');
 
   root.findAll({ rule: { kind: 'class_body' } }).forEach((body) => {
     body.children().forEach((m) => {
@@ -276,15 +285,16 @@ function reviewMembers(
         const allIds = m.findAll({
           rule: { any: [{ kind: 'property_identifier' }, { kind: 'identifier' }] },
         });
-        
-        let idNode = allIds.find(node => {
-          let parent = node.parent();
-          while (parent && parent !== m) {
-            if (parent.kind() === 'decorator') return false;
-            parent = parent.parent();
-          }
-          return true;
-        }) || allIds[0];
+
+        let idNode =
+          allIds.find((node) => {
+            let parent = node.parent();
+            while (parent && parent !== m) {
+              if (parent.kind() === 'decorator') return false;
+              parent = parent.parent();
+            }
+            return true;
+          }) || allIds[0];
 
         const name = idNode?.text().trim() || 'unknown';
         if (isNoiseSymbol(name)) return;
@@ -340,7 +350,11 @@ function reviewGlobals(root: SgNode, filePath: string, allLines: string[]): Viol
         if (text.startsWith('describe(')) {
           name = 'describe';
           label = '테스트 스위트(Suite)';
-        } else if (text.startsWith('beforeEach(') || text.startsWith('beforeAll(') || text.startsWith('afterEach(')) {
+        } else if (
+          text.startsWith('beforeEach(') ||
+          text.startsWith('beforeAll(') ||
+          text.startsWith('afterEach(')
+        ) {
           name = text.split('(')[0];
           label = '테스트 설정 로직(Setup)';
         } else {
@@ -360,16 +374,17 @@ function reviewGlobals(root: SgNode, filePath: string, allLines: string[]): Viol
       }
       if (!idNode) return;
       name = idNode.text().trim();
-      label = m.text().includes('=>') || m.text().includes('function') ? '함수형 변수' : '전역 변수';
+      label =
+        m.text().includes('=>') || m.text().includes('function') ? '함수형 변수' : '전역 변수';
     }
 
     if (isNoiseSymbol(name)) return;
 
     if (!hasKoreanCommentAbove(m, allLines)) {
-      const advice = label.includes('테스트') 
-        ? `[Senior Advice] 복잡한 ${label} [${name}] 구간의 의도(Intent)나 Mocking 구조를 설명하는 한글 주석을 추가하세요.` 
+      const advice = label.includes('테스트')
+        ? `[Senior Advice] 복잡한 ${label} [${name}] 구간의 의도(Intent)나 Mocking 구조를 설명하는 한글 주석을 추가하세요.`
         : `[Senior Advice] ${label} [${name}] 위에 한글 주석을 추가하세요.`;
-      
+
       violations.push({
         type: 'READABILITY',
         file: filePath,

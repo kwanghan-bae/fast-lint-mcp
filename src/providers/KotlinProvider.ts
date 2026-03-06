@@ -11,11 +11,14 @@ export class KotlinProvider extends BaseQualityProvider {
   name = 'Kotlin';
   public extensions = ['.kt', '.kts'];
 
-  async check(filePath: string, options?: {
-    securityThreshold?: number;
-    maxLines?: number;
-    maxComplexity?: number;
-  }): Promise<Violation[]> {
+  async check(
+    filePath: string,
+    options?: {
+      securityThreshold?: number;
+      maxLines?: number;
+      maxComplexity?: number;
+    }
+  ): Promise<Violation[]> {
     const violations: Violation[] = [];
     const customRules = this.config.customRules;
 

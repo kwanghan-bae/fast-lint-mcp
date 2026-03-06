@@ -9,25 +9,13 @@ import { AgentWorkflow } from './agent/workflow.js';
 import { formatReport, formatCLITable } from './utils/AnalysisUtils.js';
 import { join, dirname } from 'path';
 import { existsSync, statSync, readFileSync } from 'fs';
-import { SYSTEM, SECURITY } from './constants.js';
-
-// v4.3.1: 단일 소스(package.json)로부터 버전 정보 획득
-let pkg = { version: '0.0.0-unknown' };
-try {
-  const pkgPath = join(dirname(new URL(import.meta.url).pathname), '..', 'package.json');
-  if (existsSync(pkgPath)) {
-    pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
-  }
-} catch (e) {
-  // 테스트 환경이거나 package.json 접근 불가 시 기본값 사용
-}
-export const VERSION = `${SYSTEM.VERSION_PREFIX}${pkg.version}`;
+import { SYSTEM, SECURITY, VERSION } from './constants.js';
 
 /** MCP 서버 인스턴스 설정 및 초기화 */
 const server = new Server(
   {
     name: 'fast-lint-mcp',
-    version: pkg.version,
+    version: VERSION.replace('v', ''),
   },
   {
     capabilities: {
@@ -111,7 +99,8 @@ function getToolDefinitions() {
           },
           excludePattern: {
             type: 'string',
-            description: 'Optional: Glob pattern to exclude from analysis (Standard patterns like node_modules, dist are ALREADY EXCLUDED by default)',
+            description:
+              'Optional: Glob pattern to exclude from analysis (Standard patterns like node_modules, dist are ALREADY EXCLUDED by default)',
           },
           coveragePath: {
             type: 'string',
@@ -123,7 +112,8 @@ function getToolDefinitions() {
     },
     {
       name: 'guide',
-      description: 'Provides the absolute Standard Operating Procedure (SOP) for agents. ZERO-CONFIG required.',
+      description:
+        'Provides the absolute Standard Operating Procedure (SOP) for agents. ZERO-CONFIG required.',
       inputSchema: { type: 'object', properties: {} },
     },
     {

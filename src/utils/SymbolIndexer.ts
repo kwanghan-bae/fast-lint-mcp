@@ -86,7 +86,7 @@ export class SymbolIndexer {
         }
 
         this.definitions.set(fullName, { file: filePath, line });
-        
+
         // v4.0.0: export 여부 확인 로직 강화 (부모 노드 탐색)
         let isExported = node.text().includes('export ');
         let curr = node;

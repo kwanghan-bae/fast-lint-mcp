@@ -10,8 +10,9 @@ vi.mock('fast-glob');
 vi.mock('simple-git', () => ({
   simpleGit: () => ({
     checkIsRepo: () => Promise.resolve(false),
-    status: () => Promise.resolve({ modified: [], not_added: [], created: [], staged: [], renamed: [] })
-  })
+    status: () =>
+      Promise.resolve({ modified: [], not_added: [], created: [], staged: [], renamed: [] }),
+  }),
 }));
 vi.mock('../src/utils/DependencyGraph.js');
 
@@ -26,22 +27,22 @@ describe('AnalysisService Extra (Coverage & Error)', () => {
     vi.mocked(DependencyGraph).prototype.getAllFiles = vi.fn().mockReturnValue([]);
     vi.mocked(DependencyGraph).prototype.detectCycles = vi.fn().mockReturnValue([]);
     vi.mocked(glob).mockResolvedValue(['src/test.ts'] as any);
-    
+
     const mockConfig = {
       rules: {
-        minCoverage: 80,
+        minCoverage: 85,
         coverageDirectory: 'coverage',
         coveragePath: 'coverage/lcov.info',
-        techDebtLimit: 10
+        techDebtLimit: 10,
       },
       exclude: [],
       incremental: false,
       customRules: [],
-      architectureRules: []
+      architectureRules: [],
     };
     const mockStateManager = {
       getLastCoverage: vi.fn().mockReturnValue(null),
-      saveCoverage: vi.fn()
+      saveCoverage: vi.fn(),
     };
     service = new AnalysisService(mockStateManager as any, mockConfig as any, {} as any);
   });
@@ -54,13 +55,13 @@ describe('AnalysisService Extra (Coverage & Error)', () => {
 
     // v3.9.0: 명시적인 경로 전달로 탐색 로직 우회
     const report = await service.runAllChecks({ coveragePath: 'coverage/lcov.info' });
-    expect(report.violations.filter(v => v.type === 'COVERAGE').length).toBe(0);
+    expect(report.violations.filter((v) => v.type === 'COVERAGE').length).toBe(0);
   });
 
   it('테스트 리포트가 소스보다 오래된 경우(Stale) 경고를 발생시켜야 한다', async () => {
     vi.spyOn(fs, 'existsSync').mockReturnValue(true);
     vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify({ total: { lines: { pct: 90 } } }));
-    
+
     const now = Date.now();
     // v4.8.0: 유예 기간 15분을 넘기기 위해 20분 전으로 설정
     vi.spyOn(fs, 'statSync').mockImplementation((path: any) => {
@@ -71,6 +72,6 @@ describe('AnalysisService Extra (Coverage & Error)', () => {
     });
 
     const report = await service.runAllChecks({ coveragePath: 'coverage/coverage-summary.json' });
-    expect(report.violations.some(v => v.message.includes('만료'))).toBe(true);
+    expect(report.violations.some((v) => v.message.includes('만료'))).toBe(true);
   });
 });

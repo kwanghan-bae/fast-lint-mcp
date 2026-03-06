@@ -1,11 +1,11 @@
 import { execSync } from 'child_process';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { Violation } from '../types/index.js';
 import { AstCacheManager } from '../utils/AstCacheManager.js';
 import { SECURITY } from '../constants.js';
 
 /**
- * 소스 코드 내에 실수로 포함될 수 있는 민감 정보(API Key, Secret, Token 등)를 탐지하기 위한 정규식 패턴 목록입니다.
+ * 소스 코드 내에 실수로 포함될 수 있는 민감 정보 탐지 패턴입니다.
  */
 const SECRET_PATTERNS = [
   { id: 'AWS_KEY', pattern: /AKIA[0-9A-Z]{16}/, message: 'AWS Access Key가 노출되었습니다!' },
@@ -18,136 +18,116 @@ const SECRET_PATTERNS = [
 ];
 
 /**
- * 문자열의 Shannon Entropy를 측정하여 무작위성을 계산합니다.
- * 비밀번호나 API Key는 일반 단어보다 엔트로피가 높습니다.
+ * 프로젝트의 npm 의존성 취약점을 스캔합니다.
  */
+export async function checkPackageAudit(): Promise<Violation[]> {
+  try {
+    const output = execSync('npm audit --json', {
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    const audit = JSON.parse(output);
+    const highAlerts =
+      (audit.metadata?.vulnerabilities?.high || 0) +
+      (audit.metadata?.vulnerabilities?.critical || 0);
+    if (highAlerts > 0)
+      return [
+        {
+          type: 'SECURITY',
+          message: `취약한 패키지 발견 (High/Critical: ${highAlerts}건).`,
+          rationale: 'NPM Audit 엔진 결과',
+        },
+      ];
+  } catch (e: any) {
+    try {
+      const audit = JSON.parse(e.stdout || '{}');
+      const highAlerts =
+        (audit.metadata?.vulnerabilities?.high || 0) +
+        (audit.metadata?.vulnerabilities?.critical || 0);
+      if (highAlerts > 0)
+        return [
+          {
+            type: 'SECURITY',
+            message: `취약한 패키지 발견 (High/Critical: ${highAlerts}건).`,
+            rationale: 'NPM Audit 엔진 결과',
+          },
+        ];
+    } catch (inner) {}
+  }
+  return [];
+}
+
+/** Shannon Entropy 계산 함수 */
 function calculateEntropy(str: string): number {
   const len = str.length;
   if (len === 0) return 0;
   const frequencies: Record<string, number> = {};
-  for (const char of str) {
-    frequencies[char] = (frequencies[char] || 0) + 1;
+  for (const char of str) frequencies[char] = (frequencies[char] || 0) + 1;
+  let entropy = 0;
+  for (const char in frequencies) {
+    const p = frequencies[char] / len;
+    entropy -= p * Math.log2(p);
   }
-  return Object.values(frequencies).reduce((sum, count) => {
-    const p = count / len;
-    return sum - p * Math.log2(p);
-  }, 0);
+  return entropy;
 }
 
-// v4.4.0: 매직넘버 중앙화 (SECURITY 상수 활용)
-/** 대문자 상수로 정의된 키 식별자 패턴 (예: API_KEY = ...) */
-const CONSTANT_KEY_REGEX = /^[A-Z_]+_KEY\s*[:=]/;
-
 /**
- * 보안 탐지 예외 처리 로직이 포함된 정밀 스캔 (v2.2 Entropy)
- * v3.8: 동적 엔트로피 임계값 지원 및 추론 근거(Rationale) 추가.
+ * 민감 정보 노출 여부를 정밀 스캔합니다.
  */
-export async function checkSecrets(filePath: string, securityThreshold?: number): Promise<Violation[]> {
-  // v3.3.2: AstCacheManager 활용하여 중복 I/O 제거
-  const root = AstCacheManager.getInstance().getRootNode(filePath);
-  const content = root ? root.text() : readFileSync(filePath, 'utf-8');
-  
+export async function checkSecrets(
+  filePath: string,
+  securityThreshold?: number
+): Promise<Violation[]> {
+  if (!existsSync(filePath)) return [];
+
+  const root = AstCacheManager.getInstance().getRootNode(filePath, true);
+  const violations: Violation[] = [];
+  const content = readFileSync(filePath, 'utf-8');
   const threshold = securityThreshold ?? SECURITY.DEFAULT_ENTROPY_THRESHOLD;
 
-  const violations: Violation[] = [];
-  for (const { id, pattern, message } of SECRET_PATTERNS) {
-    const flags = pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g';
-    const regex = new RegExp(pattern.source, flags);
-
-    let match;
-    while ((match = regex.exec(content)) !== null) {
-      const fullMatch = match[0];
-      const matchIndex = match.index;
-
-      let keyName = '';
-      let secretValue = fullMatch;
-      let hasAssignment = false;
-
-      if (fullMatch.includes(':') || fullMatch.includes('=')) {
-        const parts = fullMatch.split(/[:=]/);
-        keyName = parts[0].trim();
-        secretValue = parts[parts.length - 1].replace(/["']/g, '').trim();
-        hasAssignment = true;
-      } else {
-        secretValue = fullMatch.replace(/["']/g, '').trim();
-      }
-
-      // 16진수 색상 코드(0x, #)인 경우 즉시 제외 (v4.4.0 상수 사용)
-      if (SECURITY.HEX_COLOR_REGEX.test(secretValue)) continue;
-
-      const entropy = calculateEntropy(secretValue);
-      const isLikelySafe =
-        hasAssignment && (SECURITY.SAFE_IDENTIFIER_REGEX.test(keyName) || CONSTANT_KEY_REGEX.test(keyName));
-
-      if (id === 'JWT_TOKEN' || (entropy > threshold && !isLikelySafe)) {
-        const lines = content.substring(0, matchIndex).split('\n');
-        const line = lines.length;
-        const column = lines[lines.length - 1].length + 1;
-        const snippet = content.substring(
-          Math.max(0, matchIndex - 20),
-          Math.min(content.length, matchIndex + fullMatch.length + 20)
-        );
-
-        violations.push({
-          type: 'SECURITY',
-          file: filePath,
-          line,
-          column,
-          snippet: `...${snippet.replace(/\n/g, ' ')}...`,
-          rationale: `엔트로피: ${entropy.toFixed(2)} (임계값: ${threshold.toFixed(1)}), 매칭 키: ${keyName || 'N/A'}`,
-          message: `[${id}] ${message}${id !== 'JWT_TOKEN' ? ` (엔트로피: ${entropy.toFixed(2)})` : ''} 민감 정보 노출 의심.`,
-        });
-      }
-    }
-  }
-
-  return violations;
-}
-
-/**
- * 'npm audit' 명령어를 실행하여 현재 프로젝트에서 사용하는 라이브러리들의 알려진 보안 취약점을 점검합니다.
- * 특히 High 및 Critical 등급의 취약점이 발견되면 위반 사항으로 보고합니다.
- * @returns 패키지 보안 위반 사항 목록
- */
-export async function checkPackageAudit(): Promise<Violation[]> {
-  const violations: Violation[] = [];
-  try {
-    // JSON 형식으로 보안 감사 결과 추출
-    const auditOutput = execSync('npm audit --json', { encoding: 'utf-8' });
-    const auditData = JSON.parse(auditOutput);
-
-    const vulnerabilities = auditData.metadata?.vulnerabilities || {};
-    const totalHigh = (vulnerabilities.high || 0) + (vulnerabilities.critical || 0);
-
-    if (totalHigh > 0) {
+  // 1. 정규식 기반 정밀 매칭
+  SECRET_PATTERNS.forEach((p) => {
+    if (p.pattern.test(content)) {
       violations.push({
         type: 'SECURITY',
-        message: `중대한 패키지 보안 취약점이 발견되었습니다: High/Critical 등급 총 ${totalHigh}건. 'npm audit fix' 명령어로 패키지를 업데이트하세요.`,
+        file: filePath,
+        message: p.message,
+        rationale: `패턴 일치: ${p.id}`,
       });
     }
-  } catch (error) {
-    /**
-     * npm audit은 취약점이 하나라도 있으면 종료 코드를 1(에러)로 반환합니다.
-     * 따라서 catch 블록에서 표준 출력(stdout)을 파싱하여 실제 취약점 정보를 획득합니다.
-     */
-    try {
-      if (error instanceof Error && 'stdout' in error) {
-        const auditData = JSON.parse((error as any).stdout);
-        const vulnerabilities = auditData.metadata?.vulnerabilities || {};
-        const totalHigh = (vulnerabilities.high || 0) + (vulnerabilities.critical || 0);
+  });
 
-        if (totalHigh > 0) {
+  if (root) {
+    const stringNodes = root.findAll({
+      rule: { any: [{ kind: 'string' }, { kind: 'string_fragment' }, { kind: 'template_string' }] },
+    });
+    stringNodes.forEach((node) => {
+      const text = node.text().replace(/["'`]/g, '').trim();
+
+      if (text.length > 8) {
+        // 지능형 화이트리스트
+        if (SECURITY.SAFE_IDENTIFIER_REGEX.test(text)) return;
+        if (
+          /^[A-Za-z][a-zA-Z0-9]{5,}(Scene|Screen|Manager|Provider|Service|Component|Layer|View|Controller|Store|Utils|Constant|Action|Reducer|Hook|Effect|Test|Sample|Table|List|Item)$/.test(
+            text
+          )
+        )
+          return;
+        if (SECURITY.HEX_COLOR_REGEX.test(text)) return;
+
+        const entropy = calculateEntropy(text);
+        if (entropy > threshold) {
+          if (!/[0-9]/.test(text) && entropy < 4.5) return;
           violations.push({
             type: 'SECURITY',
-            message: `중대한 패키지 보안 취약점이 발견되었습니다: High/Critical 등급 총 ${totalHigh}건. 'npm audit fix' 명령어로 패키지를 업데이트하세요.`,
+            file: filePath,
+            line: node.range().start.line + 1,
+            message: `높은 무작위성을 가진 문자열 발견 (엔트로피: ${entropy.toFixed(2)}).`,
+            rationale: `비밀번호나 API Key일 가능성이 큽니다.`,
           });
         }
       }
-    } catch (e) {
-      // 결과 파싱 자체에 실패한 경우 경고만 출력하고 조용히 넘어갑니다.
-      console.warn('Warning: npm audit 결과를 파싱하는 데 실패했습니다.');
-    }
+    });
   }
-
   return violations;
 }

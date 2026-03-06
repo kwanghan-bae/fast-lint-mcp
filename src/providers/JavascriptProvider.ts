@@ -44,11 +44,14 @@ export class JavascriptProvider extends BaseQualityProvider {
    * @param options 동적 분석 옵션
    * @returns 발견된 위반 사항들의 배열
    */
-  async check(filePath: string, options?: {
-    securityThreshold?: number;
-    maxLines?: number;
-    maxComplexity?: number;
-  }): Promise<Violation[]> {
+  async check(
+    filePath: string,
+    options?: {
+      securityThreshold?: number;
+      maxLines?: number;
+      maxComplexity?: number;
+    }
+  ): Promise<Violation[]> {
     const violations: Violation[] = [];
     const customRules = this.config.customRules;
 
@@ -130,12 +133,9 @@ export class JavascriptProvider extends BaseQualityProvider {
     }
 
     // 2. AI 환각(Hallucination) 체크: 존재하지 않는 파일이나 라이브러리 임포트를 탐지합니다.
-    const hallucinationViolations = (await checkHallucination(
-      filePath,
-      process.cwd(),
-      this.config.exclude
-    )) as any[];
-    hallucinationViolations.forEach((hv) => {
+    const hallucinationViolations =
+      (await checkHallucination(filePath, this.config.workspacePath, this.config.exclude)) || [];
+    hallucinationViolations.forEach((hv: any) => {
       violations.push({
         type: 'HALLUCINATION',
         file: filePath,
@@ -146,8 +146,8 @@ export class JavascriptProvider extends BaseQualityProvider {
     });
 
     // 3. 가짜 구현(Fake Logic) 체크: 파라미터를 무시한 채 고정된 값을 반환하는 등의 의심스러운 로직을 찾습니다.
-    const fakeLogicViolations = (await checkFakeLogic(filePath)) as any[];
-    fakeLogicViolations.forEach((fv) => {
+    const fakeLogicViolations = (await checkFakeLogic(filePath)) || [];
+    fakeLogicViolations.forEach((fv: any) => {
       violations.push({
         type: 'FAKE_LOGIC',
         file: filePath,

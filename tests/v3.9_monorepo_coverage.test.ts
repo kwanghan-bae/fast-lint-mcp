@@ -22,8 +22,8 @@ describe('v3.9 모노레포 커버리지 탐지 검증', () => {
     // 1. 가상 모노레포 구조 생성
     const subDir = join(testDir, 'backend-node', 'coverage');
     mkdirSync(subDir, { recursive: true });
-    
-    // 2. 가짜 lcov.info 생성 (커버리지 80%)
+
+    // 2. 가짜 lcov.info 생성 (커버리지 85%)
     const lcovContent = `
 TN:
 SF:src/index.ts
@@ -51,10 +51,10 @@ end_of_record
     cfg.rules.minCoverage = 50;
 
     const report = await analyzer.runAllChecks();
-    
-    // 4. 검증: 리포트를 찾아냈으므로 커버리지 미달 경고가 없어야 함 (80% > 50%)
+
+    // 4. 검증: 리포트를 찾아냈으므로 커버리지 미달 경고가 없어야 함 (85% > 50%)
     expect(report.metadata?.coverageFreshness).toBe('fresh');
-    const coverageViolation = report.violations.find(v => v.type === 'COVERAGE');
+    const coverageViolation = report.violations.find((v) => v.type === 'COVERAGE');
     expect(coverageViolation).toBeUndefined();
   });
 
@@ -62,7 +62,7 @@ end_of_record
     const customDir = join(testDir, 'custom-reports');
     mkdirSync(customDir, { recursive: true });
     const customPath = join(customDir, 'my-coverage.json');
-    
+
     // 100% 커버리지 리포트
     writeFileSync(customPath, JSON.stringify({ total: { lines: { pct: 100 } } }));
 
@@ -71,10 +71,10 @@ end_of_record
     const analyzer = new AnalysisService(sMgr, cfg, new SemanticService());
 
     const report = await analyzer.runAllChecks({ coveragePath: customPath });
-    
+
     expect(report.metadata?.coverageFreshness).toBe('fresh');
     // Rationale에 파일명이 포함되어야 함
-    const rationale = report.violations.find(v => v.type === 'COVERAGE')?.rationale || '';
+    const rationale = report.violations.find((v) => v.type === 'COVERAGE')?.rationale || '';
     // (만약 위반이 없다면 metadata 확인)
     expect(report.pass).toBe(true);
   });
