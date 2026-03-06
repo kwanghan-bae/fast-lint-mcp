@@ -184,24 +184,29 @@ async function handleToolCall(name: string, args: any) {
   switch (name) {
     case 'guide': {
       const guideText = `
-# 🚨 FAST-LINT-MCP ZERO-CONFIG MANDATES (AGENT SOP) 🚨
+# 🚨 FAST-LINT-MCP ZERO-CONFIG MANDATES (AGENT SOP v6.0) 🚨
 
-As an AI Agent, you are bound by these Standard Operating Procedures. This tool is built with **Senior Defaults** and requires **ZERO configuration files** (no .fast-lintrc.json). Deviation is not permitted.
+As an AI Agent, you are bound by these Standard Operating Procedures. This tool is your **Absolute Guardrail** and **Hallucination Judge**. You are responsible for both implementation and verification.
 
 ### MANDATE 1: DIAGNOSIS FIRST (\`quality-check\`)
-- **Primary Directive**: Begin every session by calling \`quality-check\`. It works instantly without any setup or config files.
-- **Intelligent Auto-Chaining**: If violations exist, the engine will automatically append a **[🔍 Deep Dive]** section with the exact functions and metrics. **USE THIS DATA IMMEDIATELY.** Do not waste turns calling \`get-symbol-metrics\`.
+- **Primary Directive**: Begin every session and **every modification loop** by calling \`quality-check\`. 
+- **Intelligent Auto-Chaining**: Use the **[🔍 Deep Dive]** and **[🧠 Self-Correction Guide]** sections immediately. They are designed to prevent your hallucinations.
 
-### MANDATE 2: SURGICAL EXTRACTION (\`get-symbol-content\`)
-- **No Full Reads**: Armed with Deep Dive data, extract ONLY the problematic logic. Do not read entire files.
+### MANDATE 2: ZERO-TOLERANCE FOR HALLUCINATION
+- **Deterministic Check**: If \`quality-check\` reports a HALLUCINATION, you have called a non-existent or unimported API.
+- **Mandatory Correction**: Use \`go-to-definition\` to find actual signatures. DO NOT guess or "hallucinate" APIs.
 
-### MANDATE 3: IMPACT & VALIDATION
-- **Zero Surprises**: Call \`analyze-impact\` before any modification to map side effects.
-- **Prove It**: Claim success ONLY after a successful \`verify-fix\`. Unverified code is broken code.
+### MANDATE 3: SURGICAL EXTRACTION & IMPACT
+- **Compression**: Use \`get-symbol-content\` to minimize token usage. 
+- **Zero Surprises**: Call \`analyze-impact\` before any modification. Ignorance of side effects is a critical failure.
+
+### MANDATE 4: SELF-CORRECTION PROOF (\`verify-fix\`)
+- **Ultimate Proof**: Your work is NOT complete until \`quality-check\` returns **PASS** and \`verify-fix\` confirms test success. 
+- **No Excuses**: Do not claim success based on your own internal confidence. Trust only the AST Judge.
 
 ### 💡 CRITICAL AGENT PROTOCOLS:
-1. **Zero-Pollution Engine**: The engine ALREADY excludes \`node_modules\`, \`dist\`, \`.git\`, etc. **DO NOT attempt to create configuration files or pollute the project root.**
-2. **Cross-Validation**: If a tool reports a path as a "HALLUCINATION", you MUST immediately use \`ls\` to verify its physical existence.
+1. **Zero-Pollution**: Do NOT create configuration files. Trust the built-in Senior Defaults.
+2. **Cross-Validation**: If a path is reported as missing, use \`ls\` to verify physically.
       `.trim();
       return { content: [{ type: 'text', text: guideText }] };
     }

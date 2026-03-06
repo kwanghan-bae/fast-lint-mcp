@@ -1,34 +1,28 @@
-# 🤖 AI 에이전트 지능형 활용 및 설치 가이드 (v3.5)
+# 🤖 AI 에이전트 지능형 활용 가이드 (v6.0)
 
-이 문서는 AI 코딩 에이전트(Antigravity, Cursor, Claude Code 등)가 `fast-lint-mcp`를 통해 **설정 파일 하나 없이(Zero-Config)** 정밀 분석과 리팩토링을 수행하도록 돕는 공식 가이드입니다.
+이 문서는 AI 코딩 에이전트가 `fast-lint-mcp`를 **환각 판사(Hallucination Judge)**로 삼아 무결한 코드를 작성하도록 돕는 가이드입니다.
 
 ---
 
-## ⚡ 공통 설치 (Prerequisites)
+## ⚡ 빠른 실행 (Zero-Friction)
 
-먼저 로컬 환경에 프로젝트를 설치하고 빌드합니다.
+설치 없이 `npx`를 통해 즉시 프로젝트 품질을 진단할 수 있습니다.
 ```bash
-git clone https://github.com/your-username/fast-lint-mcp.git ~/fast-lint-mcp
-cd ~/fast-lint-mcp
-npm install
-npm run build
+npx fast-lint-mcp check
 ```
-*중요: 설치 후 `pwd` 명령어로 확인한 **절대 경로**를 아래 설정에서 사용하십시오.*
 
 ---
 
-## 1. Google Antigravity 🪐 (Agent-First IDE)
-Antigravity는 에이전트의 자율성을 극대화하기 위해 `autoApprove` 설정이 필수입니다.
+## 1. Google Antigravity & IDE 설정
+MCP 서버 연동 시 `autoApprove` 설정을 통해 에이전트의 자율성을 극대화하십시오.
 
-### ✅ 최적화 설정 (`~/.gemini/antigravity/mcp_config.json`)
-**v5.3.0 업데이트**: 이 도구는 **Zero-Config** 엔진입니다. `.fast-lintrc.json` 파일을 만들 필요가 전혀 없습니다. (경로 `/Users/joel/Desktop/git/fast-lint-mcp` 부분은 실제 설치 경로로 수정하십시오.)
-
+### ✅ MCP 서버 설정 (`mcp_config.json`)
 ```json
 {
   "mcpServers": {
     "fast-lint-mcp": {
-      "command": "node",
-      "args": ["/Users/joel/Desktop/git/fast-lint-mcp/dist/index.js"],
+      "command": "npx",
+      "args": ["-y", "fast-lint-mcp"],
       "autoApprove": [
         "quality-check",
         "get-symbol-metrics",
@@ -41,46 +35,37 @@ Antigravity는 에이전트의 자율성을 극대화하기 위해 `autoApprove`
   }
 }
 ```
-*효과: 분석 및 읽기 도구를 자동 승인하면 에이전트가 사용자 방해 없이 수초 내에 전체 아키텍처를 파악합니다.*
 
 ---
 
-## 🧠 에이전트 지능형 워크플로우 (SOP) - [v3.5 Pure Zero-Config]
+## 🧠 에이전트 핵심 행동 지침 (SOP v6.0)
 
-에이전트는 분석 시 다음의 **'순수성 유지'** 및 **'지능형 탐색'** 규칙을 준수하십시오.
+모든 에이전트는 **진단 - 추출 - 수정 - 재진단**의 무한 루프를 준수해야 합니다.
 
-### Step 1: 지능형 종합 진단 (Intelligent Diagnosis)
+### Step 1: 결정론적 진단 (The Judge)
 - **Tool**: `quality-check`
-- **Zero Pollution**: 이 프로젝트에는 설정 파일(.fast-lintrc.json)을 생성하지 마십시오. 엔진은 내장된 시니어급 기본값으로 완벽하게 작동합니다.
-- **Action**: 에이전트는 즉시 프로젝트 전체 진단을 수행하십시오. 엔진이 `node_modules`, `dist` 등을 자동으로 제외하므로 노이즈 걱정이 없습니다.
+- **Role**: 당신이 작성한 코드에 존재하지 않는 API 호출(환각)이 있는지 판결을 받으십시오. 
+- **Rule**: `HALLUCINATION` 위반 발생 시, 당신의 지능을 과신하지 말고 즉시 `go-to-definition`으로 실재를 확인하십시오.
 
-### Step 2: 자동 Deep Dive 활용
-- **Feature**: `quality-check` 리포트 하단의 **[🔍 Deep Dive]** 섹션에서 문제 함수의 상세 지표(복잡도 등)를 즉시 확인하십시오. 별도의 도구 호출 없이 다음 단계로 넘어갈 수 있습니다.
-
-### Step 3: 정밀 추출 및 영향 분석
-- **Tools**: `get-symbol-content`, `analyze-impact`
-- **Action**: 정제된 심볼 데이터를 바탕으로 필요한 로직만 추출하고, 수정 전 반드시 부수 효과를 파악하십시오.
-
-### Step 4: 시스템적 증명 (Validation)
-- **Tool**: `verify-fix`
-- **Action**: 수정을 마친 후에는 반드시 이 도구를 호출하여 성공을 증명하십시오.
+### Step 2: 자가 수정 및 재검증 (Self-Correction)
+- **Action**: 위반 사항을 수정한 후, **반드시 다시 `quality-check`를 호출**하여 판사의 승인(PASS)을 받으십시오.
+- **Goal**: 리포트 결과가 `PASS`가 되기 전까지 당신의 작업은 끝난 것이 아닙니다.
 
 ---
 
-## 🚀 에이전트 주입용 시스템 프롬프트 (System Instruction)
-이 내용을 에이전트의 **Agent Instructions**나 **.cursorrules**에 복사해 넣으세요.
+## 🚀 에이전트 전용 시스템 프롬프트
+이 내용을 에이전트 설정에 주입하여 '무결성 본능'을 강화하십시오.
 
 ```text
-[Fast-Lint-MCP Zero-Config Workflow v3.5]
-1. (Zero-Pollution) 이 프로젝트에는 설정 파일을 생성하지 마라. 엔진의 내장 기본값(Senior Defaults)을 신뢰하라.
-2. (진단) 분석 요청 시 `quality-check`를 최우선 호출하고, 하단의 [Deep Dive] 섹션 데이터를 즉시 활용하라.
-3. (압축) 코드 탐색 시 `get-symbol-content`를 우선 사용하여 필요한 로직만 정밀하게 추출하라.
-4. (경로 신뢰) 도구가 파일 경로 오류(HALLUCINATION)를 보고하면, 반드시 `ls` 명령어로 물리적 존재를 교차 검증하라.
-5. (검증) 모든 작업의 마무리는 `verify-fix` 호출 결과로 증명하라.
+[Fast-Lint-MCP v6.0 Judge Mandates]
+1. (판사 준수) `quality-check` 리포트는 당신의 실수를 감시하는 절대적인 기준이다.
+2. (환각 차단) `HALLUCINATION` 탐지 시 즉시 실재하는 API 시그니처를 재확인하고 자가 수정하라.
+3. (증명 의무) 모든 수정의 끝은 `quality-check` PASS 결과로 사용자에게 증명하라.
+4. (순수성) 프로젝트 오염(설정 파일 생성)을 절대 금지하라.
 ```
 
 ---
 
 ## ✅ 설치 검증 (Verification)
-에이전트에게 이렇게 질문하여 피드백 반영 여부를 확인하세요:
-> "이 프로젝트의 품질을 진단하고(`quality-check`), 가이드(`guide`)를 호출해 너의 분석 전략을 나에게 설명해줘."
+에이전트에게 이렇게 질문하여 v6.0 지능을 확인하세요:
+> "가이드(`guide`)를 호출하여 너의 새로운 임무를 숙지하고, 현재 프로젝트에 내가 모르는 환각(Hallucination)이 있는지 결정론적으로 진단해줘."
