@@ -39,10 +39,23 @@ export function formatReport(report: QualityReport): string {
     report.violations.forEach((v: Violation) => {
       // 테이블 깨짐 방지를 위해 파이프(|) 기호 이스케이프 처리
       const safeMessage = v.message.replace(/\|/g, '\\|');
-      const safeRationale = (v.rationale || '-').replace(/\|/g, '\\|');
+      let safeRationale = (v.rationale || '-').replace(/\|/g, '\\|');
+
+      // v6.0.2: 환각 위반에 대한 지능형 힌트 추가
+      if (v.type === 'HALLUCINATION') {
+        safeRationale += ' **(👉 Action: Call `go-to-definition` or `find-references`)**';
+      }
+
       const fileWithLine = v.file ? `\`${v.file}${v.line ? `:L${v.line}` : ''}\`` : '`-`';
       output += `| **${v.type}** | ${fileWithLine} | ${safeMessage} | *${safeRationale}* |\n`;
     });
+
+    // 2.1 에이전트 자가 수정 가이드 (Self-Correction Guide v6.0.2)
+    output += `\n### 🧠 에이전트 자가 수정 가이드 (Self-Correction Guide)\n`;
+    output += `> 발견된 위반 사항을 해결하기 위해 다음 단계를 권장합니다:\n`;
+    output += `- **Hallucination 해결**: 해당 심볼의 정의가 프로젝트 내에 존재하는지 \`go-to-definition\`으로 확인하고, 없다면 실제 존재하는 API로 교체하십시오.\n`;
+    output += `- **Complexity/Size 해결**: 하단의 **Deep Dive** 섹션에서 분석된 함수 범위를 참고하여 로직을 작은 단위로 추출하십시오.\n`;
+    output += `- **Architecture 해결**: 의존성 그래프의 방향을 확인하고, 상위 레이어에서 하위 레이어를 참조하도록 구조를 변경하십시오.\n`;
   } else {
     // 3. 위반 사항이 없는 경우의 축하 메시지
     output += `\n> 🎉 **발견된 위반 사항이 없습니다. 완벽한 코드 품질을 유지하고 있습니다!**\n`;
@@ -124,6 +137,19 @@ export function formatCLITable(report: QualityReport): string {
   // 조치 가이드 추가 (복구)
   if (report.suggestion) {
     output += `\n${chalk.blue.bold('💡 Suggestion:')}\n${report.suggestion}\n`;
+
+    // v6.0.2: 위반 사항이 있을 경우 터미널 전용 퀵 힌트 추가
+    if (report.violations.length > 0) {
+      output += `\n${chalk.magenta.bold('🧠 Quick Hints for AI Agent:')}\n`;
+      if (report.violations.some((v) => v.type === 'HALLUCINATION')) {
+        output += chalk.gray(`- Use 'go-to-definition' to find actual API signatures.\n`);
+      }
+      if (report.violations.some((v) => v.type === 'COMPLEXITY' || v.type === 'SIZE')) {
+        output += chalk.gray(
+          `- Refer to 'Deep Dive' section below to identify refactoring targets.\n`
+        );
+      }
+    }
   }
 
   return output;
