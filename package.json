@@ -3,6 +3,9 @@
   "version": "4.9.0",
   "description": "AI-native Quality Gate MCP Server",
   "main": "dist/index.js",
+  "bin": {
+    "fast-lint-mcp": "./dist/cli.js"
+  },
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",

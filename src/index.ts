@@ -1,9 +1,9 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { AnalysisService } from './service/AnalysisService.js';
 import { StateManager } from './state.js';
 import { ConfigService } from './config.js';
-import { AnalysisService } from './service/AnalysisService.js';
 import { SemanticService } from './service/SemanticService.js';
 import { AgentWorkflow } from './agent/workflow.js';
 import { formatReport, formatCLITable } from './utils/AnalysisUtils.js';
@@ -24,51 +24,29 @@ const server = new Server(
   }
 );
 
-/** 품질 검사 세션 간의 상태 관리자 (싱글톤) */
-let stateManager: StateManager;
-/** 프로젝트 설정 로드 및 관리 서비스 (싱글톤) */
-let config: ConfigService;
-/** 메인 품질 분석 서비스 (싱글톤) */
-let analyzer: AnalysisService;
-/** 심볼 추적 및 시맨틱 분석 서비스 (싱글톤) */
-let semantic: SemanticService;
-/** 자율형 코드 수정 에이전트 (싱글톤) */
-let agent: AgentWorkflow;
+/** 리소스/도구 인스턴스 캐싱을 위한 내부 변수 */
+let analyzerSvc: AnalysisService | null = null;
+let semanticSvc: SemanticService | null = null;
 
-/**
- * AnalysisService 인스턴스를 컨텍스트에 맞게 제공합니다. (v4.5.0)
- * targetPath가 변경되면 인스턴스를 새로 생성하여 컨텍스트 불일치를 방지합니다.
- */
-function getAnalyzer(targetPath?: string) {
-  const workspace = targetPath || process.env.FAST_LINT_WORKSPACE || process.cwd();
-
-  if (!analyzer || analyzer['workspacePath'] !== workspace) {
-    stateManager = new StateManager(workspace);
-    config = new ConfigService(workspace);
-    analyzer = new AnalysisService(stateManager, config, getSemantic());
+/** 지연 로딩을 통해 AnalysisService 인스턴스를 가져옵니다. */
+function getAnalyzer(workspacePath: string) {
+  if (!analyzerSvc) {
+    const state = new StateManager(workspacePath);
+    const config = new ConfigService(workspacePath);
+    analyzerSvc = new AnalysisService(state, config, getSemantic());
   }
-  return analyzer;
+  return analyzerSvc;
 }
 
-/**
- * SemanticService 인스턴스를 싱글톤으로 제공합니다.
- */
+/** 지연 로딩을 통해 SemanticService 인스턴스를 가져옵니다. */
 function getSemantic() {
-  if (!semantic) semantic = new SemanticService();
-  return semantic;
+  if (!semanticSvc) {
+    semanticSvc = new SemanticService();
+  }
+  return semanticSvc;
 }
 
-/**
- * AgentWorkflow 인스턴스를 싱글톤으로 제공합니다.
- */
-function getAgent() {
-  if (!agent) agent = new AgentWorkflow();
-  return agent;
-}
-
-/**
- * 지원 가능한 MCP 도구 목록을 정의합니다.
- */
+/** 에이전트에게 제공할 MCP 도구 목록을 정의합니다. */
 function getToolDefinitions() {
   return [
     {
@@ -128,10 +106,50 @@ function getToolDefinitions() {
     },
     {
       name: 'get-symbol-content',
-      description: 'Reads the source code content of a specific symbol.',
+      description:
+        'Reads the source code content of a specific symbol (function/class) within a file.',
       inputSchema: {
         type: 'object',
-        properties: { filePath: { type: 'string' }, symbolName: { type: 'string' } },
+        properties: {
+          filePath: { type: 'string' },
+          symbolName: { type: 'string' },
+        },
+        required: ['filePath', 'symbolName'],
+      },
+    },
+    {
+      name: 'analyze-impact',
+      description: 'Tracks files and test cases affected by a symbol modification.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          filePath: { type: 'string' },
+          symbolName: { type: 'string' },
+        },
+        required: ['filePath', 'symbolName'],
+      },
+    },
+    {
+      name: 'find-references',
+      description: 'Finds all references of a specific symbol.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          filePath: { type: 'string' },
+          symbolName: { type: 'string' },
+        },
+        required: ['filePath', 'symbolName'],
+      },
+    },
+    {
+      name: 'go-to-definition',
+      description: 'Locates the exact definition of a specific symbol.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          filePath: { type: 'string' },
+          symbolName: { type: 'string' },
+        },
         required: ['filePath', 'symbolName'],
       },
     },
@@ -141,73 +159,22 @@ function getToolDefinitions() {
       inputSchema: { type: 'object', properties: {} },
     },
     {
-      name: 'analyze-impact',
-      description: 'Tracks files and test cases affected by a symbol modification.',
-      inputSchema: {
-        type: 'object',
-        properties: { filePath: { type: 'string' }, symbolName: { type: 'string' } },
-        required: ['filePath', 'symbolName'],
-      },
-    },
-    {
-      name: 'find-references',
-      description: 'Finds all references of a specific symbol.',
-      inputSchema: {
-        type: 'object',
-        properties: { filePath: { type: 'string' }, symbolName: { type: 'string' } },
-        required: ['filePath', 'symbolName'],
-      },
-    },
-    {
-      name: 'go-to-definition',
-      description: 'Locates the exact definition of a specific symbol.',
-      inputSchema: {
-        type: 'object',
-        properties: { filePath: { type: 'string' }, symbolName: { type: 'string' } },
-        required: ['filePath', 'symbolName'],
-      },
-    },
-    {
       name: 'verify-fix',
       description: 'Verifies if the modified code correctly passes tests.',
       inputSchema: {
         type: 'object',
-        properties: { testCommand: { type: 'string', default: 'npm test' } },
+        properties: {
+          testCommand: {
+            type: 'string',
+            description: "Custom test command (default: 'npm test')",
+          },
+        },
       },
     },
   ];
 }
 
-/**
- * MCP 도구 목록 요청을 처리합니다.
- */
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return { tools: getToolDefinitions() };
-});
-
-/**
- * MCP 도구 호출 요청을 처리합니다.
- */
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args } = request.params;
-  try {
-    return await handleToolCall(name, args);
-  } catch (error) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `오류 발생: ${error instanceof Error ? error.message : String(error)}`,
-        },
-      ],
-      isError: true,
-    };
-  }
-});
-
-/**
- * 개별 도구 호출에 대한 실제 로직을 수행합니다.
- */
+/** 에이전트의 도구 호출을 처리하는 핵심 로직입니다. */
 async function handleToolCall(name: string, args: any) {
   const workspace = args?.targetPath || process.env.FAST_LINT_WORKSPACE || process.cwd();
   // 동적으로 설정한 workspace 경로로 프로세스의 작업 디렉토리를 변경합니다.
@@ -251,23 +218,10 @@ As an AI Agent, you are bound by these Standard Operating Procedures. This tool 
         join(workspace, String(args?.filePath)),
         String(args?.symbolName)
       );
-      return content
-        ? { content: [{ type: 'text', text: content }] }
-        : { content: [{ type: 'text', text: 'Symbol not found' }], isError: true };
-    }
-    case 'find-dead-code': {
-      const dead = await semanticSvc.findDeadCode();
-      return {
-        content: [
-          {
-            type: 'text',
-            text: dead.length ? JSON.stringify(dead, null, 2) : 'No dead code found!',
-          },
-        ],
-      };
+      return { content: [{ type: 'text', text: content || '심볼을 찾을 수 없습니다.' }] };
     }
     case 'analyze-impact': {
-      const impact = semanticSvc.analyzeImpact(
+      const impact = await semanticSvc.analyzeImpact(
         join(workspace, String(args?.filePath)),
         String(args?.symbolName)
       );
@@ -279,46 +233,56 @@ As an AI Agent, you are bound by these Standard Operating Procedures. This tool 
     }
     case 'go-to-definition': {
       const def = semanticSvc.goToDefinition(String(args?.symbolName));
-      return def
-        ? { content: [{ type: 'text', text: JSON.stringify(def, null, 2) }] }
-        : { content: [{ type: 'text', text: 'Definition not found' }], isError: true };
+      return { content: [{ type: 'text', text: JSON.stringify(def, null, 2) }] };
+    }
+    case 'find-dead-code': {
+      const dead = await semanticSvc.findDeadCode();
+      return { content: [{ type: 'text', text: JSON.stringify(dead, null, 2) }] };
     }
     case 'verify-fix': {
-      const result = getAgent().verify(String(args?.testCommand || 'npm test'));
+      const workflow = new AgentWorkflow();
+      const result = await workflow.verify(args?.testCommand || 'npm test');
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
     default:
-      throw new Error(`Unknown tool: ${name}`);
+      throw new Error(`알 수 없는 도구: ${name}`);
   }
 }
 
-/**
- * 서버를 시작하거나 CLI 분석 모드로 진입합니다.
- */
-async function main() {
-  const targetDirIdx = process.argv.indexOf('--path');
-  const targetDir = targetDirIdx !== -1 ? process.argv[targetDirIdx + 1] : process.cwd();
+// 1. 도구 목록 조회 핸들러
+server.setRequestHandler(ListToolsRequestSchema, async () => ({
+  tools: getToolDefinitions(),
+}));
 
-  if (process.argv.includes('--check')) {
-    let resolvedPath = targetDir;
-    if (existsSync(targetDir) && statSync(targetDir).isFile()) {
-      resolvedPath = dirname(targetDir);
-    }
-    const sMgr = new StateManager(resolvedPath);
-    const cfg = new ConfigService(resolvedPath);
-    const analyzerSvc = new AnalysisService(sMgr, cfg, getSemantic());
-    console.error(`Running quality check for: ${resolvedPath}...`);
-    const report = await analyzerSvc.runAllChecks();
-    console.log(formatCLITable(report));
-    process.exit(report.pass ? 0 : 1);
+// 2. 도구 실행 핸들러
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  try {
+    return await handleToolCall(request.params.name, request.params.arguments);
+  } catch (error) {
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `오류 발생: ${error instanceof Error ? error.message : String(error)}`,
+        },
+      ],
+      isError: true,
+    };
   }
+});
 
+/** MCP 서버의 메인 실행 루프입니다. (v6.0.1) */
+export async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error('Fast-Lint-MCP Server running on stdio');
 }
 
-if (process.env.NODE_ENV !== 'test') {
+// 직접 실행 시에만 main 호출 (CLI 진입점과 분리)
+if (
+  process.argv[1] &&
+  (process.argv[1].endsWith('index.js') || process.argv[1].endsWith('src/index.ts'))
+) {
   main().catch((error) => {
     console.error('Fatal error:', error);
     process.exit(1);
