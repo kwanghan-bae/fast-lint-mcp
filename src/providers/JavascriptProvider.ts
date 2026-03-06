@@ -3,7 +3,7 @@ import { analyzeFile } from '../analysis/sg.js';
 import { checkHallucination, checkFakeLogic, checkArchitecture } from '../analysis/import-check.js';
 import { checkSecrets } from '../checkers/security.js';
 import { runMutationTest } from '../analysis/mutation.js';
-import { runSemanticReview } from '../analysis/reviewer.js';
+import { runSemanticReview, verifyAPIContracts } from '../analysis/reviewer.js';
 import { runSelfHealing } from '../checkers/fixer.js';
 import { Violation } from '../types/index.js';
 import { BaseQualityProvider } from './BaseQualityProvider.js';
@@ -144,6 +144,14 @@ export class JavascriptProvider extends BaseQualityProvider {
         message: `[환각 경고] ${hv.message}`,
       });
     });
+
+    // 2.1 결정론적 API 계약 검증 (v6.0.0: AST Call Expression 분석)
+    const root = AstCacheManager.getInstance().getRootNode(filePath);
+    if (root && this.semantic) {
+      const exportedSymbols = this.semantic.getAllExportedSymbols();
+      const apiViolations = await verifyAPIContracts(root, filePath, exportedSymbols);
+      violations.push(...apiViolations);
+    }
 
     // 3. 가짜 구현(Fake Logic) 체크: 파라미터를 무시한 채 고정된 값을 반환하는 등의 의심스러운 로직을 찾습니다.
     const fakeLogicViolations = (await checkFakeLogic(filePath)) || [];

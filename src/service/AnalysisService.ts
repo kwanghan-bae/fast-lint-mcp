@@ -50,8 +50,8 @@ export class AnalysisService {
     this.depGraph = new DependencyGraph(this.workspacePath);
     this.coverageAnalyzer = new CoverageAnalyzer(this.workspacePath);
 
-    this.providers.push(new JavascriptProvider(this.config));
-    this.providers.push(new KotlinProvider(this.config));
+    this.providers.push(new JavascriptProvider(this.config, this.semantic));
+    this.providers.push(new KotlinProvider(this.config, this.semantic));
   }
 
   /**

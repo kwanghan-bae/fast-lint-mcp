@@ -1,5 +1,6 @@
 import { Violation, QualityProvider } from '../types/index.js';
 import { ConfigService } from '../config.js';
+import { SemanticService } from '../service/SemanticService.js';
 
 /**
  * 언어별 품질 검사 프로바이더의 기반(Base)이 되는 추상 클래스입니다.
@@ -19,8 +20,12 @@ export abstract class BaseQualityProvider implements QualityProvider {
   /**
    * BaseQualityProvider 인스턴스를 생성합니다.
    * @param config 프로젝트 설정 서비스 (하위 클래스에서 공유하여 사용)
+   * @param semantic 심볼 분석 및 의존성 추적 서비스 (선택 사항)
    */
-  constructor(protected config: ConfigService) {}
+  constructor(
+    protected config: ConfigService,
+    protected semantic?: SemanticService
+  ) {}
 
   /**
    * 데이터 파일 여부 및 런타임 옵션에 따라 실질적인 임계값을 계산합니다. (v3.8)

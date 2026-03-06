@@ -200,6 +200,11 @@ export class SemanticService {
     return this.depGraph.getDependents(resolve(path));
   }
 
+  /** 프로젝트 내의 모든 공개(export) 심볼 목록을 가져옵니다. (v6.0.0 환각 탐지용) */
+  getAllExportedSymbols(): { name: string; file: string }[] {
+    return this.indexer.getAllExportedSymbols();
+  }
+
   async findDeadCode(): Promise<{ file: string; symbol: string }[]> {
     await this.ensureInitialized(true);
     const symbols = this.indexer.getAllExportedSymbols();

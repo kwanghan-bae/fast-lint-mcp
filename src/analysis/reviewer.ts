@@ -10,6 +10,82 @@ const KOREAN_CHAR_REGEX = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/;
 const COMMENT_PATTERN_REGEX = /\/\/|\/\*|\*/g;
 
 /**
+ * AST 기반의 결정론적 API 계약 검증을 수행하여 환각(Hallucination)을 탐지합니다.
+ * v6.0.0: 존재하지 않는 함수 호출이나 잘못된 API 사용을 잡아냅니다.
+ */
+export async function verifyAPIContracts(
+  root: SgNode,
+  filePath: string,
+  allExportedSymbols: { name: string; file: string }[] = []
+): Promise<Violation[]> {
+  const violations: Violation[] = [];
+  const calls = root.findAll({ rule: { kind: 'call_expression' } });
+
+  // 1. 현재 파일 내의 모든 정의(Definition) 수집
+  const localDefs = new Set<string>();
+  root
+    .findAll({
+      rule: {
+        any: [
+          { kind: 'function_declaration' },
+          { kind: 'class_declaration' },
+          { kind: 'variable_declarator' },
+          { kind: 'lexical_declaration' },
+        ],
+      },
+    })
+    .forEach((node) => {
+      const id = node.find({
+        rule: { any: [{ kind: 'identifier' }, { kind: 'property_identifier' }] },
+      });
+      if (id) localDefs.add(id.text().trim());
+    });
+
+  // 2. 현재 파일의 임포트(Import) 목록 수집
+  const imports = new Set<string>();
+  root.findAll({ rule: { kind: 'import_specifier' } }).forEach((node) => imports.add(node.text().trim()));
+  root.findAll({ rule: { kind: 'import_clause' } }).forEach((node) => {
+    const id = node.find({ rule: { kind: 'identifier' } });
+    if (id) imports.add(id.text().trim());
+  });
+
+  // 3. 표준 내장 객체 및 전역 변수 (Whitelist)
+  const builtins = new Set([
+    'console', 'Math', 'JSON', 'Promise', 'process', 'Object', 'Array', 
+    'String', 'Number', 'Boolean', 'Date', 'RegExp', 'Error',
+    'setTimeout', 'setInterval', 'setImmediate', 'clearTimeout', 'clearInterval', 'clearImmediate',
+    'require', 'module', 'exports', 'global', '__dirname', '__filename', 'Buffer'
+  ]);
+
+  // 4. 함수 호출부 검증
+  calls.forEach((call) => {
+    const fnNode = call.child(0); // function name or identifier
+    if (!fnNode) return;
+
+    // 단순 식별자 호출인 경우 (예: myFunc())
+    if (fnNode.kind() === 'identifier') {
+      const name = fnNode.text().trim();
+
+      // 지역 정의, 임포트, 표준 내장 객체, 전체 공개 심볼 중 어디에도 없는 경우
+      const isExternalExport = allExportedSymbols.some((s) => s.name === name);
+
+      if (!localDefs.has(name) && !imports.has(name) && !builtins.has(name) && !isExternalExport) {
+        violations.push({
+          type: 'HALLUCINATION',
+          file: filePath,
+          line: fnNode.range().start.line + 1,
+          rationale: `결정론적 AST 분석: 심볼 [${name}]의 정의를 찾을 수 없음`,
+          message: `[환각 경고] 존재하지 않거나 임포트되지 않은 함수 [${name}]을 호출하고 있습니다. 실제 존재하는 API인지 확인하십시오.`,
+        });
+      }
+    }
+    // 멤버 호출 (예: obj.method()) 등은 추후 정교화 가능 (v6.1 예정)
+  });
+
+  return violations;
+}
+
+/**
  * 정성적 코드 품질을 분석하고 시니어 개발자의 관점에서 조언을 생성합니다.
  */
 export async function runSemanticReview(
