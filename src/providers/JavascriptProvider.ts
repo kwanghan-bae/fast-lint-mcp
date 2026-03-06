@@ -90,7 +90,11 @@ export class JavascriptProvider extends BaseQualityProvider {
 
       if (validSymbols.length > 0) {
         const blueprint = validSymbols
-          .map((s) => `- [${s.kind}] ${s.name} (Complexity: ${s.complexity}, L${s.line})`)
+          .map((s) => {
+            const ratio =
+              metrics.complexity > 0 ? ((s.complexity / metrics.complexity) * 100).toFixed(0) : '0';
+            return `- [${s.kind}] ${s.name} (Complexity: ${s.complexity} [${ratio}%], L${s.line}-L${s.endLine})`;
+          })
           .join('\n');
 
         const root = AstCacheManager.getInstance().getRootNode(filePath);

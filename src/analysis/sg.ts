@@ -12,7 +12,13 @@ export interface FileAnalysis {
   lineCount: number; // 파일의 총 라인 수
   complexity: number; // 계산된 코드 복잡도 지수
   isDataFile: boolean; // 데이터 위주의 파일인지 여부 (리터럴 비중 80% 이상)
-  topComplexSymbols: { name: string; complexity: number; kind: string; line: number }[]; // 가장 복잡한 심볼 TOP 3
+  topComplexSymbols: {
+    name: string;
+    complexity: number;
+    kind: string;
+    line: number;
+    endLine: number;
+  }[]; // 가장 복잡한 심볼 TOP 3
   customViolations: { id: string; message: string }[]; // 사용자 정의 규칙 위반 목록
 }
 
@@ -84,7 +90,6 @@ export async function analyzeFile(
     }
 
     // 리터럴이 텍스트의 80% 이상을 차지하거나, 명시적 태그가 있는 경우 데이터 파일로 간주
-    // (중첩 노드로 인해 100%를 초과할 수 있으므로 최소값 방어)
     const literalRatio = dataTextLength / Math.max(1, text.length);
     const isDataFile = isTaggedData || (literalRatio > 0.8 && lineCount > 50);
 
@@ -95,7 +100,13 @@ export async function analyzeFile(
     }
 
     // 3. 심볼별 복잡도 추출 및 TOP 3 선정 (Refactoring Blueprint)
-    const symbols: { name: string; complexity: number; kind: string; line: number }[] = [];
+    const symbols: {
+      name: string;
+      complexity: number;
+      kind: string;
+      line: number;
+      endLine: number;
+    }[] = [];
     const symbolKinds = [
       'function_declaration',
       'class_declaration',
@@ -111,11 +122,13 @@ export async function analyzeFile(
         for (const pattern of COMPLEXITY_PATTERNS) {
           symbolComplexity += node.findAll(pattern).length;
         }
+        const range = node.range();
         symbols.push({
           name,
           complexity: symbolComplexity,
           kind: kind.replace('_declaration', '').replace('_definition', ''),
-          line: node.range().start.line + 1,
+          line: range.start.line + 1,
+          endLine: range.end.line + 1,
         });
       });
     }

@@ -53,6 +53,8 @@ export class AstCacheManager {
       if (entry.mtime === mtime) {
         return entry.root;
       }
+      // v6.2.0: mtime이 다르면 낡은 캐시를 즉시 파기
+      this.cache.delete(absPath);
     }
 
     try {
