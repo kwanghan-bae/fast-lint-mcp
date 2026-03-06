@@ -256,10 +256,17 @@ export class AnalysisService {
     files: string[],
     incremental: boolean
   ): Promise<QualityReport> {
+    // v6.1.0: 위반 사항 중복 제거 (Deduplication)
+    const uniqueViolations = Array.from(
+      new Map(
+        violations.map((v) => [`${v.type}:${v.file}:${v.line}:${v.message}`, v])
+      ).values()
+    );
+
     const lastCoverage = await this.stateManager.getLastCoverage();
-    let pass = violations.length === 0;
+    let pass = uniqueViolations.length === 0;
     if (lastCoverage !== null && cov.currentCoverage < lastCoverage) {
-      violations.push({
+      uniqueViolations.push({
         type: 'COVERAGE',
         message: `커버리지가 하락했습니다 (${lastCoverage.toFixed(1)}% -> ${cov.currentCoverage.toFixed(1)}%)`,
       });
@@ -270,7 +277,7 @@ export class AnalysisService {
     await this.stateManager.saveCoverage(cov.currentCoverage);
     return {
       pass,
-      violations,
+      violations: uniqueViolations,
       deepDive,
       suggestion: suggestion + (cov.coverageInsight ? `\n${cov.coverageInsight}` : ''),
       metadata: {

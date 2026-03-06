@@ -44,7 +44,12 @@ describe('AnalysisService Extra (Coverage & Error)', () => {
       getLastCoverage: vi.fn().mockReturnValue(null),
       saveCoverage: vi.fn(),
     };
-    service = new AnalysisService(mockStateManager as any, mockConfig as any, {} as any);
+    const mockSemantic = {
+      getAllExportedSymbols: vi.fn().mockReturnValue([]),
+      getSymbolMetrics: vi.fn().mockReturnValue([]),
+      ensureInitialized: vi.fn().mockResolvedValue(undefined),
+    };
+    service = new AnalysisService(mockStateManager as any, mockConfig as any, mockSemantic as any);
   });
 
   it('lcov.info 형식을 올바르게 파싱해야 한다', async () => {
