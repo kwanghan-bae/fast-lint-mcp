@@ -104,7 +104,8 @@ export async function checkSecrets(
     stringNodes.forEach((node) => {
       const text = node.text().replace(/["'`]/g, '').trim();
 
-      if (text.length > 8) {
+      // v6.1.1: 최소 길이 12자로 상향 (진짜 토큰은 대개 16자 이상)
+      if (text.length > 12) {
         // 지능형 화이트리스트
         if (SECURITY.SAFE_IDENTIFIER_REGEX.test(text)) return;
         if (
@@ -116,14 +117,18 @@ export async function checkSecrets(
         if (SECURITY.HEX_COLOR_REGEX.test(text)) return;
 
         const entropy = calculateEntropy(text);
-        if (entropy > threshold) {
-          if (!/[0-9]/.test(text) && entropy < 4.5) return;
+        
+        // v6.1.1: 문자열 길이에 따른 동적 임계값 적용 (16자 미만은 더 엄격하게)
+        const dynamicThreshold = text.length < 16 ? Math.max(threshold, 4.5) : threshold;
+
+        if (entropy > dynamicThreshold) {
+          if (!/[0-9]/.test(text) && entropy < 4.8) return;
           violations.push({
             type: 'SECURITY',
             file: filePath,
             line: node.range().start.line + 1,
             message: `높은 무작위성을 가진 문자열 발견 (엔트로피: ${entropy.toFixed(2)}).`,
-            rationale: `비밀번호나 API Key일 가능성이 큽니다.`,
+            rationale: `비밀번호나 API Key일 가능성이 큽니다. (기준: ${dynamicThreshold})`,
           });
         }
       }
