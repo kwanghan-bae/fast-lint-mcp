@@ -3,26 +3,36 @@
 이 문서는 AI 코딩 에이전트가 `fast-lint-mcp`를 **환각 판사(Hallucination Judge)**로 삼아 무결한 코드를 작성하도록 돕는 가이드입니다.
 
 ---
+## ⚡ 로컬 실행 및 검증 (Local Development)
 
-## ⚡ 빠른 실행 (Zero-Friction)
+아직 npm에 배포되지 않은 상태이므로, 로컬에서 다음 명령어로 기능을 검증하거나 에이전트와 연동하십시오.
 
-설치 없이 `npx`를 통해 즉시 프로젝트 품질을 진단할 수 있습니다.
+### 1. 1회성 진단 실행
 ```bash
-npx fast-lint-mcp check
+# 프로젝트 루트에서
+npx . check
+```
+
+### 2. 배포된 것처럼 시스템에 등록 (권장)
+```bash
+npm link
+# 이제 어디서든 아래 명령어로 실행 가능합니다.
+fast-lint-mcp check
 ```
 
 ---
 
 ## 1. Google Antigravity & IDE 설정
-MCP 서버 연동 시 `autoApprove` 설정을 통해 에이전트의 자율성을 극대화하십시오.
+MCP 서버 연동 시 로컬 빌드 경로를 직접 지정하는 것이 가장 안정적입니다.
 
 ### ✅ MCP 서버 설정 (`mcp_config.json`)
 ```json
 {
   "mcpServers": {
     "fast-lint-mcp": {
-      "command": "npx",
-      "args": ["-y", "fast-lint-mcp"],
+      "command": "node",
+      "args": ["/Users/joel/Desktop/git/fast-lint-mcp/dist/cli.js"],
+...
       "autoApprove": [
         "quality-check",
         "get-symbol-metrics",
