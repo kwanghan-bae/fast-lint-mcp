@@ -1,0 +1,22 @@
+[package]
+edition = "2021"
+name = "fast-lint-core"
+version = "0.0.1"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# NAPI-RS 핵심 의존성
+napi = { version = "2.12.2", default-features = false, features = ["napi3"] }
+napi-derive = "2.12.2"
+ignore = "0.4.22"
+rayon = "1.10.0"
+ast-grep-core = "0.40.5"
+regex = "1.10.3"
+
+[build-dependencies]
+napi-build = "2.0.1"
+
+[profile.release]
+lto = true

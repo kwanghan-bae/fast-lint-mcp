@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from 'fs';
 import { Lang, parse, SgNode } from '@ast-grep/napi';
 import { dirname, join, normalize, isAbsolute, relative } from 'path';
-import glob from 'fast-glob';
+import { scanFiles } from '../../native/index.js';
 import {
   resolveModulePath,
   loadProjectAliases,
@@ -33,13 +33,8 @@ export async function getProjectFiles(
     return projectFilesCache.files;
   }
 
-  // v4.6.0: workspacePath 하위로 탐색 범위를 엄격히 제한
-  const rawFiles = await glob(['**/*.{ts,js,tsx,jsx,json,css,svg,kt,kts}'], {
-    cwd: workspacePath,
-    absolute: true,
-    ignore: combinedPatterns,
-  });
-  const files = rawFiles.map((f) => normalize(f));
+  // v0.0.1: Rust Native Scanner를 사용하여 .gitignore를 준수하며 고속 탐색
+  const files = scanFiles(workspacePath, combinedPatterns).map((f) => normalize(f));
 
   projectFilesCache = { key: cacheKey, files };
   return files;
