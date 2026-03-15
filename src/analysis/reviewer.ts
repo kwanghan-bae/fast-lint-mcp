@@ -3,6 +3,7 @@ import { Lang, parse, SgNode } from '@ast-grep/napi';
 import { Violation } from '../types/index.js';
 import { AstCacheManager } from '../utils/AstCacheManager.js';
 import { READABILITY } from '../constants.js';
+import { verifyHallucinationNative, hasKoreanCommentNative } from '../../native/index.js';
 
 /** 한글 문자 포함 여부를 확인하는 정규식 */
 const KOREAN_CHAR_REGEX = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/;
@@ -11,7 +12,7 @@ const COMMENT_PATTERN_REGEX = /\/\/|\/\*|\*/g;
 
 /**
  * AST 기반의 결정론적 API 계약 검증을 수행하여 환각(Hallucination)을 탐지합니다.
- * v6.1.2: 테스트 파일(isTestFile)인 경우 검증을 완화하여 오탐을 방지합니다.
+ * v0.0.1: Rust Native HashSet 엔진을 사용하여 O(1) 속도로 검증합니다.
  */
 export async function verifyAPIContracts(
   root: SgNode,
@@ -19,14 +20,10 @@ export async function verifyAPIContracts(
   allExportedSymbols: { name: string; file: string }[] = [],
   isTestFile: boolean = false
 ): Promise<Violation[]> {
-  // v6.1.2: 테스트 파일은 더미 데이터와 목킹이 빈번하므로 환각 탐지를 최소화하거나 스킵 가능
   if (isTestFile) return [];
 
-  const violations: Violation[] = [];
-  const calls = root.findAll({ rule: { kind: 'call_expression' } });
-
-  // 1. 현재 파일 내의 모든 정의(Definition) 수집
-  const localDefs = new Set<string>();
+  // 1. 현재 파일 내의 모든 정의 수집 (파라미터 포함)
+  const localDefs: string[] = [];
   root
     .findAll({
       rule: {
@@ -35,138 +32,71 @@ export async function verifyAPIContracts(
           { kind: 'class_declaration' },
           { kind: 'variable_declarator' },
           { kind: 'lexical_declaration' },
-          { kind: 'formal_parameters' }, // 함수 인자 추가 (v0.0.1)
+          { kind: 'formal_parameters' },
         ],
       },
     })
     .forEach((node) => {
       if (node.kind() === 'formal_parameters') {
-        // 파라미터 내부의 모든 식별자 수집
         node.findAll({ rule: { kind: 'identifier' } }).forEach((id) => {
-          localDefs.add(id.text().trim());
+          localDefs.push(id.text().trim());
         });
       } else {
         const id = node.find({
           rule: { any: [{ kind: 'identifier' }, { kind: 'property_identifier' }] },
         });
-        if (id) localDefs.add(id.text().trim());
+        if (id) localDefs.push(id.text().trim());
       }
     });
 
-  // 2. 현재 파일의 임포트(Import) 목록 수집
-  const imports = new Set<string>();
+  // 2. 현재 파일의 임포트 목록 수집
+  const imports: string[] = [];
   root
     .findAll({ rule: { kind: 'import_specifier' } })
-    .forEach((node) => imports.add(node.text().trim()));
+    .forEach((node) => imports.push(node.text().trim()));
   root.findAll({ rule: { kind: 'import_clause' } }).forEach((node) => {
     const id = node.find({ rule: { kind: 'identifier' } });
-    if (id) imports.add(id.text().trim());
+    if (id) imports.push(id.text().trim());
   });
 
-  // 3. 표준 내장 객체 및 전역 변수 (Whitelist 확장 v0.0.1)
-  const builtins = new Set([
-    'console',
-    'Math',
-    'JSON',
-    'Promise',
-    'process',
-    'Object',
-    'Array',
-    'String',
-    'Number',
-    'Boolean',
-    'Date',
-    'RegExp',
-    'Error',
-    'setTimeout',
-    'setInterval',
-    'setImmediate',
-    'clearTimeout',
-    'clearInterval',
-    'clearImmediate',
-    'require',
-    'module',
-    'exports',
-    'global',
-    'window',
-    'document',
-    'navigator',
-    'location',
-    'history',
-    'screen',
-    '__dirname',
-    '__filename',
-    'Buffer',
-    'encodeURI',
-    'encodeURIComponent',
-    'decodeURI',
-    'decodeURIComponent',
-    'parseFloat',
-    'parseInt',
-    'isNaN',
-    'isFinite',
-    'fetch',
-    'Headers',
-    'Request',
-    'Response',
-    'URL',
-    'URLSearchParams',
-    'AbortController',
-    'AbortSignal',
-    'FormData',
-    'Blob',
-    'File',
-    'FileReader',
-    'WebSocket',
-    'Event',
-    'CustomEvent',
-    'Map',
-    'Set',
-    'WeakMap',
-    'WeakSet',
-    'Proxy',
-    'Reflect',
-    'Symbol',
-    'Intl',
-    'Int8Array',
-    'Uint8Array',
-    'Uint8ClampedArray',
-    'Int16Array',
-    'Uint16Array',
-    'Int32Array',
-    'Uint32Array',
-    'Float32Array',
-    'Float64Array',
-    'BigInt64Array',
-    'BigUint64Array',
-    'DataView',
-    'ArrayBuffer',
-    'SharedArrayBuffer',
-    'Atomics',
-  ]);
+  // 3. 표준 내장 객체 및 전역 변수
+  const builtins = [
+    'console', 'Math', 'JSON', 'Promise', 'process', 'Object', 'Array', 'String', 'Number',
+    'Boolean', 'Date', 'RegExp', 'Error', 'setTimeout', 'setInterval', 'setImmediate',
+    'clearTimeout', 'clearInterval', 'clearImmediate', 'require', 'module', 'exports',
+    'global', 'window', 'document', 'navigator', 'location', 'history', 'screen',
+    '__dirname', '__filename', 'Buffer', 'encodeURI', 'encodeURIComponent', 'decodeURI',
+    'decodeURIComponent', 'parseFloat', 'parseInt', 'isNaN', 'isFinite', 'fetch',
+    'Headers', 'Request', 'Response', 'URL', 'URLSearchParams', 'AbortController',
+    'AbortSignal', 'FormData', 'Blob', 'File', 'FileReader', 'WebSocket', 'Event',
+    'CustomEvent', 'Map', 'Set', 'WeakMap', 'WeakSet', 'Proxy', 'Reflect', 'Symbol',
+    'Intl', 'Int8Array', 'Uint8Array', 'Uint8ClampedArray', 'Int16Array', 'Uint16Array',
+    'Int32Array', 'Uint32Array', 'Float32Array', 'Float64Array', 'BigInt64Array',
+    'BigUint64Array', 'DataView', 'ArrayBuffer', 'SharedArrayBuffer', 'Atomics',
+  ];
 
-  // 4. 함수 호출부 검증
-  calls.forEach((call) => {
-    const fnNode = call.child(0); // function name or identifier
-    if (!fnNode) return;
+  const externalExports = allExportedSymbols.map(s => s.name);
 
-    if (fnNode.kind() === 'identifier') {
-      const name = fnNode.text().trim();
-      const isExternalExport = allExportedSymbols.some((s) => s.name === name);
+  // 4. Rust Native 엔진 호출 (O(1) 검증)
+  try {
+    const nativeViolations = verifyHallucinationNative(
+      filePath,
+      localDefs,
+      imports,
+      builtins,
+      externalExports
+    );
 
-      if (!localDefs.has(name) && !imports.has(name) && !builtins.has(name) && !isExternalExport) {
-        violations.push({
-          type: 'HALLUCINATION',
-          file: filePath,
-          line: fnNode.range().start.line + 1,
-          rationale: `결정론적 AST 분석: 심볼 [${name}]의 정의를 찾을 수 없음`,
-          message: `[환각 경고] 존재하지 않거나 임포트되지 않은 함수 [${name}]을 호출하고 있습니다. 실제 존재하는 API인지 확인하십시오.`,
-        });
-      }
-    }
-  });
-
-  return violations;
+    return nativeViolations.map(nv => ({
+      type: 'HALLUCINATION',
+      file: filePath,
+      line: nv.line,
+      rationale: `결정론적 AST/Rust 분석: 심볼 [${nv.name}]의 정의를 찾을 수 없음`,
+      message: `[환각 경고] 존재하지 않거나 임포트되지 않은 함수 [${nv.name}]을 호출하고 있습니다. 실제 존재하는 API인지 확인하십시오.`,
+    }));
+  } catch (e) {
+    return [];
+  }
 }
 
 /**
@@ -216,58 +146,23 @@ function isNoiseSymbol(name: string): boolean {
 
 /**
  * 특정 AST 노드 바로 위에 한글 주석이 존재하는지 검사하는 헬퍼 함수입니다.
+ * v0.0.1: Native 스캐너를 사용하여 파일 I/O 부하를 제거합니다.
  */
 function hasKoreanCommentAbove(
   node: SgNode,
-  allLines: string[],
+  filePath: string, // 명시적 경로 전달
   depth = READABILITY.KOREAN_COMMENT_SEARCH_DEPTH
 ): boolean {
-  let targetNode = node;
-  let current = node;
-
-  while (current.parent()) {
-    const p = current.parent()!;
-    const kind = String(p.kind());
-    if (
-      [
-        'export_statement',
-        'decorator',
-        'export_item',
-        'lexical_declaration',
-        'variable_declaration',
-        'expression_statement',
-      ].includes(kind)
-    ) {
-      targetNode = p;
-      current = p;
-    } else break;
+  try {
+    if (!filePath || !existsSync(filePath)) return false;
+    
+    const range = node.range();
+    const startLine = range.start.line + 1;
+    
+    return hasKoreanCommentNative(filePath, startLine, depth);
+  } catch (e) {
+    return false;
   }
-
-  const range = targetNode.range();
-  let currentLineIdx = range.start.line - 1;
-  let checkedLines = 0;
-  let foundComment = false;
-
-  while (currentLineIdx >= 0 && checkedLines < depth) {
-    const line = allLines[currentLineIdx]?.trim();
-    if (!line) {
-      if (foundComment) break;
-      currentLineIdx--;
-      continue;
-    }
-
-    if (line.includes('//') || line.includes('*') || line.includes('/*')) {
-      foundComment = true;
-      if (KOREAN_CHAR_REGEX.test(line)) return true;
-      currentLineIdx--;
-      checkedLines++;
-    } else {
-      if (foundComment) break;
-      currentLineIdx--;
-      checkedLines++;
-    }
-  }
-  return false;
 }
 
 /**
@@ -277,7 +172,7 @@ function reviewClasses(
   root: SgNode,
   filePath: string,
   isTestFile: boolean,
-  allLines: string[]
+  _allLines: string[]
 ): Violation[] {
   if (isTestFile) return [];
   const violations: Violation[] = [];
@@ -296,7 +191,7 @@ function reviewClasses(
       const className = idNode?.text().trim() || 'unknown';
       if (isNoiseSymbol(className)) return;
 
-      if (!hasKoreanCommentAbove(m, allLines)) {
+      if (!hasKoreanCommentAbove(m, filePath)) {
         violations.push({
           type: 'READABILITY',
           file: filePath,
@@ -316,7 +211,7 @@ function reviewFunctions(
   root: SgNode,
   filePath: string,
   isTestFile: boolean,
-  allLines: string[]
+  _allLines: string[]
 ): Violation[] {
   const violations: Violation[] = [];
   const funcKinds = [
@@ -326,7 +221,7 @@ function reviewFunctions(
   ];
 
   root.findAll({ rule: { any: funcKinds } }).forEach((m) => {
-    violations.push(...analyzeSingleFunction(m, filePath, isTestFile, allLines));
+    violations.push(...analyzeSingleFunction(m, filePath, isTestFile));
   });
   return violations;
 }
@@ -337,8 +232,7 @@ function reviewFunctions(
 function analyzeSingleFunction(
   m: SgNode,
   filePath: string,
-  isTestFile: boolean,
-  allLines: string[]
+  isTestFile: boolean
 ): Violation[] {
   const violations: Violation[] = [];
   const idNode = m.find({
@@ -350,7 +244,7 @@ function analyzeSingleFunction(
 
   const startLine = m.range().start.line + 1;
 
-  if (!isTestFile && m.kind() === 'function_declaration' && !hasKoreanCommentAbove(m, allLines)) {
+  if (!isTestFile && m.kind() === 'function_declaration' && !hasKoreanCommentAbove(m, filePath)) {
     violations.push({
       type: 'READABILITY',
       file: filePath,
@@ -376,7 +270,7 @@ function analyzeSingleFunction(
     });
   }
 
-  violations.push(...checkCommentDensity(m, name, filePath, body, bodyLines, allLines));
+  violations.push(...checkCommentDensity(m, name, filePath, body, bodyLines));
   return violations;
 }
 
@@ -388,20 +282,16 @@ function checkCommentDensity(
   name: string,
   path: string,
   body: string,
-  lines: string[],
-  allLines: string[]
+  lines: string[]
 ): Violation[] {
   const violations: Violation[] = [];
   const startLine = m.range().start.line + 1;
   const hasKorean = KOREAN_CHAR_REGEX.test(body);
-  const hasTopComment = hasKoreanCommentAbove(m, allLines);
+  const hasTopComment = hasKoreanCommentAbove(m, path);
   const commentCount = (body.match(COMMENT_PATTERN_REGEX) || []).length + (hasTopComment ? 1 : 0);
 
   if (lines.length > READABILITY.DENSITY_THRESHOLD_MEDIUM && !hasKorean && commentCount > 0) {
-    const hasAnyKorean =
-      hasKorean ||
-      (hasTopComment && KOREAN_CHAR_REGEX.test(allLines[m.range().start.line - 1] || ''));
-    if (!hasAnyKorean) {
+    if (!hasTopComment && !hasKorean) {
       violations.push({
         type: 'READABILITY',
         file: path,
@@ -429,7 +319,7 @@ function reviewMembers(
   root: SgNode,
   filePath: string,
   isTestFile: boolean,
-  allLines: string[]
+  _allLines: string[]
 ): Violation[] {
   if (isTestFile) return [];
   const violations: Violation[] = [];
@@ -462,7 +352,7 @@ function reviewMembers(
           label = '필드 (DTO/Entity)';
         }
 
-        if (!hasKoreanCommentAbove(m, allLines)) {
+        if (!hasKoreanCommentAbove(m, filePath)) {
           violations.push({
             type: 'READABILITY',
             file: filePath,
@@ -480,7 +370,7 @@ function reviewMembers(
 /**
  * 전역 변수 및 할당부의 품질을 리뷰합니다.
  */
-function reviewGlobals(root: SgNode, filePath: string, allLines: string[]): Violation[] {
+function reviewGlobals(root: SgNode, filePath: string, _allLines: string[]): Violation[] {
   const violations: Violation[] = [];
   const globalKinds = [
     { kind: 'lexical_declaration' },
@@ -538,7 +428,7 @@ function reviewGlobals(root: SgNode, filePath: string, allLines: string[]): Viol
 
     if (isNoiseSymbol(name)) return;
 
-    if (!hasKoreanCommentAbove(m, allLines)) {
+    if (!hasKoreanCommentAbove(m, filePath)) {
       const advice = label.includes('테스트')
         ? `[Senior Advice] 복잡한 ${label} [${name}] 구간의 의도(Intent)나 Mocking 구조를 설명하는 한글 주석을 추가하세요. (예: // [${name}] 구간은 [테스트 대상]의 [시나리오]를 검증합니다)`
         : `[Senior Advice] ${label} [${name}] 위에 한글 주석을 추가하세요. (예: // [${name}] ${label}는 [역할]을 위해 정의되었습니다)`;

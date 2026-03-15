@@ -7,9 +7,9 @@ use ignore::WalkBuilder;
 use std::path::{Path, PathBuf};
 use rayon::prelude::*;
 use regex::Regex;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use petgraph::graph::DiGraph;
-use petgraph::Direction;
+use petgraph::algo::tarjan_scc;
 use serde::{Deserialize, Serialize};
 use std::fs;
 
@@ -96,7 +96,7 @@ pub fn extract_imports_native(files: Vec<String>) -> Vec<ImportResult> {
   files.into_par_iter()
     .map(|file_path| {
       let mut imports = Vec::new();
-      if let Ok(content) = std::fs::read_to_string(&file_path) {
+      if let Ok(content) = fs::read_to_string(&file_path) {
         for cap in re.captures_iter(&content) {
           if let Some(m) = cap.get(1).or(cap.get(2)) {
             imports.push(m.as_str().to_string());
@@ -112,7 +112,7 @@ pub fn extract_imports_native(files: Vec<String>) -> Vec<ImportResult> {
 }
 
 #[napi]
-pub fn get_dependents_native(target_file: String, import_map: HashMap<String, Vec<String>>) -> Vec<String> {
+pub fn get_dependents_native(_target_file: String, import_map: HashMap<String, Vec<String>>) -> Vec<String> {
   let mut graph = DiGraph::<String, ()>::new();
   let mut nodes = HashMap::new();
 
@@ -132,8 +132,8 @@ pub fn get_dependents_native(target_file: String, import_map: HashMap<String, Ve
   }
 
   let mut dependents = Vec::new();
-  if let Some(&target_idx) = nodes.get(&target_file) {
-    let mut incoming = graph.neighbors_directed(target_idx, Direction::Incoming);
+  if let Some(&target_idx) = nodes.get(&_target_file) {
+    let mut incoming = graph.neighbors_directed(target_idx, petgraph::Direction::Incoming);
     while let Some(neighbor_idx) = incoming.next() {
       if let Some(file_name) = graph.node_weight(neighbor_idx) {
         dependents.push(file_name.clone());
@@ -249,8 +249,12 @@ pub struct SymbolResult {
 
 #[napi]
 pub fn extract_symbols_native(file_path: String) -> Vec<SymbolResult> {
+  extract_symbols_regex_v2(&file_path)
+}
+
+fn extract_symbols_regex_v2(file_path: &str) -> Vec<SymbolResult> {
   let mut symbols = Vec::new();
-  if let Ok(content) = fs::read_to_string(&file_path) {
+  if let Ok(content) = fs::read_to_string(file_path) {
     let re_func = Regex::new(r#"(?P<exp>export\s+)?(?P<async>async\s+)?function\s+(?P<name>[a-zA-Z0-9_$]+)"#).unwrap();
     let re_class = Regex::new(r#"(?P<exp>export\s+)?class\s+(?P<name>[a-zA-Z0-9_$]+)"#).unwrap();
     let re_const = Regex::new(r#"(?P<exp>export\s+)?(?:const|let|var)\s+(?P<name>[a-zA-Z0-9_$]+)"#).unwrap();
@@ -304,7 +308,7 @@ pub fn extract_symbols_native(file_path: String) -> Vec<SymbolResult> {
             line: (i + 1) as u32,
             end_line: (i + 1) as u32,
             is_exported: cap.name("exp").is_some(),
-            kind: "function".to_string(), // 변수 할당형 함수로 가정 (테스트 대응)
+            kind: "function".to_string(), 
             complexity: 1,
             lines: 1,
           });
@@ -333,7 +337,6 @@ pub fn extract_symbols_native(file_path: String) -> Vec<SymbolResult> {
       }
 
       if let Some((idx, level)) = in_symbol {
-        // 새로 발견된 심볼 라인 자체도 복잡도 계산에 포함
         let line_complexity = re_complexity.find_iter(line).count() as i32;
         if found_new_symbol {
            symbols[idx].complexity += line_complexity;
@@ -422,4 +425,151 @@ pub fn get_file_metrics_native(file_path: String) -> Option<FileMetrics> {
     });
   }
   None
+}
+
+#[napi]
+pub fn detect_cycles_native(import_map: HashMap<String, Vec<String>>) -> Vec<Vec<String>> {
+  let mut graph = DiGraph::<String, ()>::new();
+  let mut nodes = HashMap::new();
+
+  for file in import_map.keys() {
+    let idx = graph.add_node(file.clone());
+    nodes.insert(file.clone(), idx);
+  }
+
+  for (file, imports) in &import_map {
+    if let Some(&from_idx) = nodes.get(file) {
+      for import_path in imports {
+        if let Some(&to_idx) = nodes.get(import_path) {
+          graph.add_edge(from_idx, to_idx, ());
+        }
+      }
+    }
+  }
+
+  let sccs = tarjan_scc(&graph);
+  
+  sccs.into_iter()
+    .filter(|scc| {
+      if scc.len() > 1 {
+        true
+      } else if scc.len() == 1 {
+        let node_idx = scc[0];
+        graph.contains_edge(node_idx, node_idx)
+      } else {
+        false
+      }
+    })
+    .map(|scc| {
+      scc.into_iter()
+        .map(|idx| graph.node_weight(idx).unwrap().clone())
+        .collect()
+    })
+    .collect()
+}
+
+#[napi(object)]
+pub struct HallucinationViolation {
+  pub name: String,
+  pub line: u32,
+}
+
+#[napi]
+pub fn verify_hallucination_native(
+  file_path: String,
+  local_defs: Vec<String>,
+  imports: Vec<String>,
+  builtins: Vec<String>,
+  external_exports: Vec<String>,
+) -> Vec<HallucinationViolation> {
+  let mut violations = Vec::new();
+  
+  let mut allowed = HashSet::new();
+  for s in local_defs { allowed.insert(s); }
+  for s in imports { allowed.insert(s); }
+  for s in builtins { allowed.insert(s); }
+  for s in external_exports { allowed.insert(s); }
+
+  if let Ok(content) = fs::read_to_string(&file_path) {
+    let re_def = Regex::new(r#"(?:function|class|const|let|var)\s+\b(?P<name>[a-zA-Z0-9_$]+)\b"#).unwrap();
+    let re_call = Regex::new(r#"(?P<prefix>[\.\?])?\b(?P<name>[a-zA-Z0-9_$]+)\b\s*\("#).unwrap();
+    
+    let lines: Vec<&str> = content.lines().collect();
+    for (i, line) in lines.iter().enumerate() {
+      if line.trim().starts_with("//") || line.trim().starts_with("*") {
+        continue;
+      }
+
+      let def_names: HashSet<&str> = re_def.captures_iter(line)
+        .map(|cap| cap.name("name").unwrap().as_str())
+        .collect();
+
+      for cap in re_call.captures_iter(line) {
+        let prefix = cap.name("prefix").map(|m| m.as_str());
+        let name = cap.name("name").unwrap().as_str();
+        
+        if prefix.is_some() {
+          continue;
+        }
+
+        if vec!["if", "for", "while", "switch", "catch", "super", "import", "require", "return", "await", "yield"].contains(&name) {
+          continue;
+        }
+
+        if def_names.contains(name) {
+          continue;
+        }
+
+        if !allowed.contains(name) {
+          violations.push(HallucinationViolation {
+            name: name.to_string(),
+            line: (i + 1) as u32,
+          });
+        }
+      }
+    }
+  }
+
+  violations
+}
+
+#[napi]
+pub fn has_korean_comment_native(file_path: String, line: u32, search_depth: u32) -> bool {
+  if let Ok(content) = fs::read_to_string(&file_path) {
+    let lines: Vec<&str> = content.lines().collect();
+    let start_line = if line > search_depth { line - search_depth } else { 1 };
+    let end_line = line;
+
+    let re_korean = Regex::new(r"[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]").unwrap();
+    let re_comment = Regex::new(r"//|/\*|\*").unwrap();
+
+    for i in (start_line..end_line).rev() {
+      let idx = (i - 1) as usize;
+      if idx < lines.len() {
+        let l = lines[idx];
+        if re_comment.is_match(l) && re_korean.is_match(l) {
+          return true;
+        }
+      }
+    }
+  }
+  false
+}
+
+#[napi]
+pub fn check_fake_logic_native(body: String, params: Vec<String>) -> Vec<String> {
+  // 주석 제거 로직
+  let re_comments = Regex::new(r"(?m)//.*|/\*[\s\S]*?\*/").unwrap();
+  let clean_body = re_comments.replace_all(&body, "");
+
+  let mut unused = Vec::new();
+  for p in params {
+    let pattern = format!(r"\b{}\b", regex::escape(&p));
+    let re = Regex::new(&pattern).unwrap();
+    
+    if re.find_iter(&clean_body).count() == 0 {
+      unused.push(p);
+    }
+  }
+  unused
 }

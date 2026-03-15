@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from 'fs';
 import { Lang, parse, SgNode } from '@ast-grep/napi';
 import { dirname, join, normalize, isAbsolute, relative } from 'path';
-import { scanFiles } from '../../native/index.js';
+import { scanFiles, checkFakeLogicNative } from '../../native/index.js';
 import {
   resolveModulePath,
   loadProjectAliases,
@@ -253,15 +253,8 @@ async function loadAllDependencies(filePath: string, workspacePath: string): Pro
 }
 
 /**
- * 정규식 메타 문자를 이스케이프 처리합니다.
- */
-function escapeRegExp(string: string) {
-  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-/**
  * 에이전트의 '가짜 구현(Fake Logic)' 여부를 탐지합니다.
- * v4.3.0: AST + 텍스트 하이브리드 탐색으로 Shorthand Property 및 모든 식별자 참조 완벽 지원.
+ * v0.0.1: Rust Native Regex 엔진을 사용하여 GC 부하를 제거하고 성능을 향상시킵니다.
  */
 export async function checkFakeLogic(
   filePath: string
@@ -334,36 +327,11 @@ export async function checkFakeLogic(
           (p) => p.length > 0 && !['props', 'req', 'res', 'next', 'ctx'].includes(p)
         );
 
-        // v4.3.0: 텍스트 기반 카운팅 + AST 하이브리드 탐색 (가장 견고함)
+        // v0.0.1: Native Regex 스캐너 호출 (GC 부하 제거)
         if (pList.length > 0) {
-          const functionText = m.text();
-          const paramsText = paramsNode.text();
+          const unusedParams = checkFakeLogicNative(body, pList);
 
-          const allUnused = pList.every((p) => {
-            // 1. AST 정밀 탐색 시도
-            try {
-              const usageMatches = bodyNode.findAll({
-                rule: {
-                  any: [
-                    { kind: 'identifier', pattern: p },
-                    { kind: 'shorthand_property_identifier', pattern: p },
-                    { pattern: p },
-                  ],
-                },
-              });
-              if (usageMatches.length > 0) return false; // 사용됨
-            } catch (e) {}
-
-            // 2. 텍스트 카운팅 폴백 (AST가 놓치는 특수 구문 대응)
-            const reg = new RegExp(`\\b${escapeRegExp(p)}\\b`, 'g');
-            const countInParams = (paramsText.match(reg) || []).length;
-            const countInFunction = (functionText.match(reg) || []).length;
-
-            // 본체에서의 발생 횟수가 선언부 발생 횟수보다 많으면 사용된 것으로 간주
-            return countInFunction <= countInParams;
-          });
-
-          if (allUnused) {
+          if (unusedParams.length === pList.length) {
             violations.push({
               id: 'FAKE_LOGIC_CONST',
               line: m.range().start.line + 1,

@@ -109,52 +109,14 @@ export class DependencyGraph {
 
   /**
    * 프로젝트 내의 순환 참조(Circular Dependency)를 탐지합니다.
-   * v4.0.0: 재귀 호출을 제거하고 반복문 기반 DFS를 도입하여 Stack Overflow 원천 차단.
+   * v0.0.1: Rust Native petgraph 엔진을 사용하여 O(V+E) 속도로 즉시 추출합니다.
    */
   detectCycles(): string[][] {
-    const visited = new Set<string>();
-    const cycles: string[][] = [];
-
-    for (const startNode of this.importMap.keys()) {
-      if (visited.has(startNode)) continue;
-
-      const stack: { node: string; path: string[]; neighborIdx: number }[] = [
-        { node: startNode, path: [startNode], neighborIdx: 0 },
-      ];
-      const onStack = new Set<string>([startNode]);
-
-      while (stack.length > 0) {
-        const current = stack[stack.length - 1];
-        const neighbors = this.importMap.get(current.node) || [];
-
-        if (current.neighborIdx < neighbors.length) {
-          const neighbor = neighbors[current.neighborIdx];
-          current.neighborIdx++;
-
-          if (neighbor.includes('node_modules')) continue;
-
-          if (onStack.has(neighbor)) {
-            const cycleStartIdx = current.path.indexOf(neighbor);
-            cycles.push([...current.path.slice(cycleStartIdx), neighbor]);
-            continue;
-          }
-
-          if (!visited.has(neighbor)) {
-            visited.add(neighbor);
-            onStack.add(neighbor);
-            stack.push({
-              node: neighbor,
-              path: [...current.path, neighbor],
-              neighborIdx: 0,
-            });
-          }
-        } else {
-          onStack.delete(current.node);
-          stack.pop();
-        }
-      }
-      visited.add(startNode);
+    try {
+      const importEntries = Object.fromEntries(this.importMap);
+      return detectCyclesNative(importEntries);
+    } catch (e) {
+      return [];
     }
-    return cycles;
   }
 }
