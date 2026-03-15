@@ -25,6 +25,12 @@ coverage/
 .DS_Store
 Thumbs.db
 
+# Rust / NAPI-RS
+native/target/
+native/*.node
+native/index.js
+native/index.d.ts
+
 # Secrets
 .env
 .env.local
