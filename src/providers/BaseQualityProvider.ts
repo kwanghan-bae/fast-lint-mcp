@@ -50,6 +50,7 @@ export abstract class BaseQualityProvider implements QualityProvider {
       securityThreshold?: number;
       maxLines?: number;
       maxComplexity?: number;
+      batchResult?: any;
     }
   ): Promise<Violation[]>;
 

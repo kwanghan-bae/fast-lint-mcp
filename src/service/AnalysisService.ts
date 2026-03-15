@@ -18,6 +18,7 @@ import os from 'os';
 import { AstCacheManager } from '../utils/AstCacheManager.js';
 import { SYSTEM, VERSION } from '../constants.js';
 import { CoverageAnalyzer } from '../utils/CoverageAnalyzer.js';
+import { runBatchAnalysisNative } from '../../native/index.js';
 
 /**
  * 품질 분석 결과를 담는 내부 인터페이스입니다.
@@ -186,6 +187,14 @@ export class AnalysisService {
   /** 개별 파일들에 대한 품질 분석을 병렬로 수행합니다. */
   private async performFileAnalysis(files: string[], options: any) {
     const cpuCount = os.cpus().length;
+
+    // v0.0.1: Rust Native Batch Analysis (Symbols + Secrets)
+    const absFiles = files.map((f) => (isAbsolute(f) ? f : join(this.workspacePath, f)));
+    const batchResults = runBatchAnalysisNative(absFiles);
+
+    // 결과를 맵에 저장하여 Provider가 활용할 수 있게 함
+    const batchMap = new Map(batchResults.map((r) => [normalize(r.file), r]));
+
     const analysisResults = await pMap(
       files,
       async (file) => {
@@ -193,7 +202,12 @@ export class AnalysisService {
         const fullPath = isAbsolute(file) ? file : join(this.workspacePath, file);
         const provider = this.providers.find((p) => p.extensions.includes(extname(fullPath)));
         if (!provider) return null;
-        const fileViolations = await provider.check(fullPath, options);
+
+        // 배치 결과 주입 (Provider가 내부적으로 사용하도록 옵션으로 전달)
+        const fileViolations = await provider.check(fullPath, {
+          ...options,
+          batchResult: batchMap.get(normalize(fullPath)),
+        });
         return { fileViolations } as AnalysisResult;
       },
       { concurrency: Math.max(1, cpuCount - SYSTEM.CONCURRENCY_MARGIN) }

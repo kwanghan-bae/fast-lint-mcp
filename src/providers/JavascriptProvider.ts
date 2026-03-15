@@ -11,7 +11,6 @@ import { AstCacheManager } from '../utils/AstCacheManager.js';
 import { checkTestValidity } from '../analysis/test-check.js';
 
 // AST 패턴 정의 (v3.0 Semantic)
-/** UI 렌더링 및 프레임워크 관련 AST 패턴 목록 */
 const UI_AST_PATTERNS = [
   'use$A($$$)', // Hooks
   '< $A $$$ />', // JSX
@@ -19,7 +18,6 @@ const UI_AST_PATTERNS = [
   'render($$$)',
 ];
 
-/** 고도의 비즈니스 로직 및 연산 관련 AST 패턴 목록 */
 const LOGIC_AST_PATTERNS = [
   'Math.$A($$$)',
   'new Map($$$)',
@@ -30,29 +28,26 @@ const LOGIC_AST_PATTERNS = [
 
 /**
  * JavaScript 및 TypeScript 언어에 특화된 품질 분석을 수행하는 프로바이더 클래스입니다.
- * v6.1.2: 테스트 파일에 대한 컨텍스트 인식 분석 강화.
+ * v0.0.1: Native Batch Analysis 결과를 우선 활용하여 성능을 극대화합니다.
  */
 export class JavascriptProvider extends BaseQualityProvider {
-  // 프로바이더 이름 정의
   name = 'Javascript/TypeScript';
-  // 분석 가능한 파일 확장자 정의
   extensions = ['.ts', '.js', '.tsx', '.jsx'];
 
-  /**
-   * 지정된 파일에 대해 종합적인 품질 검사를 수행합니다.
-   */
   async check(
     filePath: string,
     options?: {
       securityThreshold?: number;
       maxLines?: number;
       maxComplexity?: number;
+      batchResult?: any;
     }
   ): Promise<Violation[]> {
     const violations: Violation[] = [];
     const customRules = this.config.customRules;
+    const batch = options?.batchResult;
 
-    // 테스트 파일 여부 판별 (v3.0)
+    // 테스트 파일 여부 판별
     const isTestFile =
       filePath.match(/\.(test|spec)\.[tj]sx?$/) ||
       filePath.includes('/tests/') ||
@@ -69,8 +64,22 @@ export class JavascriptProvider extends BaseQualityProvider {
       }
     }
 
-    // 1. 기본 AST 메트릭 분석
-    const metrics = await analyzeFile(filePath, customRules);
+    // 1. 기본 메트릭 분석 (Native Batch Result 활용)
+    let metrics: any;
+    if (batch && (!customRules || customRules.length === 0)) {
+      metrics = {
+        lineCount: batch.lineCount,
+        complexity: batch.complexity,
+        isDataFile: batch.lineCount > 50 && batch.complexity / batch.lineCount < 0.1, // Heuristic
+        topComplexSymbols: batch.symbols
+          .sort((a: any, b: any) => b.complexity - a.complexity)
+          .slice(0, 3),
+        customViolations: [],
+      };
+    } else {
+      metrics = await analyzeFile(filePath, customRules);
+    }
+
     const isDataFile = metrics.isDataFile;
     const { maxLines, maxComplexity } = this.getEffectiveLimits(isDataFile, options);
 
@@ -86,11 +95,11 @@ export class JavascriptProvider extends BaseQualityProvider {
     }
 
     if (!isDataFile && metrics.complexity > maxComplexity) {
-      const validSymbols = metrics.topComplexSymbols.filter((s) => s.name.length > 3);
+      const validSymbols = metrics.topComplexSymbols.filter((s: any) => s.name.length > 3);
 
       if (validSymbols.length > 0) {
         const blueprint = validSymbols
-          .map((s) => {
+          .map((s: any) => {
             const ratio =
               metrics.complexity > 0 ? ((s.complexity / metrics.complexity) * 100).toFixed(0) : '0';
             return `- [${s.kind}] ${s.name} (Complexity: ${s.complexity} [${ratio}%], L${s.line}-L${s.endLine})`;
@@ -143,7 +152,7 @@ export class JavascriptProvider extends BaseQualityProvider {
       });
     });
 
-    // 2.1 결정론적 API 계약 검증 (v6.1.2: 테스트 파일 컨텍스트 전달)
+    // 2.1 결정론적 API 계약 검증
     const root = AstCacheManager.getInstance().getRootNode(filePath);
     if (root && this.semantic) {
       const exportedSymbols = this.semantic.getAllExportedSymbols();
@@ -157,7 +166,6 @@ export class JavascriptProvider extends BaseQualityProvider {
     }
 
     // 3. 가짜 구현(Fake Logic) 체크
-    // v6.1.2: 테스트 파일은 의도적인 가짜 로직이 많으므로 스킵합니다.
     if (!isTestFile) {
       const fakeLogicViolations = (await checkFakeLogic(filePath)) || [];
       fakeLogicViolations.forEach((fv: any) => {
@@ -189,11 +197,21 @@ export class JavascriptProvider extends BaseQualityProvider {
       });
     }
 
-    // 5. 보안(Secret) 스캔
-    // v6.1.2: 테스트 파일은 보안 임계값을 완화합니다 (4.0 -> 5.0).
-    const effectiveSecurityThreshold = isTestFile ? 5.0 : options?.securityThreshold;
-    const secretViolations = await checkSecrets(filePath, effectiveSecurityThreshold);
-    violations.push(...secretViolations);
+    // 5. 보안(Secret) 스캔 (Native Batch Result 활용)
+    if (batch) {
+      batch.secrets.forEach((sv: any) => {
+        violations.push({
+          type: 'SECURITY',
+          file: filePath,
+          line: sv.line,
+          message: sv.message,
+          rationale: sv.rationale,
+        });
+      });
+    } else {
+      const secretViolations = await checkSecrets(filePath);
+      violations.push(...secretViolations);
+    }
 
     // 6. 시맨틱 코드 리뷰
     const reviewViolations = await runSemanticReview(filePath, isDataFile);
@@ -211,17 +229,14 @@ export class JavascriptProvider extends BaseQualityProvider {
       });
     }
 
-    // 사용자 정의 규칙(Custom Rules) 위반 사항 추가
-    metrics.customViolations?.forEach((cv) => {
+    // 사용자 정의 규칙 위반 사항 추가
+    metrics.customViolations?.forEach((cv: any) => {
       violations.push({ type: 'CUSTOM', file: filePath, message: `[${cv.id}] ${cv.message}` });
     });
 
     return violations;
   }
 
-  /**
-   * 발견된 사소한 오류들에 대해 자가 치유(Self-Healing) 프로세스를 실행합니다.
-   */
   override async fix(files: string[], workspacePath: string) {
     return runSelfHealing(files, workspacePath);
   }

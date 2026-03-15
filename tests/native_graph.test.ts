@@ -11,12 +11,12 @@ describe('Native Dependency Graph (Commit 3.2)', () => {
       'fileA.ts': ['fileB.ts'],
       'fileB.ts': ['fileD.ts'],
       'fileC.ts': ['fileB.ts'],
-      'fileD.ts': []
+      'fileD.ts': [],
     };
 
     // fileB.ts를 참조하는 파일은 fileA.ts와 fileC.ts여야 함
     const dependents = getDependentsNative('fileB.ts', importMap);
-    
+
     expect(dependents.length).toBe(2);
     expect(dependents).toContain('fileA.ts');
     expect(dependents).toContain('fileC.ts');
@@ -25,7 +25,7 @@ describe('Native Dependency Graph (Commit 3.2)', () => {
   it('참조하는 파일이 없으면 빈 배열을 반환해야 한다', () => {
     const importMap = {
       'fileA.ts': ['fileB.ts'],
-      'fileB.ts': []
+      'fileB.ts': [],
     };
 
     const dependents = getDependentsNative('fileA.ts', importMap);

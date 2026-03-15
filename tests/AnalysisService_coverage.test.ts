@@ -1,11 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AnalysisService } from '../src/service/AnalysisService.js';
 import * as fs from 'fs';
 import { join } from 'path';
 import { DependencyGraph } from '../src/utils/DependencyGraph.js';
 import glob from 'fast-glob';
 
-vi.mock('fs');
 vi.mock('fast-glob');
 vi.mock('simple-git', () => ({
   simpleGit: () => ({
@@ -18,8 +17,10 @@ vi.mock('../src/utils/DependencyGraph.js');
 
 describe('AnalysisService Extra (Coverage & Error)', () => {
   let service: AnalysisService;
+  const testDir = join(process.cwd(), 'temp_coverage_service_test');
 
   beforeEach(() => {
+    if (!fs.existsSync(testDir)) fs.mkdirSync(testDir, { recursive: true });
     vi.clearAllMocks();
     vi.mocked(DependencyGraph).prototype.build = vi.fn().mockResolvedValue(undefined);
     vi.mocked(DependencyGraph).prototype.getDependents = vi.fn().mockReturnValue([]);
@@ -32,7 +33,7 @@ describe('AnalysisService Extra (Coverage & Error)', () => {
       rules: {
         minCoverage: 85,
         coverageDirectory: 'coverage',
-        coveragePath: 'coverage/lcov.info',
+        coveragePath: join(testDir, 'lcov.info'),
         techDebtLimit: 10,
       },
       exclude: [],
@@ -52,31 +53,31 @@ describe('AnalysisService Extra (Coverage & Error)', () => {
     service = new AnalysisService(mockStateManager as any, mockConfig as any, mockSemantic as any);
   });
 
-  it('lcov.info 형식을 올바르게 파싱해야 한다', async () => {
-    const lcovContent = 'LF:100\nLH:90\n'; // 90% coverage
-    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
-    vi.spyOn(fs, 'readFileSync').mockReturnValue(lcovContent);
-    vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: Date.now(), mtime: new Date() } as any);
+  afterEach(() => {
+    if (fs.existsSync(testDir)) fs.rmSync(testDir, { recursive: true, force: true });
+    vi.restoreAllMocks();
+  });
 
-    // v3.9.0: 명시적인 경로 전달로 탐색 로직 우회
-    const report = await service.runAllChecks({ coveragePath: 'coverage/lcov.info' });
+  it('lcov.info 형식을 올바르게 파싱해야 한다', async () => {
+    const lcovContent = 'LF:100\nLH:90\nend_of_record\n'; // 90% coverage
+    const lcovPath = join(testDir, 'lcov.info');
+    fs.writeFileSync(lcovPath, lcovContent);
+
+    const report = await service.runAllChecks({ coveragePath: lcovPath });
+    // 90% > 85% 이므로 위반 사항이 없어야 함
     expect(report.violations.filter((v) => v.type === 'COVERAGE').length).toBe(0);
   });
 
   it('테스트 리포트가 소스보다 오래된 경우(Stale) 경고를 발생시켜야 한다', async () => {
-    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
-    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify({ total: { lines: { pct: 90 } } }));
+    const summaryPath = join(testDir, 'coverage-summary.json');
+    fs.writeFileSync(summaryPath, JSON.stringify({ total: { lines: { pct: 90 } } }));
 
+    // utimesSync를 사용하여 실제 파일 시간 조작 (ESM spyOn 이슈 우회)
     const now = Date.now();
-    // v4.8.0: 유예 기간 15분을 넘기기 위해 20분 전으로 설정
-    vi.spyOn(fs, 'statSync').mockImplementation((path: any) => {
-      if (path.toString().includes('coverage')) {
-        return { mtimeMs: now - 1200000, mtime: new Date(now - 1200000) } as any;
-      }
-      return { mtimeMs: now, mtime: new Date() } as any;
-    });
+    const staleTime = (now - 2000000) / 1000; // 2000초 전
+    fs.utimesSync(summaryPath, staleTime, staleTime);
 
-    const report = await service.runAllChecks({ coveragePath: 'coverage/coverage-summary.json' });
+    const report = await service.runAllChecks({ coveragePath: summaryPath });
     expect(report.violations.some((v) => v.message.includes('만료'))).toBe(true);
   });
 });

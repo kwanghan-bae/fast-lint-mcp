@@ -7,10 +7,8 @@ describe('AnalysisUtils Extra', () => {
   it('formatCLITable: 위반 사항이 있는 경우 테이블을 생성해야 한다', () => {
     const report: QualityReport = {
       pass: false,
-      violations: [
-        { type: 'SIZE', file: 'test.ts', message: 'Too large' }
-      ],
-      suggestion: 'Split it'
+      violations: [{ type: 'SIZE', file: 'test.ts', message: 'Too large' }],
+      suggestion: 'Split it',
     };
     const output = formatCLITable(report);
     expect(output).toContain('FAIL');
@@ -23,7 +21,7 @@ describe('AnalysisUtils Extra', () => {
     const report: QualityReport = {
       pass: true,
       violations: [],
-      suggestion: 'All good'
+      suggestion: 'All good',
     };
     const output = formatCLITable(report);
     expect(output).toContain('PASS');
@@ -38,7 +36,7 @@ describe('AnalysisUtils Extra', () => {
     const mockDg = {
       detectCycles: vi.fn().mockReturnValue([['fileA.ts', 'fileB.ts', 'fileA.ts']]),
       getAllFiles: vi.fn().mockReturnValue([]),
-      getDependencies: vi.fn().mockReturnValue([])
+      getDependencies: vi.fn().mockReturnValue([]),
     };
     const violations = checkStructuralIntegrity(mockDg as any);
     expect(violations.length).toBe(1);

@@ -16,7 +16,7 @@ describe('Native Semantic Metrics (Commit 6.1)', () => {
 
   it('파일의 복잡도와 라인 수를 정확히 계산해야 한다', () => {
     const filePath = join(testDir, 'complex.ts');
-    const code = 
+    const code =
       'function test(a) {\n' +
       '  if (a > 0 && a < 10) {\n' +
       '    for (let i=0; i<a; i++) {\n' +
@@ -27,7 +27,7 @@ describe('Native Semantic Metrics (Commit 6.1)', () => {
       '  }\n' +
       '  return 1;\n' +
       '}\n';
-    
+
     writeFileSync(filePath, code);
 
     const result = getFileMetricsNative(filePath);

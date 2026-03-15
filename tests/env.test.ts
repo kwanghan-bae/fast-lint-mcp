@@ -7,7 +7,7 @@ vi.mock('execa');
 describe('Environment Checker', () => {
   it('모든 도구가 설치되어 있으면 성공을 반환해야 한다', async () => {
     vi.mocked(execa).mockResolvedValue({ stdout: '/usr/local/bin/fd' } as any);
-    
+
     const result = await checkEnv();
     expect(result.pass).toBe(true);
     expect(result.missing).toHaveLength(0);

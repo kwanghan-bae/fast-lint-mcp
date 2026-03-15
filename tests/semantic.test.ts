@@ -6,7 +6,10 @@ import { AstCacheManager } from '../src/utils/AstCacheManager.js';
 
 describe('SemanticService (v3.7.5 Engine)', () => {
   // 테스트 간 충돌 방지를 위해 유니크한 경로 사용
-  const testProjectRoot = join(process.cwd(), `temp_sem_${Math.random().toString(36).substring(7)}`);
+  const testProjectRoot = join(
+    process.cwd(),
+    `temp_sem_${Math.random().toString(36).substring(7)}`
+  );
 
   beforeEach(async () => {
     if (!existsSync(testProjectRoot)) mkdirSync(testProjectRoot, { recursive: true });
@@ -24,7 +27,7 @@ describe('SemanticService (v3.7.5 Engine)', () => {
     const semantic = new SemanticService();
     // 테스트 대상 워크스페이스 명시적 초기화
     await semantic.ensureInitialized(true, testProjectRoot);
-    
+
     const filePath = join(testProjectRoot, 'src/main.ts');
     const code = `
       class Calculator {
@@ -42,8 +45,8 @@ describe('SemanticService (v3.7.5 Engine)', () => {
 
     const metrics = semantic.getSymbolMetrics(filePath, true);
     expect(metrics.length).toBeGreaterThan(0);
-    
-    const addMethod = metrics.find(m => m.name.includes('add'));
+
+    const addMethod = metrics.find((m) => m.name.includes('add'));
     expect(addMethod).toBeDefined();
     expect(addMethod?.complexity).toBeGreaterThanOrEqual(2);
   });

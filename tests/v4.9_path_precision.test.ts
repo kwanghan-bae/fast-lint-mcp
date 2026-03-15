@@ -5,7 +5,7 @@ import { normalize, join } from 'path';
 describe('v4.9 Path Resolution Precision (Fuzzy & Index)', () => {
   const workspacePath = '/root/project';
   const currentDir = join(workspacePath, 'src/services');
-  
+
   // 가상의 프로젝트 파일 셋 (normalize 적용)
   const allFiles = [
     join(workspacePath, 'src/services/auth.service.ts'),
@@ -13,7 +13,7 @@ describe('v4.9 Path Resolution Precision (Fuzzy & Index)', () => {
     join(workspacePath, 'src/game/GameState.tsx'),
     join(workspacePath, 'src/common/types.d.ts'),
     join(workspacePath, 'package.json'),
-  ].map(f => normalize(f));
+  ].map((f) => normalize(f));
 
   it('확장자가 생략된 파일 경로를 정확히 해소해야 한다 (auth.service -> .ts)', () => {
     const result = resolveModulePath(

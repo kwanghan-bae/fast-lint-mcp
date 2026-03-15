@@ -3,6 +3,7 @@ import glob from 'fast-glob';
 import { join, normalize, isAbsolute, dirname, relative } from 'path';
 import { Violation } from '../types/index.js';
 import { COVERAGE } from '../constants.js';
+import { parseLcovNative } from '../../native/index.js';
 
 export class CoverageAnalyzer {
   constructor(private workspacePath: string) {}
@@ -105,56 +106,41 @@ export class CoverageAnalyzer {
 
   private parseCoverageFile(path: string, allFiles: string[]) {
     if (!existsSync(path)) return { total: 0, hit: 0, fileCoverageMap: new Map(), lastUpdated: '' };
-    const content = readFileSync(path, 'utf-8');
-    const fileCoverageMap = new Map<string, { total: number; hit: number }>();
-    let total = 0,
-      hit = 0;
 
-    if (path.endsWith('.json')) {
-      try {
-        const data = JSON.parse(content);
-        // v5.4.6: JSON 포맷 파싱 고정
-        total = 100;
-        hit = data.total?.lines?.pct ?? 0;
-      } catch (e) {}
-    } else {
-      const lines = content.split(/\r?\n/);
-      let currentFile = '';
-      for (const line of lines) {
-        if (line.startsWith('SF:')) {
-          const raw = line.split(':').slice(1).join(':').trim();
-          currentFile = allFiles.find((f) => normalize(f).endsWith(normalize(raw))) || raw;
-        } else if (line.startsWith('LF:') && currentFile) {
-          const val = parseInt(line.split(':')[1]);
-          if (!isNaN(val)) {
-            total += val;
-            if (!fileCoverageMap.has(currentFile))
-              fileCoverageMap.set(currentFile, { total: 0, hit: 0 });
-            fileCoverageMap.get(currentFile)!.total = val;
-          }
-        } else if (line.startsWith('LH:') && currentFile) {
-          const val = parseInt(line.split(':')[1]);
-          if (!isNaN(val) && fileCoverageMap.has(currentFile)) {
-            fileCoverageMap.get(currentFile)!.hit = val;
-            hit += val;
-          }
-        }
-      }
-      // v5.4.6: 파일 정보가 없는 테스트용 LCOV 지원
-      if (total === 0) {
-        lines.forEach((l) => {
-          if (l.startsWith('LF:')) total += parseInt(l.split(':')[1]) || 0;
-          if (l.startsWith('LH:')) hit += parseInt(l.split(':')[1]) || 0;
-        });
-      }
-    }
     let lastUpdated = '';
     try {
       lastUpdated = statSync(path).mtime.toISOString();
     } catch (e) {
       lastUpdated = new Date().toISOString();
     }
-    return { total, hit, fileCoverageMap, lastUpdated };
+
+    if (path.endsWith('.json')) {
+      try {
+        const content = readFileSync(path, 'utf-8');
+        const data = JSON.parse(content);
+        return {
+          total: 100,
+          hit: data.total?.lines?.pct ?? 0,
+          fileCoverageMap: new Map(),
+          lastUpdated,
+        };
+      } catch (e) {
+        return { total: 0, hit: 0, fileCoverageMap: new Map(), lastUpdated };
+      }
+    }
+
+    // v0.0.1: Native Rust LCOV Parser 호출
+    const result = parseLcovNative(path, allFiles);
+    const fileCoverageMap = new Map<string, { total: number; hit: number }>();
+
+    if (result) {
+      result.files.forEach((f: any) => {
+        fileCoverageMap.set(f.file, { total: f.total, hit: f.hit });
+      });
+      return { total: result.total, hit: result.hit, fileCoverageMap, lastUpdated };
+    }
+
+    return { total: 0, hit: 0, fileCoverageMap: new Map(), lastUpdated };
   }
 
   private applyGuardrails(

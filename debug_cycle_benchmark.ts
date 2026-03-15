@@ -25,7 +25,7 @@ function benchmark() {
   // 의도적인 순환 삽입
   importMap['cycle_1.ts'] = ['cycle_2.ts'];
   importMap['cycle_2.ts'] = ['cycle_1.ts'];
-  
+
   importMap['loop_1.ts'] = ['loop_2.ts'];
   importMap['loop_2.ts'] = ['loop_3.ts'];
   importMap['loop_3.ts'] = ['loop_1.ts'];
@@ -37,10 +37,10 @@ function benchmark() {
 
   console.log(`탐지된 순환 고리 수: ${cycles.length}`);
   console.log(`소요 시간: ${(end - start).toFixed(4)}ms`);
-  
-  const hasIntentionalCycles = cycles.some(c => c.includes('cycle_1.ts')) && 
-                               cycles.some(c => c.includes('loop_1.ts'));
-  
+
+  const hasIntentionalCycles =
+    cycles.some((c) => c.includes('cycle_1.ts')) && cycles.some((c) => c.includes('loop_1.ts'));
+
   if (hasIntentionalCycles) {
     console.log('✅ 검증 성공: 의도적으로 삽입한 순환 고리를 정확하고 빠르게 찾아냈습니다.');
   } else {

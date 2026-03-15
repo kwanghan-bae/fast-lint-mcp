@@ -4,21 +4,16 @@ import { getProjectFiles, clearProjectFilesCache } from '../src/analysis/import-
 import { AnalysisService } from '../src/service/AnalysisService.js';
 import { StateManager } from '../src/state.js';
 import { ConfigService } from '../src/config.js';
-import { rmSync, mkdirSync, existsSync } from 'fs';
+import { rmSync, mkdirSync, existsSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import glob from 'fast-glob';
 import { simpleGit } from 'simple-git';
-
-vi.mock('fast-glob', async (importOriginal) => {
-  const original = await importOriginal<typeof import('fast-glob')>();
-  return { ...original, default: vi.fn() };
-});
 
 vi.mock('simple-git', () => ({
   simpleGit: vi.fn().mockReturnValue({
     checkIsRepo: () => Promise.resolve(false),
-    status: () => Promise.resolve({ modified: [], not_added: [], created: [], staged: [], renamed: [] })
-  })
+    status: () =>
+      Promise.resolve({ modified: [], not_added: [], created: [], staged: [], renamed: [] }),
+  }),
 }));
 
 describe('v3.2 Turbo Engine Validation', () => {
@@ -36,23 +31,34 @@ describe('v3.2 Turbo Engine Validation', () => {
 
   it('Turbo Build: DependencyGraph가 무거운 디렉토리를 무시해야 한다', async () => {
     const dg = new DependencyGraph(externalWorkspace);
-    vi.mocked(glob).mockResolvedValue(['src/main.ts'] as any);
+
+    // 실제 파일 생성
+    const srcDir = join(externalWorkspace, 'src');
+    const nodeModulesDir = join(externalWorkspace, 'node_modules');
+    if (!existsSync(srcDir)) mkdirSync(srcDir);
+    if (!existsSync(nodeModulesDir)) mkdirSync(nodeModulesDir);
+
+    writeFileSync(join(srcDir, 'main.ts'), 'export const a = 1;');
+    writeFileSync(join(nodeModulesDir, 'ignored.ts'), 'export const b = 1;');
 
     await dg.build();
 
-    const lastGlobCall = vi.mocked(glob).mock.calls[0];
-    expect(lastGlobCall[1]?.ignore).toContain('**/node_modules/**');
-    expect(lastGlobCall[1]?.ignore).toContain('**/dist/**');
+    const files = dg.getAllFiles();
+    expect(files.some((f) => f.includes('src/main.ts'))).toBe(true);
+    expect(files.some((f) => f.includes('node_modules'))).toBe(false);
   });
 
   it('Project File Cache: 동일 워크스페이스에 대해 캐시를 사용해야 한다', async () => {
-    vi.mocked(glob).mockResolvedValue(['file1.ts'] as any);
+    const srcDir = join(externalWorkspace, 'src');
+    if (!existsSync(srcDir)) mkdirSync(srcDir);
+    writeFileSync(join(srcDir, 'file1.ts'), 'content');
 
     const files1 = await getProjectFiles(externalWorkspace);
     const files2 = await getProjectFiles(externalWorkspace);
 
-    expect(vi.mocked(glob)).toHaveBeenCalledTimes(1);
-    expect(files1).toBe(files2);
+    // 내용이 같아야 함 (캐시 동작 확인)
+    expect(files1).toEqual(files2);
+    expect(files1).toBe(files2); // 레퍼런스 동일성 확인
   });
 
   it('Cross-Project Context: AnalysisService가 주입된 경로를 기준으로 동작해야 한다', async () => {

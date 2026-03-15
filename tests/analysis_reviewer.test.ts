@@ -97,7 +97,9 @@ describe('runSemanticReview', () => {
     writeFileSync(testFile, code);
     const violations = await runSemanticReview(testFile);
     expect(
-      violations.some((v) => v.type === 'READABILITY' && v.message.includes('전역 변수 [globalVar]'))
+      violations.some(
+        (v) => v.type === 'READABILITY' && v.message.includes('전역 변수 [globalVar]')
+      )
     ).toBe(true);
   });
 

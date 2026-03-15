@@ -1,7 +1,13 @@
 import { dirname, normalize, join, isAbsolute, extname } from 'path';
 import { existsSync } from 'fs';
 import { findNearestProjectRoot } from './PathResolver.js';
-import { extractImportsNative, scanFiles, resolveModulePathNative, parseTsconfigPaths } from '../../native/index.js';
+import {
+  extractImportsNative,
+  scanFiles,
+  resolveModulePathNative,
+  parseTsconfigPaths,
+  detectCyclesNative,
+} from '../../native/index.js';
 import { SYSTEM } from '../constants.js';
 
 /**
@@ -43,7 +49,7 @@ export class DependencyGraph {
     const projectRoot = findNearestProjectRoot(this.workspacePath);
     const tsconfigPath = join(projectRoot, 'tsconfig.json');
     const tsconfig = existsSync(tsconfigPath) ? parseTsconfigPaths(tsconfigPath) : null;
-    
+
     // 3. Rust Native 엔진을 통해 전 파일 임포트 구문을 병렬로 긁어옵니다.
     const nativeResults = extractImportsNative(allFiles);
 
@@ -62,7 +68,7 @@ export class DependencyGraph {
           tsconfig?.baseUrl || null,
           tsconfig?.paths || null
         );
-        
+
         if (resolved) {
           resolvedImports.push(normalize(resolved));
         }

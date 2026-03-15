@@ -4,6 +4,7 @@
 extern crate napi_derive;
 
 use ignore::WalkBuilder;
+use ignore::overrides::OverrideBuilder;
 use std::path::{Path, PathBuf};
 use rayon::prelude::*;
 use regex::Regex;
@@ -12,6 +13,16 @@ use petgraph::graph::DiGraph;
 use petgraph::algo::tarjan_scc;
 use serde::{Deserialize, Serialize};
 use std::fs;
+use once_cell::sync::Lazy;
+
+// 글로벌 정규식 캐시 (성능 최적화)
+static TECH_DEBT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)(TODO|FIXME|HACK|XXX)").unwrap());
+static SECRET_PATTERNS: Lazy<Vec<(&'static str, Regex, &'static str)>> = Lazy::new(|| vec![
+    ("AWS_KEY", Regex::new(r"AKIA[0-9A-Z]{16}").unwrap(), "AWS Access Key가 노출되었습니다!"),
+    ("GENERIC_SECRET", Regex::new(r#"(?i)(password|secret|token|key|api_key|auth_token)\s*[:=]\s*['"].{16,}['"]"#).unwrap(), "하드코딩된 비밀번호나 토큰이 발견되었습니다!"),
+    ("JWT_TOKEN", Regex::new(r"eyJ[a-zA-Z0-9\._\-]{10,}").unwrap(), "JWT 토큰이 노출되었습니다!"),
+]);
+static COMPLEXITY_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b(if|for|while|switch|catch)\b|(&&|\|\||\?)").unwrap());
 
 #[napi]
 pub fn hello_rust() -> String {
@@ -27,27 +38,23 @@ pub fn scan_files(root_path: String, ignore_patterns: Vec<String>) -> Vec<String
     return files;
   }
 
+  let mut override_builder = OverrideBuilder::new(root);
+  for pattern in ignore_patterns {
+    let _ = override_builder.add(&format!("!{}", pattern));
+  }
+  let overrides = override_builder.build().unwrap_or(ignore::overrides::Override::empty());
+
   let walker = WalkBuilder::new(root)
     .standard_filters(true)
     .hidden(true)
+    .overrides(overrides)
     .build();
 
   for entry in walker {
     if let Ok(entry) = entry {
       if entry.file_type().map(|ft| ft.is_file()).unwrap_or(false) {
         let path = entry.path();
-        let path_str = path.to_string_lossy().to_string();
-        let mut should_ignore = false;
-        for pattern in &ignore_patterns {
-          if path_str.contains(pattern) {
-            should_ignore = true;
-            break;
-          }
-        }
-
-        if !should_ignore {
-          files.push(path_str);
-        }
+        files.push(path.to_string_lossy().to_string());
       }
     }
   }
@@ -59,7 +66,7 @@ pub fn scan_files(root_path: String, ignore_patterns: Vec<String>) -> Vec<String
 pub fn parse_files_basic(files: Vec<String>) -> Vec<bool> {
   files.into_par_iter()
     .map(|file_path| {
-      if let Ok(content) = std::fs::read_to_string(&file_path) {
+      if let Ok(content) = fs::read_to_string(&file_path) {
         !content.is_empty()
       } else {
         false
@@ -70,12 +77,10 @@ pub fn parse_files_basic(files: Vec<String>) -> Vec<bool> {
 
 #[napi]
 pub fn count_tech_debt_native(files: Vec<String>) -> i32 {
-  let re = Regex::new(r"(?i)(TODO|FIXME|HACK|XXX)").unwrap();
-
   files.into_par_iter()
     .map(|file_path| {
-      if let Ok(content) = std::fs::read_to_string(&file_path) {
-        re.find_iter(&content).count() as i32
+      if let Ok(content) = fs::read_to_string(&file_path) {
+        TECH_DEBT_RE.find_iter(&content).count() as i32
       } else {
         0
       }
@@ -247,19 +252,13 @@ pub struct SymbolResult {
   pub lines: i32,
 }
 
-#[napi]
-pub fn extract_symbols_native(file_path: String) -> Vec<SymbolResult> {
-  extract_symbols_regex_v2(&file_path)
-}
-
-fn extract_symbols_regex_v2(file_path: &str) -> Vec<SymbolResult> {
+fn extract_symbols_internal(file_path: &str) -> Vec<SymbolResult> {
   let mut symbols = Vec::new();
   if let Ok(content) = fs::read_to_string(file_path) {
     let re_func = Regex::new(r#"(?P<exp>export\s+)?(?P<async>async\s+)?function\s+(?P<name>[a-zA-Z0-9_$]+)"#).unwrap();
     let re_class = Regex::new(r#"(?P<exp>export\s+)?class\s+(?P<name>[a-zA-Z0-9_$]+)"#).unwrap();
     let re_const = Regex::new(r#"(?P<exp>export\s+)?(?:const|let|var)\s+(?P<name>[a-zA-Z0-9_$]+)"#).unwrap();
     let re_method = Regex::new(r#"\s*(?P<name>[a-zA-Z0-9_$]+)\s*\(.*?\)\s*(?::\s*[a-zA-Z0-9_$<>\[\]\s|&]+)?\s*\{"#).unwrap();
-    let re_complexity = Regex::new(r"\b(if|for|while|switch|catch)\b|(&&|\|\||\?)").unwrap();
 
     let mut current_class: Option<String> = None;
     let mut class_brace_level: i32 = 0;
@@ -337,7 +336,7 @@ fn extract_symbols_regex_v2(file_path: &str) -> Vec<SymbolResult> {
       }
 
       if let Some((idx, level)) = in_symbol {
-        let line_complexity = re_complexity.find_iter(line).count() as i32;
+        let line_complexity = COMPLEXITY_RE.find_iter(line).count() as i32;
         if found_new_symbol {
            symbols[idx].complexity += line_complexity;
         } else if brace_count > level || (brace_count == level && opened == 0) {
@@ -364,6 +363,11 @@ fn extract_symbols_regex_v2(file_path: &str) -> Vec<SymbolResult> {
     }
   }
   symbols
+}
+
+#[napi]
+pub fn extract_symbols_native(file_path: String) -> Vec<SymbolResult> {
+  extract_symbols_internal(&file_path)
 }
 
 #[napi(object)]
@@ -558,7 +562,6 @@ pub fn has_korean_comment_native(file_path: String, line: u32, search_depth: u32
 
 #[napi]
 pub fn check_fake_logic_native(body: String, params: Vec<String>) -> Vec<String> {
-  // 주석 제거 로직
   let re_comments = Regex::new(r"(?m)//.*|/\*[\s\S]*?\*/").unwrap();
   let clean_body = re_comments.replace_all(&body, "");
 
@@ -572,4 +575,161 @@ pub fn check_fake_logic_native(body: String, params: Vec<String>) -> Vec<String>
     }
   }
   unused
+}
+
+#[napi(object)]
+pub struct FileCoverageResult {
+  pub file: String,
+  pub total: i32,
+  pub hit: i32,
+}
+
+#[napi(object)]
+pub struct LcovResult {
+  pub total: i32,
+  pub hit: i32,
+  pub files: Vec<FileCoverageResult>,
+}
+
+#[napi]
+pub fn parse_lcov_native(path: String, all_files: Vec<String>) -> Option<LcovResult> {
+  if let Ok(content) = fs::read_to_string(&path) {
+    let mut files = Vec::new();
+    let mut total_lines = 0;
+    let mut hit_lines = 0;
+    
+    let mut current_file = String::new();
+    let mut current_lf = 0;
+    let mut current_lh = 0;
+
+    for line in content.lines() {
+      if line.starts_with("SF:") {
+        current_file = line[3..].trim().to_string();
+        current_lf = 0;
+        current_lh = 0;
+      } else if line.starts_with("LF:") {
+        if let Ok(val) = line[3..].trim().parse::<i32>() {
+          current_lf = val;
+        }
+      } else if line.starts_with("LH:") {
+        if let Ok(val) = line[3..].trim().parse::<i32>() {
+          current_lh = val;
+        }
+      } else if line == "end_of_record" {
+        let matched_file = if current_file.is_empty() {
+           "unknown".to_string()
+        } else {
+           all_files.iter()
+            .find(|f| f.ends_with(&current_file) || current_file.ends_with(*f))
+            .cloned()
+            .unwrap_or(current_file.clone())
+        };
+
+        files.push(FileCoverageResult {
+          file: matched_file,
+          total: current_lf,
+          hit: current_lh,
+        });
+        total_lines += current_lf;
+        hit_lines += current_lh;
+      }
+    }
+
+    if total_lines == 0 {
+       for line in content.lines() {
+          if line.starts_with("LF:") {
+            if let Ok(val) = line[3..].trim().parse::<i32>() { total_lines += val; }
+          } else if line.starts_with("LH:") {
+            if let Ok(val) = line[3..].trim().parse::<i32>() { hit_lines += val; }
+          }
+       }
+    }
+
+    return Some(LcovResult {
+      total: total_lines,
+      hit: hit_lines,
+      files,
+    });
+  }
+  None
+}
+
+#[napi(object)]
+pub struct SecretViolation {
+  pub file: String,
+  pub line: u32,
+  pub message: String,
+  pub rationale: String,
+}
+
+#[napi]
+pub fn scan_secrets_native(files: Vec<String>) -> Vec<SecretViolation> {
+  files.into_par_iter()
+    .flat_map(|file_path| {
+      let mut file_violations = Vec::new();
+      if let Ok(content) = fs::read_to_string(&file_path) {
+        let lines: Vec<&str> = content.lines().collect();
+        for (i, line) in lines.iter().enumerate() {
+          for (id, re, msg) in SECRET_PATTERNS.iter() {
+            if re.is_match(line) {
+              file_violations.push(SecretViolation {
+                file: file_path.clone(),
+                line: (i + 1) as u32,
+                message: msg.to_string(),
+                rationale: format!("패턴 일치: {}", id),
+              });
+            }
+          }
+        }
+      }
+      file_violations
+    })
+    .collect()
+}
+
+#[napi(object)]
+pub struct BatchResult {
+  pub file: String,
+  pub line_count: i32,
+  pub complexity: i32,
+  pub symbols: Vec<SymbolResult>,
+  pub secrets: Vec<SecretViolation>,
+}
+
+#[napi]
+pub fn run_batch_analysis_native(files: Vec<String>) -> Vec<BatchResult> {
+  files.into_par_iter()
+    .map(|file_path| {
+      let symbols = extract_symbols_internal(&file_path);
+      let mut secrets = Vec::new();
+      let mut line_count = 0;
+      let mut overall_complexity = 1;
+
+      if let Ok(content) = fs::read_to_string(&file_path) {
+        line_count = content.lines().count() as i32;
+        overall_complexity = COMPLEXITY_RE.find_iter(&content).count() as i32 + 1;
+
+        let lines: Vec<&str> = content.lines().collect();
+        for (i, line) in lines.iter().enumerate() {
+          for (id, re, msg) in SECRET_PATTERNS.iter() {
+            if re.is_match(line) {
+              secrets.push(SecretViolation {
+                file: file_path.clone(),
+                line: (i + 1) as u32,
+                message: msg.to_string(),
+                rationale: format!("패턴 일치: {}", id),
+              });
+            }
+          }
+        }
+      }
+      BatchResult {
+        file: file_path,
+        line_count,
+        complexity: overall_complexity,
+        symbols,
+        secrets,
+      }
+    })
+    .collect()
 }

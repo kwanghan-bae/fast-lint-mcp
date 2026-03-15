@@ -5,7 +5,7 @@ describe('Native Cycle Detection (Commit 7.1)', () => {
   it('A -> B -> A 순환 참조를 정확히 탐지해야 한다', () => {
     const importMap = {
       'fileA.ts': ['fileB.ts'],
-      'fileB.ts': ['fileA.ts']
+      'fileB.ts': ['fileA.ts'],
     };
     const cycles = detectCyclesNative(importMap);
     expect(cycles.length).toBe(1);
@@ -17,7 +17,7 @@ describe('Native Cycle Detection (Commit 7.1)', () => {
     const importMap = {
       'fileA.ts': ['fileB.ts'],
       'fileB.ts': ['fileC.ts'],
-      'fileC.ts': ['fileA.ts']
+      'fileC.ts': ['fileA.ts'],
     };
     const cycles = detectCyclesNative(importMap);
     expect(cycles.length).toBe(1);
@@ -30,7 +30,7 @@ describe('Native Cycle Detection (Commit 7.1)', () => {
     const importMap = {
       'fileA.ts': ['fileB.ts'],
       'fileB.ts': ['fileC.ts'],
-      'fileC.ts': []
+      'fileC.ts': [],
     };
     const cycles = detectCyclesNative(importMap);
     expect(cycles).toEqual([]);
@@ -38,7 +38,7 @@ describe('Native Cycle Detection (Commit 7.1)', () => {
 
   it('자기 자신을 참조하는 경우(Self-loop)를 탐지해야 한다', () => {
     const importMap = {
-      'fileA.ts': ['fileA.ts']
+      'fileA.ts': ['fileA.ts'],
     };
     const cycles = detectCyclesNative(importMap);
     expect(cycles.length).toBe(1);

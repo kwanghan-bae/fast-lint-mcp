@@ -34,7 +34,7 @@ export class SemanticService {
     if (!filePath || filePath === 'non-existent.ts') return [];
     const absPath = resolve(filePath);
     if (!existsSync(absPath)) return [];
-    
+
     try {
       // v0.0.1: Native 단일 패스 메트릭 추출 (정밀 AST 분석 기반)
       const nativeSymbols = extractSymbolsNative(absPath);

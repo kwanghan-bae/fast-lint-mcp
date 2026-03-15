@@ -40,7 +40,7 @@ describe('v4.0 Stability & Precision Verification', () => {
     `;
     writeFileSync(filePath, code);
     const violations = await checkFakeLogic(filePath);
-    
+
     // AST 기반 추적으로 if문 내부 참조를 찾아내어 위반이 없어야 함
     expect(violations.length).toBe(0);
   });
@@ -48,20 +48,20 @@ describe('v4.0 Stability & Precision Verification', () => {
   it('[TECH_DEBT] 제외 디렉토리 내의 TODO는 카운트하지 않아야 한다 (grep 일치성)', async () => {
     // 1. 정상 소스 파일에 TODO 2개 생성
     writeFileSync(join(testDir, 'source.ts'), '// TODO: real task 1\n// FIXME: real task 2');
-    
+
     // 2. 제외 대상 폴더(.git, build) 생성 및 TODO 주입
     const gitDir = join(testDir, '.git');
     const buildDir = join(testDir, 'build');
     mkdirSync(gitDir);
     mkdirSync(buildDir);
-    
+
     writeFileSync(join(gitDir, 'config'), '# TODO: internal git config');
     writeFileSync(join(buildDir, 'bundle.js'), '// TODO: minified build todo');
 
     // 3. 기술 부채 스캔 실행 (ignorePatterns에 testDir 내의 특수 경로 주입)
     const files = await getProjectFiles(testDir);
     const count = await countTechDebt(files);
-    
+
     // 4. 결과는 오직 source.ts의 2개여야 함
     expect(count).toBe(2);
   });

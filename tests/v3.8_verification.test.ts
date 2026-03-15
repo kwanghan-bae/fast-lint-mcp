@@ -30,14 +30,19 @@ describe('v3.8 최종 고도화 스위트 (지능형 센서 및 아키텍처 검
     `;
     writeFileSync(filePath, code);
     const violations = await runSemanticReview(filePath);
-    
+
     // IsInt나 Min이 아닌 'userAge'를 찾아야 하며, (DTO) 표기가 있어야 함
-    const fieldViolation = violations.find(v => v.message.includes('필드 (DTO/Entity) [userAge]'));
+    const fieldViolation = violations.find((v) =>
+      v.message.includes('필드 (DTO/Entity) [userAge]')
+    );
     if (!fieldViolation) {
-      console.error('Actual violations:', violations.map(v => v.message));
+      console.error(
+        'Actual violations:',
+        violations.map((v) => v.message)
+      );
     }
     expect(fieldViolation).toBeDefined();
-    expect(violations.some(v => v.message.includes('[IsInt]'))).toBe(false);
+    expect(violations.some((v) => v.message.includes('[IsInt]'))).toBe(false);
   });
 
   it('[2. Test-as-Spec] 테스트 블록을 모듈 할당이 아닌 전용 용어로 리포팅해야 한다', async () => {
@@ -50,9 +55,11 @@ describe('v3.8 최종 고도화 스위트 (지능형 센서 및 아키텍처 검
     `;
     writeFileSync(filePath, code);
     const violations = await runSemanticReview(filePath);
-    
+
     // describe는 테스트 스위트로 식별되어 의도 중심 주석을 요구해야 함
-    const suiteViolation = violations.find(v => v.message.includes('테스트 스위트(Suite) [describe]'));
+    const suiteViolation = violations.find((v) =>
+      v.message.includes('테스트 스위트(Suite) [describe]')
+    );
     expect(suiteViolation).toBeDefined();
     expect(suiteViolation?.message).toContain('의도(Intent)나 Mocking 구조를 설명하는 한글 주석');
   });
@@ -71,7 +78,7 @@ describe('v3.8 최종 고도화 스위트 (지능형 센서 및 아키텍처 검
     `;
     writeFileSync(filePath, code);
     const violations = await checkFakeLogic(filePath);
-    
+
     // 두 함수 모두 파라미터를 실질적으로 사용했으므로 FAKE_LOGIC 위반이 없어야 함
     expect(violations.length).toBe(0);
   });
@@ -89,9 +96,9 @@ describe('v3.8 최종 고도화 스위트 (지능형 센서 및 아키텍처 검
     dg['importMap'].set(fileB, [fileA]);
 
     const violations = checkStructuralIntegrity(dg);
-    
+
     // TECH_DEBT로 강등되었는지 확인
-    const cycleViolation = violations.find(v => v.message.includes('순환 참조가 발견되었으나'));
+    const cycleViolation = violations.find((v) => v.message.includes('순환 참조가 발견되었으나'));
     expect(cycleViolation).toBeDefined();
     expect(cycleViolation?.type).toBe('TECH_DEBT');
   });
@@ -99,14 +106,16 @@ describe('v3.8 최종 고도화 스위트 (지능형 센서 및 아키텍처 검
   it('[5. Architecture] Service가 Controller를 참조하면 Layer 위반으로 처리해야 한다', async () => {
     const serviceFile = join(testDir, 'auth.service.ts');
     const controllerFile = join(testDir, 'auth.controller.ts');
-    
+
     const dg = new DependencyGraph(testDir);
     // Service -> Controller 역방향 참조 발생
     dg['importMap'].set(serviceFile, [controllerFile]);
-    
+
     const violations = checkStructuralIntegrity(dg);
-    
-    const layerViolation = violations.find(v => v.rationale === 'Layer 위반: Service -> Controller');
+
+    const layerViolation = violations.find(
+      (v) => v.rationale === 'Layer 위반: Service -> Controller'
+    );
     expect(layerViolation).toBeDefined();
     expect(layerViolation?.type).toBe('ARCHITECTURE');
   });

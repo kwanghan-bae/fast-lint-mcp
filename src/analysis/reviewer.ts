@@ -61,21 +61,87 @@ export async function verifyAPIContracts(
 
   // 3. 표준 내장 객체 및 전역 변수
   const builtins = [
-    'console', 'Math', 'JSON', 'Promise', 'process', 'Object', 'Array', 'String', 'Number',
-    'Boolean', 'Date', 'RegExp', 'Error', 'setTimeout', 'setInterval', 'setImmediate',
-    'clearTimeout', 'clearInterval', 'clearImmediate', 'require', 'module', 'exports',
-    'global', 'window', 'document', 'navigator', 'location', 'history', 'screen',
-    '__dirname', '__filename', 'Buffer', 'encodeURI', 'encodeURIComponent', 'decodeURI',
-    'decodeURIComponent', 'parseFloat', 'parseInt', 'isNaN', 'isFinite', 'fetch',
-    'Headers', 'Request', 'Response', 'URL', 'URLSearchParams', 'AbortController',
-    'AbortSignal', 'FormData', 'Blob', 'File', 'FileReader', 'WebSocket', 'Event',
-    'CustomEvent', 'Map', 'Set', 'WeakMap', 'WeakSet', 'Proxy', 'Reflect', 'Symbol',
-    'Intl', 'Int8Array', 'Uint8Array', 'Uint8ClampedArray', 'Int16Array', 'Uint16Array',
-    'Int32Array', 'Uint32Array', 'Float32Array', 'Float64Array', 'BigInt64Array',
-    'BigUint64Array', 'DataView', 'ArrayBuffer', 'SharedArrayBuffer', 'Atomics',
+    'console',
+    'Math',
+    'JSON',
+    'Promise',
+    'process',
+    'Object',
+    'Array',
+    'String',
+    'Number',
+    'Boolean',
+    'Date',
+    'RegExp',
+    'Error',
+    'setTimeout',
+    'setInterval',
+    'setImmediate',
+    'clearTimeout',
+    'clearInterval',
+    'clearImmediate',
+    'require',
+    'module',
+    'exports',
+    'global',
+    'window',
+    'document',
+    'navigator',
+    'location',
+    'history',
+    'screen',
+    '__dirname',
+    '__filename',
+    'Buffer',
+    'encodeURI',
+    'encodeURIComponent',
+    'decodeURI',
+    'decodeURIComponent',
+    'parseFloat',
+    'parseInt',
+    'isNaN',
+    'isFinite',
+    'fetch',
+    'Headers',
+    'Request',
+    'Response',
+    'URL',
+    'URLSearchParams',
+    'AbortController',
+    'AbortSignal',
+    'FormData',
+    'Blob',
+    'File',
+    'FileReader',
+    'WebSocket',
+    'Event',
+    'CustomEvent',
+    'Map',
+    'Set',
+    'WeakMap',
+    'WeakSet',
+    'Proxy',
+    'Reflect',
+    'Symbol',
+    'Intl',
+    'Int8Array',
+    'Uint8Array',
+    'Uint8ClampedArray',
+    'Int16Array',
+    'Uint16Array',
+    'Int32Array',
+    'Uint32Array',
+    'Float32Array',
+    'Float64Array',
+    'BigInt64Array',
+    'BigUint64Array',
+    'DataView',
+    'ArrayBuffer',
+    'SharedArrayBuffer',
+    'Atomics',
   ];
 
-  const externalExports = allExportedSymbols.map(s => s.name);
+  const externalExports = allExportedSymbols.map((s) => s.name);
 
   // 4. Rust Native 엔진 호출 (O(1) 검증)
   try {
@@ -87,7 +153,7 @@ export async function verifyAPIContracts(
       externalExports
     );
 
-    return nativeViolations.map(nv => ({
+    return nativeViolations.map((nv) => ({
       type: 'HALLUCINATION',
       file: filePath,
       line: nv.line,
@@ -155,10 +221,10 @@ function hasKoreanCommentAbove(
 ): boolean {
   try {
     if (!filePath || !existsSync(filePath)) return false;
-    
+
     const range = node.range();
     const startLine = range.start.line + 1;
-    
+
     return hasKoreanCommentNative(filePath, startLine, depth);
   } catch (e) {
     return false;
@@ -229,11 +295,7 @@ function reviewFunctions(
 /**
  * 단일 함수의 품질을 분석합니다.
  */
-function analyzeSingleFunction(
-  m: SgNode,
-  filePath: string,
-  isTestFile: boolean
-): Violation[] {
+function analyzeSingleFunction(m: SgNode, filePath: string, isTestFile: boolean): Violation[] {
   const violations: Violation[] = [];
   const idNode = m.find({
     rule: { any: [{ kind: 'identifier' }, { kind: 'property_identifier' }] },

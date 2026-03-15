@@ -20,12 +20,12 @@ describe('findOrphanFiles', () => {
     const orphan = join(testDir, 'orphan.ts');
 
     writeFileSync(file1, "import './used'");
-    writeFileSync(file2, "export const a = 1");
-    writeFileSync(orphan, "export const b = 2");
+    writeFileSync(file2, 'export const a = 1');
+    writeFileSync(orphan, 'export const b = 2');
 
     const allFiles = [file1, file2, orphan];
     const depMap = await getDependencyMap(testDir, allFiles);
-    
+
     // index.ts를 진입점으로 설정
     const orphans = await findOrphanFiles(depMap, [file1]);
 

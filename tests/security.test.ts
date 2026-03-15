@@ -26,26 +26,29 @@ describe('Security Checker', () => {
     writeFileSync(testFile, code);
     const violations = await checkSecrets(testFile);
     expect(violations.length).toBeGreaterThanOrEqual(2);
-    expect(violations.some(v => v.message.includes('AWS'))).toBe(true);
+    expect(violations.some((v) => v.message.includes('AWS'))).toBe(true);
   });
 
   it('JWT 토큰을 탐지해야 한다', async () => {
-    const code = 'const val = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";';
+    const code =
+      'const val = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";';
     writeFileSync(testFile, code);
     const violations = await checkSecrets(testFile);
     expect(violations.some((v) => v.message.includes('JWT'))).toBe(true);
   });
 
   it('패키지 취약점이 없으면 빈 배열을 반환해야 한다', async () => {
-    vi.mocked(execSync).mockReturnValue(JSON.stringify({ metadata: { vulnerabilities: { high: 0, critical: 0 } } }));
+    vi.mocked(execSync).mockReturnValue(
+      JSON.stringify({ metadata: { vulnerabilities: { high: 0, critical: 0 } } })
+    );
     const violations = await checkPackageAudit();
     expect(violations).toHaveLength(0);
   });
 
   it('패키지 취약점이 발견되면 위반 사항을 반환해야 한다 (에러 객체 케이스)', async () => {
     const error = new Error('audit failed');
-    (error as any).stdout = JSON.stringify({ 
-      metadata: { vulnerabilities: { high: 2, critical: 1 } } 
+    (error as any).stdout = JSON.stringify({
+      metadata: { vulnerabilities: { high: 2, critical: 1 } },
     });
     vi.mocked(execSync).mockImplementation(() => {
       throw error;

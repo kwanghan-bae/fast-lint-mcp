@@ -16,13 +16,13 @@ describe('Native Hallucination Verifier (Commit 8.1)', () => {
 
   it('존재하지 않는 심볼 호출을 정확히 식별해야 한다', () => {
     const filePath = join(testDir, 'code.ts');
-    const code = 
+    const code =
       'function main() {\n' +
       '  validFunc();\n' +
       '  invalidFunc();\n' +
       '  Promise.resolve();\n' +
       '}\n';
-    
+
     writeFileSync(filePath, code);
 
     const violations = verifyHallucinationNative(

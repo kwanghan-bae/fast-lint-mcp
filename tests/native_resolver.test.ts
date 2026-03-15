@@ -25,11 +25,11 @@ describe('Native TSConfig & Path Resolver (Commit 4.2)', () => {
         baseUrl: './src',
         paths: {
           '@/*': ['*'],
-          '@utils/*': ['utils/*']
-        }
-      }
+          '@utils/*': ['utils/*'],
+        },
+      },
     };
-    
+
     writeFileSync(configPath, JSON.stringify(config));
 
     const result = parseTsconfigPaths(configPath);

@@ -34,12 +34,12 @@ describe('KotlinProvider (Cross-Language Precision)', () => {
     writeFileSync(filePath, code);
 
     const violations = await provider.check(filePath);
-    
+
     // 1. 보안 위반 검증 (checkSecrets 연동 확인)
-    expect(violations.some(v => v.type === 'SECURITY')).toBe(true);
-    
+    expect(violations.some((v) => v.type === 'SECURITY')).toBe(true);
+
     // 2. 가독성 리뷰 검증 (runSemanticReview 연동 확인)
-    expect(violations.some(v => v.type === 'READABILITY')).toBe(true);
+    expect(violations.some((v) => v.type === 'READABILITY')).toBe(true);
   });
 
   it('데이터 파일 성격의 Kotlin 파일은 가독성 리뷰를 최소화해야 한다', async () => {
@@ -49,7 +49,7 @@ describe('KotlinProvider (Cross-Language Precision)', () => {
 
     const violations = await provider.check(filePath);
     // 데이터 파일이므로 가독성(READABILITY) 경고가 없거나 적어야 함
-    const readability = violations.filter(v => v.type === 'READABILITY');
+    const readability = violations.filter((v) => v.type === 'READABILITY');
     expect(readability.length).toBeLessThan(2);
   });
 });

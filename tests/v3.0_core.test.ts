@@ -20,7 +20,7 @@ describe('v3.0 Core Architecture Validation', () => {
     writeFileSync(testFile, code);
 
     const cache = AstCacheManager.getInstance();
-    
+
     // 첫 번째 호출: 파싱 수행
     const root1 = cache.getRootNode(testFile);
     // 두 번째 호출: 캐시된 노드 반환
@@ -48,7 +48,7 @@ describe('v3.0 Core Architecture Validation', () => {
 
   it('Abstraction: BaseQualityProvider로부터 임계치를 올바르게 상속받아야 한다', () => {
     const provider = new JavascriptProvider({
-      rules: { maxLineCount: 100, maxComplexity: 10 }
+      rules: { maxLineCount: 100, maxComplexity: 10 },
     } as any);
 
     // 데이터 파일이 아닐 때

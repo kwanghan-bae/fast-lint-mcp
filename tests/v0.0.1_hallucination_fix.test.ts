@@ -26,11 +26,11 @@ describe('Hallucination Fix (v0.0.1)', () => {
     writeFileSync(testFile, code);
     const root = AstCacheManager.getInstance().getRootNode(testFile);
     const violations = await verifyAPIContracts(root!, testFile);
-    
+
     // resolve, reject 호출이 환각으로 지적되지 않아야 함
-    const hasResolveViolation = violations.some(v => v.message.includes('[resolve]'));
-    const hasRejectViolation = violations.some(v => v.message.includes('[reject]'));
-    
+    const hasResolveViolation = violations.some((v) => v.message.includes('[resolve]'));
+    const hasRejectViolation = violations.some((v) => v.message.includes('[reject]'));
+
     expect(hasResolveViolation).toBe(false);
     expect(hasRejectViolation).toBe(false);
   });
@@ -47,9 +47,9 @@ describe('Hallucination Fix (v0.0.1)', () => {
     writeFileSync(testFile, code);
     const root = AstCacheManager.getInstance().getRootNode(testFile);
     const violations = await verifyAPIContracts(root!, testFile);
-    
+
     // job 호출이 환각으로 지적되지 않아야 함
-    const hasJobViolation = violations.some(v => v.message.includes('[job]'));
+    const hasJobViolation = violations.some((v) => v.message.includes('[job]'));
     expect(hasJobViolation).toBe(false);
   });
 
@@ -62,7 +62,7 @@ describe('Hallucination Fix (v0.0.1)', () => {
     writeFileSync(testFile, code);
     const root = AstCacheManager.getInstance().getRootNode(testFile);
     const violations = await verifyAPIContracts(root!, testFile);
-    
+
     expect(violations.length).toBe(0);
   });
 
@@ -76,7 +76,7 @@ describe('Hallucination Fix (v0.0.1)', () => {
     writeFileSync(testFile, code);
     const root = AstCacheManager.getInstance().getRootNode(testFile);
     const violations = await verifyAPIContracts(root!, testFile);
-    
+
     expect(violations.length).toBe(0);
   });
 });

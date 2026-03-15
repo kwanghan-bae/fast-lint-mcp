@@ -38,7 +38,7 @@ describe('StateManager', () => {
     if (!existsSync(ws)) mkdirSync(ws, { recursive: true });
     const sFile = join(ws, '.fast-lint-state.json'); // legacy check test
     const manager = new StateManager(ws);
-    // Note: StateManager v3.7 no longer reads from project root, 
+    // Note: StateManager v3.7 no longer reads from project root,
     // but the test should still confirm isolation.
     expect(await manager.getLastCoverage()).toBeNull();
   });

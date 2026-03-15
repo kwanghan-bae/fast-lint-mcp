@@ -1,55 +1,37 @@
 import { execSync } from 'child_process';
-import { readFileSync, existsSync } from 'fs';
+import { existsSync } from 'fs';
 import { Violation } from '../types/index.js';
+import { scanSecretsNative } from '../../native/index.js';
 
 /**
- * 소스 코드 내에 실수로 포함될 수 있는 민감 정보 탐지 패턴입니다.
- */
-const SECRET_PATTERNS = [
-  { id: 'AWS_KEY', pattern: /AKIA[0-9A-Z]{16}/, message: 'AWS Access Key가 노출되었습니다!' },
-  {
-    id: 'GENERIC_SECRET',
-    pattern: /(password|secret|token|key|api_key|auth_token)\s*[:=]\s*["'][a-zA-Z0-9_\-]{16,}["']/i,
-    message: '하드코딩된 비밀번호나 토큰이 발견되었습니다!',
-  },
-  { id: 'JWT_TOKEN', pattern: /eyJ[a-zA-Z0-9\._\-]{10,}/, message: 'JWT 토큰이 노출되었습니다!' },
-];
-
-/**
- * 프로젝트의 npm 의존성 취약점을 스캔합니다.
+ * 프로젝트 전체의 보안 상태를 점검합니다. (NPM Audit 등)
  */
 export async function checkPackageAudit(): Promise<Violation[]> {
   try {
-    const output = execSync('npm audit --json', {
-      encoding: 'utf-8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    });
-    const audit = JSON.parse(output);
-    const highAlerts =
-      (audit.metadata?.vulnerabilities?.high || 0) +
-      (audit.metadata?.vulnerabilities?.critical || 0);
-    if (highAlerts > 0)
-      return [
-        {
-          type: 'SECURITY',
-          message: `취약한 패키지 발견 (High/Critical: ${highAlerts}건).`,
-          rationale: 'NPM Audit 엔진 결과',
-        },
-      ];
-  } catch (e: any) {
+    execSync('npm audit --json', { stdio: 'pipe' });
+  } catch (error: any) {
     try {
-      const audit = JSON.parse(e.stdout || '{}');
-      const highAlerts =
-        (audit.metadata?.vulnerabilities?.high || 0) +
-        (audit.metadata?.vulnerabilities?.critical || 0);
-      if (highAlerts > 0)
+      const stdout = error.stdout ? error.stdout.toString() : '';
+      if (!stdout) return [];
+
+      const audit = JSON.parse(stdout);
+      const vuln = audit.metadata?.vulnerabilities || {};
+      const low = vuln.low || 0;
+      const moderate = vuln.moderate || 0;
+      const high = vuln.high || 0;
+      const critical = vuln.critical || 0;
+      const total = low + moderate + high + critical;
+
+      if (total > 0) {
         return [
           {
             type: 'SECURITY',
-            message: `취약한 패키지 발견 (High/Critical: ${highAlerts}건).`,
-            rationale: 'NPM Audit 엔진 결과',
+            file: 'package.json',
+            message: `의존성 취약점이 발견되었습니다. (${total}건: 고위험 ${high + critical}건)`,
+            rationale: 'npm audit 실행 결과 취약한 패키지가 포함되어 있습니다.',
           },
         ];
+      }
     } catch (inner) {}
   }
   return [];
@@ -57,6 +39,7 @@ export async function checkPackageAudit(): Promise<Violation[]> {
 
 /**
  * 민감 정보 노출 여부를 정밀 스캔합니다.
+ * v0.0.1: Rust Native 병렬 정규식 엔진을 사용하여 고속 탐색을 수행합니다.
  */
 export async function checkSecrets(
   filePath: string,
@@ -64,20 +47,16 @@ export async function checkSecrets(
 ): Promise<Violation[]> {
   if (!existsSync(filePath)) return [];
 
-  const violations: Violation[] = [];
-  const content = readFileSync(filePath, 'utf-8');
-
-  // 1. 정규식 기반 정밀 매칭
-  SECRET_PATTERNS.forEach((p) => {
-    if (p.pattern.test(content)) {
-      violations.push({
-        type: 'SECURITY',
-        file: filePath,
-        message: p.message,
-        rationale: `패턴 일치: ${p.id}`,
-      });
-    }
-  });
-
-  return violations;
+  try {
+    const nativeViolations = scanSecretsNative([filePath]);
+    return nativeViolations.map((nv) => ({
+      type: 'SECURITY',
+      file: filePath,
+      line: nv.line,
+      message: nv.message,
+      rationale: nv.rationale,
+    }));
+  } catch (e) {
+    return [];
+  }
 }

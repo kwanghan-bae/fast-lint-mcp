@@ -28,7 +28,7 @@ describe('v4.3 Shorthand Property 정밀도 검증', () => {
     `;
     writeFileSync(filePath, code);
     const violations = await checkFakeLogic(filePath);
-    
+
     // v4.3.0 엔진은 { high } 패턴을 인식하여 위반을 보고하지 않아야 함
     expect(violations.length).toBe(0);
   });

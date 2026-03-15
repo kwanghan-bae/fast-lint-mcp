@@ -16,7 +16,7 @@ describe('Native Import Extractor (Commit 3.1)', () => {
 
   it('다양한 Import/Export 구문을 정확히 추출해야 한다', () => {
     const filePath = join(testDir, 'source.ts');
-    const code = 
+    const code =
       'import defaultMember from "module-name";\n' +
       'import * as name from "module-name-2";\n' +
       'import { member } from "./relative-path";\n' +
@@ -27,12 +27,12 @@ describe('Native Import Extractor (Commit 3.1)', () => {
       'async function load() {\n' +
       '  const mod = await import("./dynamic-import");\n' +
       '}\n';
-    
+
     writeFileSync(filePath, code);
 
     const results = extractImportsNative([filePath]);
     expect(results.length).toBe(1);
-    
+
     const imports = results[0].imports;
     expect(imports).toContain('module-name');
     expect(imports).toContain('module-name-2');

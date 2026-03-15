@@ -14,7 +14,7 @@ describe('JavascriptProvider Advice Coverage', () => {
     vi.clearAllMocks();
     provider = new JavascriptProvider({
       rules: { maxLineCount: 100, maxComplexity: 5 },
-      exclude: []
+      exclude: [],
     } as any);
     AstCacheManager.getInstance().clear();
   });
@@ -27,7 +27,7 @@ describe('JavascriptProvider Advice Coverage', () => {
       complexity: 10, // 기준(5) 초과 유도
       isDataFile: false,
       topComplexSymbols: [{ name: 'hybridFunc', complexity: 10, kind: 'function', line: 1 }],
-      customViolations: []
+      customViolations: [],
     });
 
     const mockRoot = {
@@ -36,14 +36,14 @@ describe('JavascriptProvider Advice Coverage', () => {
         if (pStr.includes('use$A') || pStr.includes('Math')) return [{}];
         return [];
       }),
-      text: () => 'useState Math.abs'
+      text: () => 'useState Math.abs',
     };
     vi.spyOn(AstCacheManager.getInstance(), 'getRootNode').mockReturnValue(mockRoot as any);
     vi.spyOn(fs, 'existsSync').mockReturnValue(true);
     vi.spyOn(fs, 'readFileSync').mockReturnValue('useState Math.abs');
 
     const violations = await provider.check('Hybrid.ts');
-    const compViolation = violations.find(v => v.type === 'COMPLEXITY');
+    const compViolation = violations.find((v) => v.type === 'COMPLEXITY');
     expect(compViolation?.message).toContain('강하게 결합');
   });
 
@@ -54,7 +54,7 @@ describe('JavascriptProvider Advice Coverage', () => {
       complexity: 10,
       isDataFile: false,
       topComplexSymbols: [{ name: 'calcFunc', complexity: 10, kind: 'function', line: 1 }],
-      customViolations: []
+      customViolations: [],
     });
 
     const mockRoot = {
@@ -63,14 +63,14 @@ describe('JavascriptProvider Advice Coverage', () => {
         if (pStr.includes('Math') || pStr.includes('crypto')) return [{}];
         return [];
       }),
-      text: () => 'Math.abs crypto.hash'
+      text: () => 'Math.abs crypto.hash',
     };
     vi.spyOn(AstCacheManager.getInstance(), 'getRootNode').mockReturnValue(mockRoot as any);
     vi.spyOn(fs, 'existsSync').mockReturnValue(true);
     vi.spyOn(fs, 'readFileSync').mockReturnValue('Math.abs crypto.hash');
 
     const violations = await provider.check('LogicOnly.ts');
-    const compViolation = violations.find(v => v.type === 'COMPLEXITY');
+    const compViolation = violations.find((v) => v.type === 'COMPLEXITY');
     expect(compViolation?.message).toContain('고도의 연산 로직');
   });
 });

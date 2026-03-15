@@ -59,12 +59,12 @@ describe('SymbolIndexer (Precision Deep Scan)', () => {
     const addRefs = indexer.findReferences('add');
     // 선언부 1개 + 호출부 1개 + 임포트 1개 = 3개 예상
     expect(addRefs.length).toBeGreaterThanOrEqual(2);
-    expect(addRefs.some(r => r.file === fileB)).toBe(true);
+    expect(addRefs.some((r) => r.file === fileB)).toBe(true);
 
     // 5. 공개 심볼 검증
     const exported = indexer.getAllExportedSymbols();
-    expect(exported.some(s => s.name === 'add')).toBe(true);
-    expect(exported.some(s => s.name === 'Calculator')).toBe(true);
+    expect(exported.some((s) => s.name === 'add')).toBe(true);
+    expect(exported.some((s) => s.name === 'Calculator')).toBe(true);
   });
 
   it('변수 선언 및 할당을 인덱싱해야 한다', async () => {

@@ -39,18 +39,18 @@ describe('SemanticService (Ultimate Coverage & Precision)', () => {
 
     // 1. 메트릭 추출 검증
     const metrics = service.getSymbolMetrics(filePath, true);
-    
-    expect(metrics.some(m => m.name === 'OrderManager')).toBe(true);
-    expect(metrics.some(m => m.name === 'OrderManager.calculate')).toBe(true);
-    expect(metrics.some(m => m.name === 'standalone')).toBe(true);
-    expect(metrics.some(m => m.name === 'arrowFunc')).toBe(true);
+
+    expect(metrics.some((m) => m.name === 'OrderManager')).toBe(true);
+    expect(metrics.some((m) => m.name === 'OrderManager.calculate')).toBe(true);
+    expect(metrics.some((m) => m.name === 'standalone')).toBe(true);
+    expect(metrics.some((m) => m.name === 'arrowFunc')).toBe(true);
 
     // 2. 복잡도 검증
-    const calcMetric = metrics.find(m => m.name === 'OrderManager.calculate');
+    const calcMetric = metrics.find((m) => m.name === 'OrderManager.calculate');
     // base(1) + if(1) + &&(1) = 3
     expect(calcMetric?.complexity).toBe(3);
 
-    const standaloneMetric = metrics.find(m => m.name === 'standalone');
+    const standaloneMetric = metrics.find((m) => m.name === 'standalone');
     // base(1) + ternary(1) = 2
     expect(standaloneMetric?.complexity).toBe(2);
   });
@@ -65,7 +65,7 @@ describe('SemanticService (Ultimate Coverage & Precision)', () => {
       '  getName() {',
       '    return "name";',
       '  }',
-      '}'
+      '}',
     ].join('\n');
     writeFileSync(filePath, code);
 
@@ -77,20 +77,23 @@ describe('SemanticService (Ultimate Coverage & Precision)', () => {
   it('프로젝트 전수 분석 및 데드 코드를 식별해야 한다', async () => {
     const libFile = join(testDir, 'lib.ts');
     const appFile = join(testDir, 'app.ts');
-    
+
     // usedFunc와 deadFunc로 명확히 구분
-    writeFileSync(libFile, 'export function usedFunc() { return 1; } \n export function deadFunc() { return 0; }');
+    writeFileSync(
+      libFile,
+      'export function usedFunc() { return 1; } \n export function deadFunc() { return 0; }'
+    );
     writeFileSync(appFile, 'import { usedFunc } from "./lib"; \n usedFunc();');
 
     await service.ensureInitialized(true, testDir);
-    
+
     // 인덱싱 결과 선 확인
     const def = service.goToDefinition('usedFunc');
     expect(def).not.toBeNull();
 
     const deadCode = await service.findDeadCode();
-    expect(deadCode.some(d => d.symbol === 'deadFunc')).toBe(true);
-    expect(deadCode.some(d => d.symbol === 'usedFunc')).toBe(false);
+    expect(deadCode.some((d) => d.symbol === 'deadFunc')).toBe(true);
+    expect(deadCode.some((d) => d.symbol === 'usedFunc')).toBe(false);
   });
 
   it('임팩트 분석이 의존성 그래프를 올바르게 참조해야 한다', async () => {
@@ -102,7 +105,7 @@ describe('SemanticService (Ultimate Coverage & Precision)', () => {
     // v4.8.1: 수동으로 인덱싱 및 그래프 빌드 유도
     await service.ensureInitialized(true, testDir);
     const impact = await service.analyzeImpact(fileA, 'SHARED_VAR');
-    
+
     // 의존성 그래프가 정상이라면 b.ts가 영향을 받는 파일에 있어야 함
     expect(impact.affectedFiles.length).toBeGreaterThanOrEqual(0);
   });
