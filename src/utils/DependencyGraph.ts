@@ -1,13 +1,11 @@
-import { dirname, normalize } from 'path';
-import glob from 'fast-glob';
+import { dirname, normalize, join, isAbsolute } from 'path';
 import { resolveModulePath } from './PathResolver.js';
-import pMap from 'p-map';
-import os from 'os';
-import { AstCacheManager } from './AstCacheManager.js';
+import { extractImportsNative, scanFiles } from '../../native/index.js';
+import { SYSTEM } from '../constants.js';
 
 /**
  * 프로젝트 내 파일 간의 의존성 관계(Import/Export)를 분석하고 그래프 구조를 관리하는 클래스입니다.
- * p-map을 사용하여 멀티코어 환경에서 병렬로 의존성 맵을 구축합니다.
+ * v0.0.1: Rust Native 엔진을 사용하여 프로젝트 전체 임포트를 초고속으로 병렬 추출합니다.
  */
 export class DependencyGraph {
   /** 각 파일이 임포트하고 있는 대상 목록 (File -> Imports) */
@@ -23,55 +21,53 @@ export class DependencyGraph {
 
   /**
    * 프로젝트 내의 모든 소스 파일을 스캔하여 의존성 맵을 생성합니다.
-   * v3.3 Turbo: 파싱 오버헤드를 제거하고 중복 스캔을 방지합니다.
+   * v0.0.1 Turbo: 러스트 네이티브 병렬 추출을 통해 I/O 병목을 제거합니다.
    * @param providedFiles 이미 스캔된 파일 목록이 있다면 이를 활용합니다.
    */
   async build(providedFiles?: string[]) {
     this.importMap.clear();
     this.dependentMap.clear();
 
+    // 1. 파일 목록 확보 (없으면 네이티브 스캐너 가동)
     let allFiles: string[] = [];
     if (providedFiles) {
       allFiles = providedFiles.map((f) => normalize(f));
     } else {
-      const files = await glob(['**/*.{ts,js,tsx,jsx,kt,kts}'], {
-        cwd: this.workspacePath,
-        absolute: true,
-        ignore: [
-          '**/node_modules/**',
-          '**/dist/**',
-          '**/build/**',
-          '**/out/**',
-          '**/.next/**',
-          '**/coverage/**',
-          '**/android/**',
-          '**/ios/**',
-          '**/.git/**',
-        ],
-      });
-      allFiles = files.map((f) => normalize(f));
+      allFiles = scanFiles(this.workspacePath, SYSTEM.DEFAULT_IGNORE_PATTERNS).map((f) =>
+        normalize(f)
+      );
     }
+    
+    // 2. Rust Native 엔진을 통해 전 파일 임포트 구문을 병렬로 긁어옵니다. (Zero-boundary overhead)
+    const nativeResults = extractImportsNative(allFiles);
 
-    const concurrency = Math.max(1, os.cpus().length - 1);
+    // 2. 추출된 임포트 원본(Raw Source)을 JS 단에서 해소(Resolve)하여 그래프를 완성합니다.
+    for (const res of nativeResults) {
+      const file = normalize(res.file);
+      const dir = dirname(file);
+      const resolvedImports: string[] = [];
 
-    await pMap(
-      allFiles,
-      async (file) => {
-        const imports = await this.extractImports(file, allFiles);
-        this.importMap.set(file, imports);
-
-        for (const imp of imports) {
-          if (!this.dependentMap.has(imp)) {
-            this.dependentMap.set(imp, []);
-          }
-          const deps = this.dependentMap.get(imp)!;
-          if (!deps.includes(file)) {
-            deps.push(file);
-          }
+      for (const source of res.imports) {
+        const resolved = resolveModulePath(dir, source, allFiles, this.workspacePath, file);
+        if (resolved) {
+          resolvedImports.push(resolved);
         }
-      },
-      { concurrency }
-    );
+      }
+
+      const uniqueImports = [...new Set(resolvedImports)];
+      this.importMap.set(file, uniqueImports);
+
+      // 역의존성 맵 구축
+      for (const imp of uniqueImports) {
+        if (!this.dependentMap.has(imp)) {
+          this.dependentMap.set(imp, []);
+        }
+        const deps = this.dependentMap.get(imp)!;
+        if (!deps.includes(file)) {
+          deps.push(file);
+        }
+      }
+    }
   }
 
   /**
@@ -146,49 +142,5 @@ export class DependencyGraph {
       visited.add(startNode);
     }
     return cycles;
-  }
-
-  /**
-   * 특정 파일의 임포트/익스포트 구문을 분석하여 의존 경로를 추출합니다.
-   * @param filePath 분석할 소스 파일 경로
-   * @param allFiles 프로젝트 내 전체 파일 목록 (경로 해소용)
-   */
-  private async extractImports(filePath: string, allFiles: string[]): Promise<string[]> {
-    try {
-      const root = AstCacheManager.getInstance().getRootNode(filePath);
-      if (!root) return [];
-
-      const imports: string[] = [];
-      const dir = dirname(filePath);
-
-      const importRule = {
-        any: [
-          { pattern: "import $A from '$B'" },
-          { pattern: 'import $A from "$B"' },
-          { pattern: "import { $$$ } from '$B'" },
-          { pattern: 'import { $$$ } from "$B"' },
-          { pattern: "export { $$$ } from '$B'" },
-          { pattern: 'export { $$$ } from "$B"' },
-          { pattern: "export * from '$B'" },
-          { pattern: 'export * from "$B"' },
-          { pattern: "import '$B'" },
-          { pattern: 'import "$B"' },
-        ],
-      };
-
-      try {
-        const matches = root.findAll({ rule: importRule });
-        for (const m of matches) {
-          const source = m.getMatch('B')?.text();
-          if (source) {
-            const resolved = resolveModulePath(dir, source, allFiles, undefined, filePath);
-            if (resolved) imports.push(resolved);
-          }
-        }
-      } catch (e) {}
-      return [...new Set(imports)];
-    } catch (e) {
-      return [];
-    }
   }
 }

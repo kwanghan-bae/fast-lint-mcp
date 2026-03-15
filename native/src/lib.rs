@@ -7,6 +7,9 @@ use ignore::WalkBuilder;
 use std::path::Path;
 use rayon::prelude::*;
 use regex::Regex;
+use std::collections::HashMap;
+use petgraph::graph::{DiGraph, NodeIndex};
+use petgraph::Direction;
 
 #[napi]
 pub fn hello_rust() -> String {
@@ -65,10 +68,8 @@ pub fn parse_files_basic(files: Vec<String>) -> Vec<bool> {
 
 #[napi]
 pub fn count_tech_debt_native(files: Vec<String>) -> i32 {
-  // TODO, FIXME, HACK, XXX 탐지를 위한 대소문자 무시 정규식
   let re = Regex::new(r"(?i)(TODO|FIXME|HACK|XXX)").unwrap();
 
-  // Rayon을 사용한 병렬 처리 및 결과 합산
   files.into_par_iter()
     .map(|file_path| {
       if let Ok(content) = std::fs::read_to_string(&file_path) {
@@ -78,4 +79,70 @@ pub fn count_tech_debt_native(files: Vec<String>) -> i32 {
       }
     })
     .sum()
+}
+
+#[napi(object)]
+pub struct ImportResult {
+  pub file: String,
+  pub imports: Vec<String>,
+}
+
+#[napi]
+pub fn extract_imports_native(files: Vec<String>) -> Vec<ImportResult> {
+  let re = Regex::new(r#"(?:import|export)\s+.*?\s+from\s+['"](.*?)['"]|import\(['"](.*?)['"]\)"#).unwrap();
+
+  files.into_par_iter()
+    .map(|file_path| {
+      let mut imports = Vec::new();
+      if let Ok(content) = std::fs::read_to_string(&file_path) {
+        for cap in re.captures_iter(&content) {
+          if let Some(m) = cap.get(1).or(cap.get(2)) {
+            imports.push(m.as_str().to_string());
+          }
+        }
+      }
+      ImportResult {
+        file: file_path,
+        imports,
+      }
+    })
+    .collect()
+}
+
+#[napi]
+pub fn get_dependents_native(target_file: String, import_map: HashMap<String, Vec<String>>) -> Vec<String> {
+  let mut graph = DiGraph::<String, ()>::new();
+  let mut nodes = HashMap::new();
+
+  // 1. 모든 파일을 노드로 등록
+  for file in import_map.keys() {
+    let idx = graph.add_node(file.clone());
+    nodes.insert(file.clone(), idx);
+  }
+
+  // 2. 엣지(의존성) 등록
+  for (file, imports) in &import_map {
+    if let Some(&from_idx) = nodes.get(file) {
+      for import_path in imports {
+        // 실제로는 여기서 Path resolution이 필요하지만, 
+        // 일단 전달된 import_map이 이미 resolved 상태라고 가정하거나 단순 매칭 수행
+        if let Some(&to_idx) = nodes.get(import_path) {
+          graph.add_edge(from_idx, to_idx, ());
+        }
+      }
+    }
+  }
+
+  // 3. 타겟 파일을 참조하는(Incoming edge) 파일들 찾기
+  let mut dependents = Vec::new();
+  if let Some(&target_idx) = nodes.get(&target_file) {
+    let mut incoming = graph.neighbors_directed(target_idx, Direction::Incoming);
+    while let Some(neighbor_idx) = incoming.next() {
+      if let Some(file_name) = graph.node_weight(neighbor_idx) {
+        dependents.push(file_name.clone());
+      }
+    }
+  }
+
+  dependents
 }

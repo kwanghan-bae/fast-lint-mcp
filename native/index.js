@@ -310,9 +310,11 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-const { helloRust, scanFiles, parseFilesBasic, countTechDebtNative } = nativeBinding
+const { helloRust, scanFiles, parseFilesBasic, countTechDebtNative, extractImportsNative, getDependentsNative } = nativeBinding
 
 module.exports.helloRust = helloRust
 module.exports.scanFiles = scanFiles
 module.exports.parseFilesBasic = parseFilesBasic
 module.exports.countTechDebtNative = countTechDebtNative
+module.exports.extractImportsNative = extractImportsNative
+module.exports.getDependentsNative = getDependentsNative

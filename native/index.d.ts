@@ -7,3 +7,9 @@ export declare function helloRust(): string
 export declare function scanFiles(rootPath: string, ignorePatterns: Array<string>): Array<string>
 export declare function parseFilesBasic(files: Array<string>): Array<boolean>
 export declare function countTechDebtNative(files: Array<string>): number
+export interface ImportResult {
+  file: string
+  imports: Array<string>
+}
+export declare function extractImportsNative(files: Array<string>): Array<ImportResult>
+export declare function getDependentsNative(targetFile: string, importMap: Record<string, Array<string>>): Array<string>
