@@ -35,14 +35,22 @@ export async function verifyAPIContracts(
           { kind: 'class_declaration' },
           { kind: 'variable_declarator' },
           { kind: 'lexical_declaration' },
+          { kind: 'formal_parameters' }, // 함수 인자 추가 (v0.0.1)
         ],
       },
     })
     .forEach((node) => {
-      const id = node.find({
-        rule: { any: [{ kind: 'identifier' }, { kind: 'property_identifier' }] },
-      });
-      if (id) localDefs.add(id.text().trim());
+      if (node.kind() === 'formal_parameters') {
+        // 파라미터 내부의 모든 식별자 수집
+        node.findAll({ rule: { kind: 'identifier' } }).forEach((id) => {
+          localDefs.add(id.text().trim());
+        });
+      } else {
+        const id = node.find({
+          rule: { any: [{ kind: 'identifier' }, { kind: 'property_identifier' }] },
+        });
+        if (id) localDefs.add(id.text().trim());
+      }
     });
 
   // 2. 현재 파일의 임포트(Import) 목록 수집
@@ -55,7 +63,7 @@ export async function verifyAPIContracts(
     if (id) imports.add(id.text().trim());
   });
 
-  // 3. 표준 내장 객체 및 전역 변수 (Whitelist)
+  // 3. 표준 내장 객체 및 전역 변수 (Whitelist 확장 v0.0.1)
   const builtins = new Set([
     'console',
     'Math',
@@ -80,9 +88,61 @@ export async function verifyAPIContracts(
     'module',
     'exports',
     'global',
+    'window',
+    'document',
+    'navigator',
+    'location',
+    'history',
+    'screen',
     '__dirname',
     '__filename',
     'Buffer',
+    'encodeURI',
+    'encodeURIComponent',
+    'decodeURI',
+    'decodeURIComponent',
+    'parseFloat',
+    'parseInt',
+    'isNaN',
+    'isFinite',
+    'fetch',
+    'Headers',
+    'Request',
+    'Response',
+    'URL',
+    'URLSearchParams',
+    'AbortController',
+    'AbortSignal',
+    'FormData',
+    'Blob',
+    'File',
+    'FileReader',
+    'WebSocket',
+    'Event',
+    'CustomEvent',
+    'Map',
+    'Set',
+    'WeakMap',
+    'WeakSet',
+    'Proxy',
+    'Reflect',
+    'Symbol',
+    'Intl',
+    'Int8Array',
+    'Uint8Array',
+    'Uint8ClampedArray',
+    'Int16Array',
+    'Uint16Array',
+    'Int32Array',
+    'Uint32Array',
+    'Float32Array',
+    'Float64Array',
+    'BigInt64Array',
+    'BigUint64Array',
+    'DataView',
+    'ArrayBuffer',
+    'SharedArrayBuffer',
+    'Atomics',
   ]);
 
   // 4. 함수 호출부 검증

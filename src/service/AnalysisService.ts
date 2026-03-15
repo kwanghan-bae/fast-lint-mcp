@@ -94,7 +94,7 @@ export class AnalysisService {
     violations.push(...fileViolations, ...structuralViolations);
 
     // 5. 기술 부채 및 커버리지 분석 (Delegated)
-    await this.scanTechDebt(rules, violations);
+    await this.scanTechDebt(allProjectFiles, rules, violations);
     const coverage = await this.coverageAnalyzer.analyze(
       options,
       rules,
@@ -221,8 +221,8 @@ export class AnalysisService {
   }
 
   /** 기술 부채(TODO) 수치를 측정하고 위반 여부를 결정합니다. */
-  private async scanTechDebt(rules: any, violations: Violation[]) {
-    const techDebtCount = await countTechDebt(this.workspacePath, this.config.exclude);
+  private async scanTechDebt(allFiles: string[], rules: any, violations: Violation[]) {
+    const techDebtCount = await countTechDebt(allFiles);
     if (techDebtCount > rules.techDebtLimit) {
       violations.push({
         type: 'TECH_DEBT',

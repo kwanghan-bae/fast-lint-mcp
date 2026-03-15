@@ -1,60 +1,32 @@
-import { readFileSync } from 'fs';
-import glob from 'fast-glob';
 import pMap from 'p-map';
 import os from 'os';
+import { AstCacheManager } from '../utils/AstCacheManager.js';
 
 /**
  * 프로젝트 내의 기술 부채(TODO, FIXME 등)를 고속으로 스캔하여 개수를 반환합니다.
- * v4.0.0: 제외 패턴 엄격화 (.git, build, coverage 등) 및 Kotlin 지원 확대
+ * v0.0.1: AST 엔진을 활용하여 주석 내의 기술 부채만 정밀 타격하고 I/O 병목을 제거합니다.
  */
-export async function countTechDebt(
-  workspacePath: string = process.cwd(),
-  ignorePatterns: string[] = []
-): Promise<number> {
+export async function countTechDebt(files: string[]): Promise<number> {
   try {
-    const defaultIgnores = [
-      '**/node_modules/**',
-      '**/dist/**',
-      '**/build/**',
-      '**/out/**',
-      '**/.next/**',
-      '**/coverage/**',
-      '**/.git/**',
-      '**/.idea/**',
-      '**/.vscode/**',
-    ];
-    const combinedIgnores = [...new Set([...defaultIgnores, ...ignorePatterns])];
-
-    // 분석 대상 파일을 탐색합니다. (Kotlin 포함)
-    const files = await glob(['**/*.{ts,js,tsx,jsx,kt,kts}'], {
-      cwd: workspacePath,
-      absolute: true,
-      ignore: combinedIgnores,
-    });
-
-    // 추적할 기술 부채 키워드 정의
-    const patterns = ['TODO', 'FIXME', 'HACK', 'XXX'];
-
-    // p-map을 사용하여 멀티코어 환경에서 병렬로 파일 내용을 검색합니다.
+    // p-map을 사용하여 멀티코어 환경에서 병렬로 파일의 AST를 검색합니다.
     const results = await pMap(
       files,
       async (file) => {
         try {
-          // 대소문자 구분 없이 검색하기 위해 내용을 모두 대문자로 변환합니다.
-          const content = readFileSync(file, 'utf-8').toUpperCase();
-          let count = 0;
-
-          for (const p of patterns) {
-            let pos = content.indexOf(p);
-            // 해당 키워드가 파일 내에 몇 번 나타나는지 카운트합니다.
-            while (pos !== -1) {
-              count++;
-              pos = content.indexOf(p, pos + 1);
+          const root = AstCacheManager.getInstance().getRootNode(file, true);
+          if (!root) return 0;
+          
+          // 오직 주석(comment) 노드 내에서만 특정 키워드를 정밀 탐색합니다.
+          // (ast-grep은 대소문자 무시 정규식을 제한적으로 지원하므로, 여러 패턴을 조합)
+          const matches = root.findAll({
+            rule: { 
+              kind: 'comment', 
+              regex: '(?i)(TODO|FIXME|HACK|XXX)' 
             }
-          }
-          return count;
+          });
+          return matches.length;
         } catch (e) {
-          // 파일 읽기 실패 시 해당 파일의 카운트는 0으로 처리
+          // 파싱/검색 실패 시 0으로 처리
           return 0;
         }
       },

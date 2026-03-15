@@ -22,7 +22,7 @@ describe('Security Checker', () => {
   it('민감 정보를 탐지해야 한다', async () => {
     // 변수명 필터(color, id 등)에 걸리지 않는 이름 사용
     const code =
-      "const myKey = 'AKIA1234567890ABCDEF';\nconst rawSecret = 'auth: \"QXpXclM0dFBlTTVuRjhLMnYxSmI2R2g5TmszWFF5RDc\"';";
+      "const myKey = 'AKIA1234567890ABCDEF';\nconst rawSecret = 'token: \"QXpXclM0dFBlTTVuRjhLMnYxSmI2R2g5TmszWFF5RDc\"';";
     writeFileSync(testFile, code);
     const violations = await checkSecrets(testFile);
     expect(violations.length).toBeGreaterThanOrEqual(2);

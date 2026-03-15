@@ -5,6 +5,8 @@ import { writeFileSync, mkdirSync, rmSync, existsSync } from 'fs';
 import { join } from 'path';
 import { AstCacheManager } from '../src/utils/AstCacheManager.js';
 
+import { getProjectFiles } from '../src/analysis/import-check.js';
+
 describe('v4.0 Stability & Precision Verification', () => {
   const testDir = join(process.cwd(), 'temp_v40_verify');
 
@@ -57,7 +59,8 @@ describe('v4.0 Stability & Precision Verification', () => {
     writeFileSync(join(buildDir, 'bundle.js'), '// TODO: minified build todo');
 
     // 3. 기술 부채 스캔 실행 (ignorePatterns에 testDir 내의 특수 경로 주입)
-    const count = await countTechDebt(testDir, []);
+    const files = await getProjectFiles(testDir);
+    const count = await countTechDebt(files);
     
     // 4. 결과는 오직 source.ts의 2개여야 함
     expect(count).toBe(2);

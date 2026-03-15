@@ -1,12 +1,12 @@
-# Gemini CLI Skill Registration Guide 🛡️ v3.7.0
+# Gemini CLI Skill Registration Guide 🛡️ v0.0.1
 
-이 문서는 `fast-lint-mcp` v3.7.0의 하이퍼-속도 엔진과 지능형 아키텍처 가이드를 Gemini CLI에서 극대화하기 위해, **Semantic Guardian** 스킬을 등록하고 활용하는 방법을 설명합니다.
+이 문서는 `fast-lint-mcp` v0.0.1의 하이퍼-속도 엔진과 지능형 아키텍처 가이드를 Gemini CLI에서 극대화하기 위해, **Semantic Guardian** 스킬을 등록하고 활용하는 방법을 설명합니다.
 
 ---
 
 ## 1. Skill 등록 방법 (Registration)
 
-현재 프로젝트에 포함된 v3.7.0 최신 스킬을 Gemini CLI의 글로벌 환경에 등록합니다.
+현재 프로젝트에 포함된 v0.0.1 최신 스킬을 Gemini CLI의 글로벌 환경에 등록합니다.
 
 ### 🔗 심볼릭 링크(Symbolic Link) 등록 (권장)
 ```bash
@@ -16,7 +16,7 @@ gemini skills link .gemini/skills/semantic-guardian
 
 ---
 
-## 2. v3.7.0 에이전트 지능형 전략 (Agent Intelligence)
+## 2. v0.0.1 에이전트 지능형 전략 (Agent Intelligence)
 
 스킬이 등록되면 에이전트는 다음과 같은 **"시니어급 자율 판단"** 워크플로우를 수행합니다:
 
@@ -34,7 +34,7 @@ gemini skills link .gemini/skills/semantic-guardian
 
 ---
 
-## 🛠️ v3.7.0 핵심 도구 (Modern Toolset)
+## 🛠️ v0.0.1 핵심 도구 (Modern Toolset)
 
 에이전트가 사용하는 최신 품질 도구들입니다:
 *   **`quality-check`**: Real-Time Turbo 엔진 기반의 고속 전체 품질 검사 및 리팩토링 블루프린트 제공.
