@@ -13,3 +13,29 @@ export interface ImportResult {
 }
 export declare function extractImportsNative(files: Array<string>): Array<ImportResult>
 export declare function getDependentsNative(targetFile: string, importMap: Record<string, Array<string>>): Array<string>
+export interface TsConfigPaths {
+  baseUrl?: string
+  paths: Record<string, Array<string>>
+}
+export declare function parseTsconfigPaths(configPath: string): TsConfigPaths | null
+export declare function resolveModulePathNative(currentDir: string, source: string, workspacePath: string, baseUrl?: string | undefined | null, paths?: Record<string, Array<string>> | undefined | null): string | null
+export interface SymbolResult {
+  name: string
+  line: number
+  endLine: number
+  isExported: boolean
+  kind: string
+  complexity: number
+  lines: number
+}
+export declare function extractSymbolsNative(filePath: string): Array<SymbolResult>
+export interface ReferenceResult {
+  file: string
+  line: number
+}
+export declare function findReferencesNative(symbolName: string, files: Array<string>): Array<ReferenceResult>
+export interface FileMetrics {
+  complexity: number
+  lines: number
+}
+export declare function getFileMetricsNative(filePath: string): FileMetrics | null

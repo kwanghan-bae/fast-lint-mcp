@@ -1,6 +1,7 @@
-import { dirname, normalize, join, isAbsolute } from 'path';
-import { resolveModulePath } from './PathResolver.js';
-import { extractImportsNative, scanFiles } from '../../native/index.js';
+import { dirname, normalize, join, isAbsolute, extname } from 'path';
+import { existsSync } from 'fs';
+import { findNearestProjectRoot } from './PathResolver.js';
+import { extractImportsNative, scanFiles, resolveModulePathNative, parseTsconfigPaths } from '../../native/index.js';
 import { SYSTEM } from '../constants.js';
 
 /**
@@ -21,7 +22,7 @@ export class DependencyGraph {
 
   /**
    * 프로젝트 내의 모든 소스 파일을 스캔하여 의존성 맵을 생성합니다.
-   * v0.0.1 Turbo: 러스트 네이티브 병렬 추출을 통해 I/O 병목을 제거합니다.
+   * v0.0.1 Turbo: 러스트 네이티브 병렬 추출 및 경로 해석을 통해 I/O 병목을 제거합니다.
    * @param providedFiles 이미 스캔된 파일 목록이 있다면 이를 활용합니다.
    */
   async build(providedFiles?: string[]) {
@@ -37,20 +38,33 @@ export class DependencyGraph {
         normalize(f)
       );
     }
+
+    // 2. TSConfig Alias 설정 로드
+    const projectRoot = findNearestProjectRoot(this.workspacePath);
+    const tsconfigPath = join(projectRoot, 'tsconfig.json');
+    const tsconfig = existsSync(tsconfigPath) ? parseTsconfigPaths(tsconfigPath) : null;
     
-    // 2. Rust Native 엔진을 통해 전 파일 임포트 구문을 병렬로 긁어옵니다. (Zero-boundary overhead)
+    // 3. Rust Native 엔진을 통해 전 파일 임포트 구문을 병렬로 긁어옵니다.
     const nativeResults = extractImportsNative(allFiles);
 
-    // 2. 추출된 임포트 원본(Raw Source)을 JS 단에서 해소(Resolve)하여 그래프를 완성합니다.
+    // 4. 추출된 임포트 원본을 네이티브 리졸버로 해소하여 그래프를 완성합니다.
     for (const res of nativeResults) {
       const file = normalize(res.file);
       const dir = dirname(file);
       const resolvedImports: string[] = [];
 
       for (const source of res.imports) {
-        const resolved = resolveModulePath(dir, source, allFiles, this.workspacePath, file);
+        // v0.0.1: Native Resolver 호출 (I/O 캐시 활용)
+        const resolved = resolveModulePathNative(
+          dir,
+          source,
+          this.workspacePath,
+          tsconfig?.baseUrl || null,
+          tsconfig?.paths || null
+        );
+        
         if (resolved) {
-          resolvedImports.push(resolved);
+          resolvedImports.push(normalize(resolved));
         }
       }
 

@@ -3,12 +3,11 @@ import { resolve, dirname } from 'path';
 import { SymbolIndexer } from '../utils/SymbolIndexer.js';
 import { DependencyGraph } from '../utils/DependencyGraph.js';
 import { SymbolMetric, ImpactAnalysis } from '../types/index.js';
-import { parse, Lang, SgNode } from '@ast-grep/napi';
-import { AstCacheManager } from '../utils/AstCacheManager.js';
+import { extractSymbolsNative } from '../../native/index.js';
 
 /**
  * 심볼 레벨(함수, 클래스 등)의 시맨틱 분석과 의존성 추적을 담당하는 서비스입니다.
- * v4.8.1: 고정밀 AST 매칭 엔진 및 100% 테스트 커버리지 대응
+ * v0.0.1: Rust Native 엔진을 사용하여 단일 패스로 모든 메트릭을 추출합니다.
  */
 export class SemanticService {
   private indexer: SymbolIndexer;
@@ -31,136 +30,28 @@ export class SemanticService {
   }
 
   /** 특정 파일의 심볼 메트릭 추출 */
-  getSymbolMetrics(filePath: string, force: boolean = false): SymbolMetric[] {
-    if (!filePath || filePath === 'non-existent.ts') return []; // 명시적 방어
+  getSymbolMetrics(filePath: string, _force: boolean = false): SymbolMetric[] {
+    if (!filePath || filePath === 'non-existent.ts') return [];
     const absPath = resolve(filePath);
     if (!existsSync(absPath)) return [];
+    
     try {
-      // 캐시 무효화 정합성을 위해 force 인자 존중
-      const root = AstCacheManager.getInstance().getRootNode(absPath, force);
-      if (!root) return [];
-      return this.collectMetrics(root);
+      // v0.0.1: Native 단일 패스 메트릭 추출 (정밀 AST 분석 기반)
+      const nativeSymbols = extractSymbolsNative(absPath);
+      return nativeSymbols.map((s) => ({
+        name: s.name,
+        kind: s.kind,
+        lineCount: s.lines,
+        complexity: s.complexity,
+        startLine: s.line,
+        endLine: s.endLine,
+      }));
     } catch (e) {
       return [];
     }
   }
 
-  private collectMetrics(root: SgNode): SymbolMetric[] {
-    const metrics: SymbolMetric[] = [];
-
-    // 1. 클래스 선언 및 내보내기(Export) 포함 정밀 탐색
-    root
-      .findAll({
-        rule: {
-          any: [{ kind: 'class_declaration' }, { kind: 'class' }, { kind: 'export_statement' }],
-        },
-      })
-      .forEach((node) => {
-        let clsNode = node;
-        if (node.kind() === 'export_statement') {
-          clsNode = node.find({ rule: { kind: 'class_declaration' } }) || node;
-        }
-        if (clsNode.kind() !== 'class_declaration' && clsNode.kind() !== 'class') return;
-
-        const className = this.getIdentifier(clsNode) || 'anonymous';
-        if (!metrics.some((m) => m.name === className)) {
-          metrics.push(this.createMetric(clsNode, 'class', className));
-        }
-
-        // 메서드 정밀 탐색
-        clsNode.findAll({ rule: { kind: 'method_definition' } }).forEach((method) => {
-          const methodName = this.getIdentifier(method);
-          if (methodName) {
-            const fullName = `${className}.${methodName}`;
-            if (!metrics.some((m) => m.name === fullName)) {
-              metrics.push(this.createMetric(method, 'method', fullName));
-            }
-          }
-        });
-      });
-
-    // 2. 함수 선언부 (일반 및 Export 포함)
-    root
-      .findAll({
-        rule: {
-          any: [{ kind: 'function_declaration' }, { kind: 'export_statement' }],
-        },
-      })
-      .forEach((node) => {
-        let funcNode = node;
-        if (node.kind() === 'export_statement') {
-          funcNode = node.find({ rule: { kind: 'function_declaration' } }) || node;
-        }
-        if (funcNode.kind() !== 'function_declaration') return;
-
-        const name = this.getIdentifier(funcNode) || 'anonymous';
-        if (!metrics.some((m) => m.name === name)) {
-          metrics.push(this.createMetric(funcNode, 'function', name));
-        }
-      });
-
-    // 3. 변수 할당형 함수 (const a = () => {})
-    root.findAll({ rule: { kind: 'variable_declarator' } }).forEach((decl) => {
-      const isFunc = decl.find({
-        rule: { any: [{ kind: 'arrow_function' }, { kind: 'function_expression' }] },
-      });
-      if (isFunc) {
-        const name = this.getIdentifier(decl) || 'anonymous';
-        if (!metrics.some((m) => m.name === name)) {
-          metrics.push(this.createMetric(decl, 'function', name));
-        }
-      }
-    });
-
-    return metrics;
-  }
-
-  private getIdentifier(node: SgNode): string | null {
-    const id = node.find({
-      rule: {
-        any: [{ kind: 'identifier' }, { kind: 'type_identifier' }, { kind: 'property_identifier' }],
-      },
-    });
-    return id?.text().trim() || null;
-  }
-
-  private createMetric(node: SgNode, kind: string, name: string): SymbolMetric {
-    const range = node.range();
-    return {
-      name,
-      kind,
-      lineCount: range.end.line - range.start.line + 1,
-      complexity: this.calculateComplexity(node),
-      startLine: range.start.line + 1,
-      endLine: range.end.line + 1,
-    };
-  }
-
-  private calculateComplexity(node: SgNode): number {
-    // 고수준 복잡도 지표 (Cyclomatic Complexity 유사 모델)
-    // v4.8.1: 패턴 매칭 우선순위 및 중복 방어 강화
-    const patterns = [
-      { pattern: 'if ($A) { $$$ }', id: 'if_block' },
-      { pattern: 'for ($A) { $$$ }', id: 'for' },
-      { pattern: 'while ($A) { $$$ }', id: 'while' },
-      { pattern: 'switch ($A) { $$$ }', id: 'switch' },
-      { pattern: 'catch ($A) { $$$ }', id: 'catch' },
-      { pattern: '$A ? $B : $C', id: 'ternary' },
-      { pattern: '$A && $B', id: 'and' },
-      { pattern: '$A || $B', id: 'or' },
-    ];
-    let complexity = 1;
-    const text = node.text();
-
-    for (const { pattern } of patterns) {
-      try {
-        const matches = node.findAll(pattern);
-        complexity += matches.length;
-      } catch (e) {}
-    }
-    return complexity;
-  }
-
+  /** 특정 심볼의 본문 내용을 가져옵니다. */
   getSymbolContent(filePath: string, symbolName: string): string | null {
     const absPath = resolve(filePath);
     const metrics = this.getSymbolMetrics(absPath, true);
@@ -170,16 +61,16 @@ export class SemanticService {
     try {
       const content = readFileSync(absPath, 'utf-8');
       const allLines = content.split(/\r?\n/);
-      // 정확한 라인 슬라이싱 (1-based index 보정)
+      // v0.0.1: 네이티브에서 추출한 정확한 라인 범위로 본문 슬라이싱
       return allLines.slice(target.startLine - 1, target.endLine).join('\n');
     } catch (e) {
       return null;
     }
   }
 
+  /** 특정 심볼의 수정이 프로젝트 전체에 미치는 영향 분석 */
   async analyzeImpact(filePath: string, symbolName: string): Promise<ImpactAnalysis> {
     const absPath = resolve(filePath);
-    // v4.8.1: 상위 디렉토리를 워크스페이스 루트로 가정하여 초기화
     await this.ensureInitialized(true, dirname(absPath));
     const dependents = this.depGraph.getDependents(absPath);
     return {
@@ -190,21 +81,27 @@ export class SemanticService {
     };
   }
 
+  /** 심볼 참조 탐색 */
   findReferences(name: string): { file: string; line: number }[] {
     return this.indexer.findReferences(name);
   }
+
+  /** 심볼 정의로 이동 */
   goToDefinition(name: string): { file: string; line: number } | null {
     return this.indexer.getDefinition(name);
   }
+
+  /** 역의존성 조회 */
   getDependents(path: string): string[] {
     return this.depGraph.getDependents(resolve(path));
   }
 
-  /** 프로젝트 내의 모든 공개(export) 심볼 목록을 가져옵니다. (v6.0.0 환각 탐지용) */
+  /** 프로젝트 내의 모든 공개(export) 심볼 목록을 가져옵니다. */
   getAllExportedSymbols(): { name: string; file: string }[] {
     return this.indexer.getAllExportedSymbols();
   }
 
+  /** 미사용 코드(Dead Code)를 탐지합니다. */
   async findDeadCode(): Promise<{ file: string; symbol: string }[]> {
     await this.ensureInitialized(true);
     const symbols = this.indexer.getAllExportedSymbols();
