@@ -1,9 +1,0 @@
-/Users/joel/Desktop/git/fast-lint-mcp/native/target/debug/deps/tree_sitter_bash-d3c8f77d2d4927b2.d: /Users/joel/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-bash-0.25.1/bindings/rust/lib.rs /Users/joel/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-bash-0.25.1/bindings/rust/../../src/node-types.json /Users/joel/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-bash-0.25.1/bindings/rust/../../queries/highlights.scm
-
-/Users/joel/Desktop/git/fast-lint-mcp/native/target/debug/deps/libtree_sitter_bash-d3c8f77d2d4927b2.rlib: /Users/joel/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-bash-0.25.1/bindings/rust/lib.rs /Users/joel/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-bash-0.25.1/bindings/rust/../../src/node-types.json /Users/joel/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-bash-0.25.1/bindings/rust/../../queries/highlights.scm
-
-/Users/joel/Desktop/git/fast-lint-mcp/native/target/debug/deps/libtree_sitter_bash-d3c8f77d2d4927b2.rmeta: /Users/joel/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-bash-0.25.1/bindings/rust/lib.rs /Users/joel/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-bash-0.25.1/bindings/rust/../../src/node-types.json /Users/joel/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-bash-0.25.1/bindings/rust/../../queries/highlights.scm
-
-/Users/joel/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-bash-0.25.1/bindings/rust/lib.rs:
-/Users/joel/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-bash-0.25.1/bindings/rust/../../src/node-types.json:
-/Users/joel/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-bash-0.25.1/bindings/rust/../../queries/highlights.scm:

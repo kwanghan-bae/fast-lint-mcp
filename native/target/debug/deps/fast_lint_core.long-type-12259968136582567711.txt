@@ -1,2 +1,0 @@
-fn(&ast_grep_core::Node<'_, _>, _) -> impl Iterator<Item = NodeMatch<'_, _>> + '_ {ast_grep_core::Node::<'_, _>::find_all::<'_, _>}
-fn(&ast_grep_core::Node<'_, _>, _) -> impl Iterator<Item = NodeMatch<'_, _>> + '_ {ast_grep_core::Node::<'_, _>::find_all::<'_, _>}: Matcher
