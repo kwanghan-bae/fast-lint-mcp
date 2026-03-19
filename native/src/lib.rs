@@ -22,7 +22,7 @@ static SECRET_PATTERNS: Lazy<Vec<(&'static str, Regex, &'static str)>> = Lazy::n
     ("GENERIC_SECRET", Regex::new(r#"(?i)(password|secret|token|key|api_key|auth_token)\s*[:=]\s*['"].{16,}['"]"#).unwrap(), "하드코딩된 비밀번호나 토큰이 발견되었습니다!"),
     ("JWT_TOKEN", Regex::new(r"eyJ[a-zA-Z0-9\._\-]{10,}").unwrap(), "JWT 토큰이 노출되었습니다!"),
 ]);
-static COMPLEXITY_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b(if|for|while|switch|catch)\b|(&&|\|\||\?)").unwrap());
+pub static COMPLEXITY_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b(if|for|while|switch|catch)\b|(&&|\|\||\?)").unwrap());
 
 #[napi]
 pub fn hello_rust() -> String {
@@ -251,8 +251,9 @@ pub struct SymbolResult {
   pub kind: String,
   pub complexity: i32,
   pub lines: i32,
+  pub parameter_count: i32,
+  pub has_korean_comment: bool,
 }
-
 
 #[napi]
 pub fn extract_symbols_native(file_path: String) -> Vec<SymbolResult> {
@@ -384,44 +385,26 @@ pub fn verify_hallucination_native(
   for s in builtins { allowed.insert(s); }
   for s in external_exports { allowed.insert(s); }
 
-  if let Ok(content) = fs::read_to_string(&file_path) {
-    let re_def = Regex::new(r#"(?:function|class|const|let|var)\s+\b(?P<name>[a-zA-Z0-9_$]+)\b"#).unwrap();
-    let re_call = Regex::new(r#"(?P<prefix>[\.\?])?\b(?P<name>[a-zA-Z0-9_$]+)\b\s*\("#).unwrap();
-    
-    let lines: Vec<&str> = content.lines().collect();
-    for (i, line) in lines.iter().enumerate() {
-      if line.trim().starts_with("//") || line.trim().starts_with("*") {
-        continue;
-      }
+  let content = fs::read_to_string(&file_path).unwrap_or_default();
+  let symbols = parser::extract_symbols_oxc(&content, &file_path);
+  for s in symbols { allowed.insert(s.name); }
 
-      let def_names: HashSet<&str> = re_def.captures_iter(line)
-        .map(|cap| cap.name("name").unwrap().as_str())
-        .collect();
-
+  let re_call = Regex::new(r#"(?P<prefix>[\.\?])?\b(?P<name>[a-zA-Z0-9_$]+)\b\s*\("#).unwrap();
+  let lines: Vec<&str> = content.lines().collect();
+  for (i, line) in lines.iter().enumerate() {
+      if line.trim().starts_with("//") || line.trim().starts_with("*") { continue; }
       for cap in re_call.captures_iter(line) {
-        let prefix = cap.name("prefix").map(|m| m.as_str());
-        let name = cap.name("name").unwrap().as_str();
-        
-        if prefix.is_some() {
-          continue;
-        }
-
-        if vec!["if", "for", "while", "switch", "catch", "super", "import", "require", "return", "await", "yield"].contains(&name) {
-          continue;
-        }
-
-        if def_names.contains(name) {
-          continue;
-        }
-
-        if !allowed.contains(name) {
-          violations.push(HallucinationViolation {
-            name: name.to_string(),
-            line: (i + 1) as u32,
-          });
-        }
+          let prefix = cap.name("prefix").map(|m| m.as_str());
+          let name = cap.name("name").unwrap().as_str();
+          if prefix.is_some() { continue; }
+          if vec!["if", "for", "while", "switch", "catch", "super", "import", "require", "return", "await", "yield"].contains(&name) { continue; }
+          if !allowed.contains(name) {
+              violations.push(HallucinationViolation {
+                  name: name.to_string(),
+                  line: (i + 1) as u32,
+              });
+          }
       }
-    }
   }
 
   violations
@@ -431,23 +414,10 @@ pub fn verify_hallucination_native(
 pub fn has_korean_comment_native(file_path: String, line: u32, search_depth: u32) -> bool {
   if let Ok(content) = fs::read_to_string(&file_path) {
     let lines: Vec<&str> = content.lines().collect();
-    let start_line = if line > search_depth { line - search_depth } else { 1 };
-    let end_line = line;
-
-    let re_korean = Regex::new(r"[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]").unwrap();
-    let re_comment = Regex::new(r"//|/\*|\*").unwrap();
-
-    for i in (start_line..end_line).rev() {
-      let idx = (i - 1) as usize;
-      if idx < lines.len() {
-        let l = lines[idx];
-        if re_comment.is_match(l) && re_korean.is_match(l) {
-          return true;
-        }
-      }
-    }
+    parser::has_korean_comment_above(&lines, line as usize, search_depth as usize)
+  } else {
+    false
   }
-  false
 }
 
 #[napi]
@@ -624,6 +594,93 @@ pub fn run_batch_analysis_native(files: Vec<String>) -> Vec<BatchResult> {
     })
     .collect()
 }
+
+#[napi(object)]
+pub struct ReviewOptions {
+  pub max_function_lines: i32,
+  pub max_parameter_count: i32,
+  pub density_threshold_medium: i32,
+  pub density_threshold_high: i32,
+  pub min_function_lines_for_comment: i32,
+}
+
+#[napi(object)]
+pub struct Violation {
+  pub r#type: String,
+  pub file: Option<String>,
+  pub line: Option<u32>,
+  pub rationale: Option<String>,
+  pub message: String,
+}
+
+#[napi]
+pub fn run_semantic_review_native(
+  file_path: String,
+  is_test_file: bool,
+  options: ReviewOptions,
+) -> Vec<Violation> {
+  let mut violations = Vec::new();
+  let content = fs::read_to_string(&file_path).unwrap_or_default();
+  let symbols = parser::extract_symbols_oxc(&content, &file_path);
+
+  for s in symbols {
+      if s.name.len() <= 2 || s.name == "anonymous" { continue; }
+
+      let start_line = s.line;
+
+      if !is_test_file && (s.kind == "class" || s.kind == "function") {
+          if !s.has_korean_comment {
+              let label = if s.kind == "class" { "클래스" } else { "함수" };
+              violations.push(Violation {
+                  r#type: "READABILITY".to_string(),
+                  file: Some(file_path.clone()),
+                  line: Some(start_line),
+                  rationale: Some(format!("심볼 타입: {} [{}]", s.kind, s.name)),
+                  message: format!("[Senior Advice] {} [{}] 위에 한글 주석을 추가하여 역할을 설명하세요.", label, s.name),
+              });
+          }
+      }
+
+      if is_test_file { continue; }
+
+      if s.kind == "function" || s.kind == "method" {
+          if s.lines > options.max_function_lines {
+              violations.push(Violation {
+                  r#type: "READABILITY".to_string(),
+                  file: Some(file_path.clone()),
+                  line: Some(start_line),
+                  rationale: Some(format!("함수 길이: {}줄 (제한: {}줄)", s.lines, options.max_function_lines)),
+                  message: format!("[Senior Advice] 함수 [{}]의 길이가 너무 깁니다 ({}줄). 분할을 권장합니다.", s.name, s.lines),
+              });
+          }
+
+          if s.parameter_count > options.max_parameter_count {
+              violations.push(Violation {
+                  r#type: "READABILITY".to_string(),
+                  file: Some(file_path.clone()),
+                  line: Some(start_line),
+                  rationale: Some(format!("파라미터 개수 > {}", options.max_parameter_count)),
+                  message: format!("[Senior Advice] 파라미터가 너무 많습니다 ({}개 초과). 객체로 묶으세요.", options.max_parameter_count),
+              });
+          }
+      }
+
+      if !is_test_file && (s.kind == "method" || s.kind == "field") {
+          if !s.has_korean_comment {
+              let label = if s.kind == "method" { "메서드" } else { "멤버 변수" };
+              violations.push(Violation {
+                  r#type: "READABILITY".to_string(),
+                  file: Some(file_path.clone()),
+                  line: Some(start_line),
+                  rationale: Some(format!("심볼 타입: {} [{}]", s.kind, s.name)),
+                  message: format!("[Senior Advice] {} [{}] 위에 한글 주석을 추가하세요.", label, s.name),
+              });
+          }
+      }
+  }
+
+  violations
+}
+
 mod parser;
-pub use parser::extract_symbols_oxc;
 mod cache;
