@@ -18,7 +18,7 @@ pub fn extract_symbols_oxc(source_text: &str, file_path: &str) -> Vec<SymbolResu
                    if let Some(Declaration::FunctionDeclaration(func)) = &decl.declaration {
                        if let Some(id) = &func.id {
                            let start_line = count_lines(&source_text[..func.span.start as usize]) + 1;
-                           let end_line = count_lines(&source_text[..func.span.end as usize]);
+                           let end_line = count_lines(&source_text[..func.span.end as usize]) + 1;
                            let snippet = &source_text[func.span.start as usize..func.span.end as usize];
                            let complexity = COMPLEXITY_RE.find_iter(snippet).count() as i32 + 1;
 
@@ -37,7 +37,7 @@ pub fn extract_symbols_oxc(source_text: &str, file_path: &str) -> Vec<SymbolResu
                        for declarator in &var_decl.declarations {
                            if let Some(id) = declarator.id.get_binding_identifier() {
                                let start_line = count_lines(&source_text[..declarator.span.start as usize]) + 1;
-                               let end_line = count_lines(&source_text[..declarator.span.end as usize]);
+                               let end_line = count_lines(&source_text[..declarator.span.end as usize]) + 1;
                                let snippet = &source_text[declarator.span.start as usize..declarator.span.end as usize];
                                let complexity = COMPLEXITY_RE.find_iter(snippet).count() as i32 + 1;
 
@@ -46,7 +46,7 @@ pub fn extract_symbols_oxc(source_text: &str, file_path: &str) -> Vec<SymbolResu
                                    line: start_line as u32,
                                    end_line: end_line as u32,
                                    is_exported: true,
-                                   kind: "function".to_string(), // Keep consistent with existing logic
+                                   kind: "function".to_string(),
                                    complexity,
                                    lines: (end_line - start_line + 1) as i32,
                                });
@@ -56,7 +56,7 @@ pub fn extract_symbols_oxc(source_text: &str, file_path: &str) -> Vec<SymbolResu
                    if let Some(Declaration::ClassDeclaration(cls)) = &decl.declaration {
                        if let Some(id) = &cls.id {
                            let start_line = count_lines(&source_text[..cls.span.start as usize]) + 1;
-                           let end_line = count_lines(&source_text[..cls.span.end as usize]);
+                           let end_line = count_lines(&source_text[..cls.span.end as usize]) + 1;
                            
                            symbols.push(SymbolResult {
                                name: id.name.to_string(),
@@ -64,7 +64,7 @@ pub fn extract_symbols_oxc(source_text: &str, file_path: &str) -> Vec<SymbolResu
                                end_line: end_line as u32,
                                is_exported: true,
                                kind: "class".to_string(),
-                               complexity: 1, // existing logic mostly sets 1 for class itself
+                               complexity: 1,
                                lines: (end_line - start_line + 1) as i32,
                            });
 
@@ -73,7 +73,7 @@ pub fn extract_symbols_oxc(source_text: &str, file_path: &str) -> Vec<SymbolResu
                                    if let oxc_ast::ast::PropertyKey::StaticIdentifier(method_id) = &method.key {
                                        if method_id.name != "constructor" {
                                             let m_start = count_lines(&source_text[..method.span.start as usize]) + 1;
-                                            let m_end = count_lines(&source_text[..method.span.end as usize]);
+                                            let m_end = count_lines(&source_text[..method.span.end as usize]) + 1;
                                             let m_snippet = &source_text[method.span.start as usize..method.span.end as usize];
                                             let m_complexity = COMPLEXITY_RE.find_iter(m_snippet).count() as i32 + 1;
 
@@ -96,7 +96,7 @@ pub fn extract_symbols_oxc(source_text: &str, file_path: &str) -> Vec<SymbolResu
                Statement::FunctionDeclaration(func) => {
                    if let Some(id) = &func.id {
                        let start_line = count_lines(&source_text[..func.span.start as usize]) + 1;
-                       let end_line = count_lines(&source_text[..func.span.end as usize]);
+                       let end_line = count_lines(&source_text[..func.span.end as usize]) + 1;
                        let snippet = &source_text[func.span.start as usize..func.span.end as usize];
                        let complexity = COMPLEXITY_RE.find_iter(snippet).count() as i32 + 1;
 
@@ -115,29 +115,26 @@ pub fn extract_symbols_oxc(source_text: &str, file_path: &str) -> Vec<SymbolResu
                    for declarator in &var_decl.declarations {
                        if let Some(id) = declarator.id.get_binding_identifier() {
                            let start_line = count_lines(&source_text[..declarator.span.start as usize]) + 1;
-                           let end_line = count_lines(&source_text[..declarator.span.end as usize]);
+                           let end_line = count_lines(&source_text[..declarator.span.end as usize]) + 1;
                            let snippet = &source_text[declarator.span.start as usize..declarator.span.end as usize];
                            let complexity = COMPLEXITY_RE.find_iter(snippet).count() as i32 + 1;
 
-                           // We might only want variables initialized with functions/arrows to map existing behavior exactly
-                           if declarator.init.as_ref().map_or(false, |init| matches!(init, oxc_ast::ast::Expression::ArrowFunctionExpression(_) | oxc_ast::ast::Expression::FunctionExpression(_))) {
-                               symbols.push(SymbolResult {
-                                   name: id.name.to_string(),
-                                   line: start_line as u32,
-                                   end_line: end_line as u32,
-                                   is_exported: false,
-                                   kind: "function".to_string(),
-                                   complexity,
-                                   lines: (end_line - start_line + 1) as i32,
-                               });
-                           }
+                           symbols.push(SymbolResult {
+                               name: id.name.to_string(),
+                               line: start_line as u32,
+                               end_line: end_line as u32,
+                               is_exported: false,
+                               kind: "function".to_string(),
+                               complexity,
+                               lines: (end_line - start_line + 1) as i32,
+                           });
                        }
                    }
                },
                Statement::ClassDeclaration(cls) => {
                    if let Some(id) = &cls.id {
                        let start_line = count_lines(&source_text[..cls.span.start as usize]) + 1;
-                       let end_line = count_lines(&source_text[..cls.span.end as usize]);
+                       let end_line = count_lines(&source_text[..cls.span.end as usize]) + 1;
                        
                        symbols.push(SymbolResult {
                            name: id.name.to_string(),
@@ -154,7 +151,7 @@ pub fn extract_symbols_oxc(source_text: &str, file_path: &str) -> Vec<SymbolResu
                                if let oxc_ast::ast::PropertyKey::StaticIdentifier(method_id) = &method.key {
                                    if method_id.name != "constructor" {
                                         let m_start = count_lines(&source_text[..method.span.start as usize]) + 1;
-                                        let m_end = count_lines(&source_text[..method.span.end as usize]);
+                                        let m_end = count_lines(&source_text[..method.span.end as usize]) + 1;
                                         let m_snippet = &source_text[method.span.start as usize..method.span.end as usize];
                                         let m_complexity = COMPLEXITY_RE.find_iter(m_snippet).count() as i32 + 1;
 
