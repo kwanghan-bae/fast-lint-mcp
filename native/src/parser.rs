@@ -82,7 +82,7 @@ pub fn extract_symbols_oxc(source_text: &str, file_path: &str) -> Vec<SymbolResu
                                            kind: "function".to_string(), 
                                            complexity,
                                            lines: (end_line - start_line + 1) as i32,
-                                           parameter_count: 0, // variable decl has no direct params here
+                                           parameter_count: 0, 
                                            has_korean_comment: has_korean,
                                        });
                                    }
@@ -229,4 +229,125 @@ pub fn has_korean_comment_above(lines: &[&str], start_line: usize, search_depth:
         }
     }
     false
+}
+
+#[derive(Debug, Clone)]
+pub struct Mutant {
+    pub original: String,
+    pub mutation: String,
+    pub line: u32,
+    pub content: String,
+}
+
+pub fn generate_mutations_oxc(source_text: &str, file_path: &str) -> Vec<Mutant> {
+    let allocator = Allocator::default();
+    let source_type = SourceType::from_path(file_path).unwrap_or_default();
+    let ret = Parser::new(&allocator, source_text, source_type).parse();
+    
+    let mut mutants = Vec::new();
+    
+    if ret.errors.is_empty() {
+        let patterns = [
+            ("===", "!=="),
+            ("!==", "==="),
+            ("==", "!="),
+            ("!=", "=="),
+            (" > ", " < "),
+            (" < ", " > "),
+            ("true", "false"),
+            ("false", "true"),
+        ];
+
+        for (orig, muta) in patterns {
+            if let Some(pos) = source_text.find(orig) {
+                let start_line = count_lines(&source_text[..pos]) + 1;
+                let mut mutated_content = source_text.to_string();
+                mutated_content.replace_range(pos..pos+orig.len(), muta);
+                
+                mutants.push(Mutant {
+                    original: orig.to_string(),
+                    mutation: muta.to_string(),
+                    line: start_line as u32,
+                    content: mutated_content,
+                });
+            }
+        }
+    }
+    
+    mutants
+}
+
+pub fn fix_readability_oxc(source_text: &str, file_path: &str) -> (String, i32) {
+    let allocator = Allocator::default();
+    let source_type = SourceType::from_path(file_path).unwrap_or_default();
+    let ret = Parser::new(&allocator, source_text, source_type).parse();
+    
+    if !ret.errors.is_empty() {
+        return (source_text.to_string(), 0);
+    }
+
+    let mut fixed_content = String::new();
+    let mut last_pos = 0;
+    let mut fix_count = 0;
+    let lines: Vec<&str> = source_text.lines().collect();
+
+    // We collect points where we want to insert comments
+    let mut insert_points = Vec::new();
+
+    for stmt in &ret.program.body {
+        match stmt {
+            Statement::ExportNamedDeclaration(decl) => {
+                if let Some(decl_body) = &decl.declaration {
+                    match decl_body {
+                        Declaration::FunctionDeclaration(func) => {
+                            if let Some(id) = &func.id {
+                                let start_line = count_lines(&source_text[..func.span.start as usize]) + 1;
+                                if !has_korean_comment_above(&lines, start_line as usize, 3) {
+                                    insert_points.push((func.span.start as usize, format!("// {} 함수는 역할을 수행합니다.\n", id.name)));
+                                }
+                            }
+                        },
+                        Declaration::ClassDeclaration(cls) => {
+                            if let Some(id) = &cls.id {
+                                let start_line = count_lines(&source_text[..cls.span.start as usize]) + 1;
+                                if !has_korean_comment_above(&lines, start_line as usize, 3) {
+                                    insert_points.push((cls.span.start as usize, format!("// {} 클래스는 역할을 담당합니다.\n", id.name)));
+                                }
+                            }
+                        },
+                        _ => {}
+                    }
+                }
+            },
+            Statement::FunctionDeclaration(func) => {
+                if let Some(id) = &func.id {
+                    let start_line = count_lines(&source_text[..func.span.start as usize]) + 1;
+                    if !has_korean_comment_above(&lines, start_line as usize, 3) {
+                        insert_points.push((func.span.start as usize, format!("// {} 함수는 내부 로직을 처리합니다.\n", id.name)));
+                    }
+                }
+            },
+            Statement::ClassDeclaration(cls) => {
+                if let Some(id) = &cls.id {
+                    let start_line = count_lines(&source_text[..cls.span.start as usize]) + 1;
+                    if !has_korean_comment_above(&lines, start_line as usize, 3) {
+                        insert_points.push((cls.span.start as usize, format!("// {} 클래스는 내부 상태를 관리합니다.\n", id.name)));
+                    }
+                }
+            },
+            _ => {}
+        }
+    }
+
+    insert_points.sort_by_key(|p| p.0);
+
+    for (pos, comment) in insert_points {
+        fixed_content.push_str(&source_text[last_pos..pos]);
+        fixed_content.push_str(&comment);
+        last_pos = pos;
+        fix_count += 1;
+    }
+    fixed_content.push_str(&source_text[last_pos..]);
+
+    (fixed_content, fix_count)
 }

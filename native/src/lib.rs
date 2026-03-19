@@ -682,5 +682,126 @@ pub fn run_semantic_review_native(
   violations
 }
 
+#[napi]
+pub fn run_mutation_test_native(file_path: String, test_command: String) -> Vec<Violation> {
+    let mut violations = Vec::new();
+    let original_content = fs::read_to_string(&file_path).unwrap_or_default();
+    let mutants = parser::generate_mutations_oxc(&original_content, &file_path);
+
+    for mutant in mutants {
+        if let Err(_) = fs::write(&file_path, &mutant.content) {
+            continue;
+        }
+
+        let status = std::process::Command::new("sh")
+            .arg("-c")
+            .arg(&test_command)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+
+        let success = status.map(|s| s.success()).unwrap_or(false);
+
+        if success {
+            violations.push(Violation {
+                r#type: "MUTATION_SURVIVED".to_string(),
+                file: Some(file_path.clone()),
+                line: Some(mutant.line),
+                rationale: Some(format!("변이: '{}' -> '{}'", mutant.original, mutant.mutation)),
+                message: format!("변이 테스트 실패: '{}'를 '{}'로 바꿨는데도 테스트가 통과함.", mutant.original, mutant.mutation),
+            });
+            let _ = fs::write(&file_path, &original_content);
+            break;
+        }
+    }
+
+    let _ = fs::write(&file_path, &original_content);
+    violations
+}
+
+#[napi(object)]
+pub struct UltimateAnalysisResult {
+    pub file: String,
+    pub line_count: i32,
+    pub complexity: i32,
+    pub violations: Vec<Violation>,
+    pub symbols: Vec<SymbolResult>,
+}
+
+#[napi]
+pub fn run_ultimate_analysis_native(
+    file_path: String,
+    is_test_file: bool,
+    review_options: ReviewOptions,
+    external_exports: Vec<String>,
+) -> UltimateAnalysisResult {
+    let content = fs::read_to_string(&file_path).unwrap_or_default();
+    let symbols = parser::extract_symbols_oxc(&content, &file_path);
+    
+    let line_count = content.lines().count() as i32;
+    let complexity = COMPLEXITY_RE.find_iter(&content).count() as i32 + 1;
+    
+    let mut violations = Vec::new();
+    
+    violations.extend(run_semantic_review_native(file_path.clone(), is_test_file, review_options));
+    
+    violations.extend(verify_hallucination_native(
+        file_path.clone(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        external_exports,
+    ).into_iter().map(|h| Violation {
+        r#type: "HALLUCINATION".to_string(),
+        file: Some(file_path.clone()),
+        line: Some(h.line),
+        rationale: Some(format!("심볼 [{}]이 존재하지 않음", h.name)),
+        message: format!("[AI Hallucination] 존재하지 않는 API 호출: {}", h.name),
+    }));
+    
+    for (id, re, msg) in SECRET_PATTERNS.iter() {
+        for (i, line) in content.lines().enumerate() {
+            if re.is_match(line) {
+                violations.push(Violation {
+                    r#type: "SECURITY".to_string(),
+                    file: Some(file_path.clone()),
+                    line: Some((i + 1) as u32),
+                    rationale: Some(format!("패턴 일치: {}", id)),
+                    message: msg.to_string(),
+                });
+            }
+        }
+    }
+
+    UltimateAnalysisResult {
+        file: file_path,
+        line_count,
+        complexity,
+        violations,
+        symbols,
+    }
+}
+
+#[napi(object)]
+pub struct SelfHealingResult {
+    pub fixed_count: i32,
+    pub content: String,
+}
+
+#[napi]
+pub fn run_self_healing_native(file_path: String) -> SelfHealingResult {
+    let content = fs::read_to_string(&file_path).unwrap_or_default();
+    let (fixed_content, fix_count) = parser::fix_readability_oxc(&content, &file_path);
+    
+    if fix_count > 0 {
+        let _ = fs::write(&file_path, &fixed_content);
+    }
+
+    SelfHealingResult {
+        fixed_count: fix_count,
+        content: fixed_content,
+    }
+}
+
 mod parser;
 mod cache;
