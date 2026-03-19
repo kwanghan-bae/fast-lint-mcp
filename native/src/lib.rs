@@ -252,122 +252,11 @@ pub struct SymbolResult {
   pub lines: i32,
 }
 
-fn extract_symbols_internal(file_path: &str) -> Vec<SymbolResult> {
-  let mut symbols = Vec::new();
-  if let Ok(content) = fs::read_to_string(file_path) {
-    let re_func = Regex::new(r#"(?P<exp>export\s+)?(?P<async>async\s+)?function\s+(?P<name>[a-zA-Z0-9_$]+)"#).unwrap();
-    let re_class = Regex::new(r#"(?P<exp>export\s+)?class\s+(?P<name>[a-zA-Z0-9_$]+)"#).unwrap();
-    let re_const = Regex::new(r#"(?P<exp>export\s+)?(?:const|let|var)\s+(?P<name>[a-zA-Z0-9_$]+)"#).unwrap();
-    let re_method = Regex::new(r#"\s*(?P<name>[a-zA-Z0-9_$]+)\s*\(.*?\)\s*(?::\s*[a-zA-Z0-9_$<>\[\]\s|&]+)?\s*\{"#).unwrap();
-
-    let mut current_class: Option<String> = None;
-    let mut class_brace_level: i32 = 0;
-    let mut brace_count: i32 = 0;
-    
-    let lines: Vec<&str> = content.lines().collect();
-    let mut in_symbol: Option<(usize, i32)> = None;
-
-    for (i, line) in lines.iter().enumerate() {
-      let trimmed = line.trim();
-      let opened = trimmed.matches('{').count() as i32;
-      let closed = trimmed.matches('}').count() as i32;
-      
-      let mut found_new_symbol = false;
-
-      if brace_count == class_brace_level {
-        if let Some(cap) = re_func.captures(line) {
-          symbols.push(SymbolResult {
-            name: cap.name("name").unwrap().as_str().to_string(),
-            line: (i + 1) as u32,
-            end_line: (i + 1) as u32,
-            is_exported: cap.name("exp").is_some(),
-            kind: "function".to_string(),
-            complexity: 1,
-            lines: 1,
-          });
-          in_symbol = Some((symbols.len() - 1, brace_count));
-          found_new_symbol = true;
-        } else if let Some(cap) = re_class.captures(line) {
-          let class_name = cap.name("name").unwrap().as_str().to_string();
-          current_class = Some(class_name.clone());
-          class_brace_level = brace_count;
-          symbols.push(SymbolResult {
-            name: class_name,
-            line: (i + 1) as u32,
-            end_line: (i + 1) as u32,
-            is_exported: cap.name("exp").is_some(),
-            kind: "class".to_string(),
-            complexity: 1,
-            lines: 1,
-          });
-          found_new_symbol = true;
-        } else if let Some(cap) = re_const.captures(line) {
-          symbols.push(SymbolResult {
-            name: cap.name("name").unwrap().as_str().to_string(),
-            line: (i + 1) as u32,
-            end_line: (i + 1) as u32,
-            is_exported: cap.name("exp").is_some(),
-            kind: "function".to_string(), 
-            complexity: 1,
-            lines: 1,
-          });
-          in_symbol = Some((symbols.len() - 1, brace_count));
-          found_new_symbol = true;
-        }
-      } else if let Some(ref cls) = current_class {
-        if brace_count == class_brace_level + 1 {
-          if let Some(cap) = re_method.captures(line) {
-            let m_name = cap.name("name").unwrap().as_str().to_string();
-            if m_name != "constructor" && !vec!["if", "for", "while", "switch", "catch", "function"].contains(&m_name.as_str()) {
-              symbols.push(SymbolResult {
-                name: format!("{}.{}", cls, m_name),
-                line: (i + 1) as u32,
-                end_line: (i + 1) as u32,
-                is_exported: false,
-                kind: "method".to_string(),
-                complexity: 1,
-                lines: 1,
-              });
-              in_symbol = Some((symbols.len() - 1, brace_count));
-              found_new_symbol = true;
-            }
-          }
-        }
-      }
-
-      if let Some((idx, level)) = in_symbol {
-        let line_complexity = COMPLEXITY_RE.find_iter(line).count() as i32;
-        if found_new_symbol {
-           symbols[idx].complexity += line_complexity;
-        } else if brace_count > level || (brace_count == level && opened == 0) {
-          symbols[idx].complexity += line_complexity;
-          symbols[idx].lines += 1;
-          symbols[idx].end_line = (i + 1) as u32;
-        }
-      }
-
-      brace_count += opened;
-      brace_count -= closed;
-      
-      if let Some((_, level)) = in_symbol {
-        if brace_count <= level && closed > 0 {
-          in_symbol = None;
-        }
-      }
-
-      if let Some(_) = current_class {
-        if brace_count <= class_brace_level && closed > 0 {
-          current_class = None;
-        }
-      }
-    }
-  }
-  symbols
-}
 
 #[napi]
 pub fn extract_symbols_native(file_path: String) -> Vec<SymbolResult> {
-  extract_symbols_internal(&file_path)
+  let content = fs::read_to_string(&file_path).unwrap_or_default();
+  parser::extract_symbols_oxc(&content, &file_path)
 }
 
 #[napi(object)]
@@ -700,7 +589,8 @@ pub struct BatchResult {
 pub fn run_batch_analysis_native(files: Vec<String>) -> Vec<BatchResult> {
   files.into_par_iter()
     .map(|file_path| {
-      let symbols = extract_symbols_internal(&file_path);
+      let content_str = fs::read_to_string(&file_path).unwrap_or_default();
+      let symbols = parser::extract_symbols_oxc(&content_str, &file_path);
       let mut secrets = Vec::new();
       let mut line_count = 0;
       let mut overall_complexity = 1;
@@ -734,3 +624,4 @@ pub fn run_batch_analysis_native(files: Vec<String>) -> Vec<BatchResult> {
     .collect()
 }
 mod parser;
+pub use parser::extract_symbols_oxc;
