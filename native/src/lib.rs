@@ -733,3 +733,4 @@ pub fn run_batch_analysis_native(files: Vec<String>) -> Vec<BatchResult> {
     })
     .collect()
 }
+mod parser;
