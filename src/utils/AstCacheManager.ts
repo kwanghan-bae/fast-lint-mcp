@@ -1,27 +1,19 @@
+import { parseAndCacheNative, clearAstCacheNative } from '../../native/index.js';
 import { Lang, parse, SgNode } from '@ast-grep/napi';
 import { readFileSync, existsSync, statSync } from 'fs';
 import { normalize, isAbsolute, resolve } from 'path';
 
 /**
- * 프로젝트 내 파일들의 AST(Abstract Syntax Tree)를 메모리에 캐싱합니다.
- * v3.7.6: 파일 수정 시간(mtime) 기반의 지능형 캐시 무효화 도입 (실시간성 확보)
+ * 프로젝트 내 파일들의 AST 심볼 및 SgNode 정보를 캐싱합니다.
+ * v6.3.0: 심볼은 Rust Native 메모리에, SgNode는 임시로 V8에 캐싱합니다.
  */
 export class AstCacheManager {
-  /** 싱글톤 인스턴스 보관 변수 */
   private static instance: AstCacheManager;
-  /** 캐시 사용 여부 설정 (테스트 시 비활성화 가능) */
   public enabled: boolean = true;
-  /** 파일 경로별 { mtime, root } 캐시 맵 */
-  private cache: Map<string, { mtime: number; root: SgNode }> = new Map();
+  private nodeCache: Map<string, { mtime: number; root: SgNode }> = new Map();
 
-  /**
-   * 내부 생성자로 외부 인스턴스화를 방지합니다.
-   */
   private constructor() {}
 
-  /**
-   * AstCacheManager의 전역 인스턴스를 가져옵니다.
-   */
   public static getInstance(): AstCacheManager {
     if (!AstCacheManager.instance) {
       AstCacheManager.instance = new AstCacheManager();
@@ -29,15 +21,14 @@ export class AstCacheManager {
     return AstCacheManager.instance;
   }
 
-  /**
-   * AST 루트 노드를 가져옵니다. 경로를 절대 경로로 강제 정규화하여 엔진 오류를 방지합니다.
-   * v3.7.6: mtime을 체크하여 파일이 변경된 경우 강제로 새로 파싱합니다.
-   * @param filePath 분석할 파일의 경로
-   * @param force 캐시를 무시하고 새로 파싱할지 여부
-   */
+  public getSymbols(filePath: string) {
+    const absPath = isAbsolute(filePath) ? normalize(filePath) : resolve(process.cwd(), filePath);
+    if (!existsSync(absPath)) return [];
+    return parseAndCacheNative(absPath);
+  }
+
   public getRootNode(filePath: string, force: boolean = false): SgNode | null {
     const absPath = isAbsolute(filePath) ? normalize(filePath) : resolve(process.cwd(), filePath);
-
     if (!existsSync(absPath)) return null;
 
     let mtime = 0;
@@ -47,32 +38,25 @@ export class AstCacheManager {
       return null;
     }
 
-    if (this.enabled && !force && this.cache.has(absPath)) {
-      const entry = this.cache.get(absPath)!;
-      // 파일이 수정되지 않았다면 기존 캐시 반환
-      if (entry.mtime === mtime) {
-        return entry.root;
-      }
-      // v6.2.0: mtime이 다르면 낡은 캐시를 즉시 파기
-      this.cache.delete(absPath);
+    if (this.enabled && !force && this.nodeCache.has(absPath)) {
+      const entry = this.nodeCache.get(absPath)!;
+      if (entry.mtime === mtime) return entry.root;
+      this.nodeCache.delete(absPath);
     }
 
     try {
       const content = readFileSync(absPath, 'utf-8');
-      if (!content.trim()) return null; // 빈 파일 방어
+      if (!content.trim()) return null;
 
       let lang = Lang.JavaScript;
       const lower = absPath.toLowerCase();
       if (lower.endsWith('.ts') || lower.endsWith('.tsx')) {
         lang = Lang.TypeScript;
-      } else if (lower.endsWith('.kt') || lower.endsWith('.kts')) {
-        // v3.7.6: Kotlin 지원 여부 확인 후 폴백
-        lang = (Lang as any).Kotlin || Lang.JavaScript;
       }
 
       const root = parse(lang, content).root();
       if (this.enabled) {
-        this.cache.set(absPath, { mtime, root });
+        this.nodeCache.set(absPath, { mtime, root });
       }
       return root;
     } catch (error) {
@@ -80,10 +64,12 @@ export class AstCacheManager {
     }
   }
 
-  /**
-   * 저장된 모든 AST 캐시를 비웁니다.
-   */
   public clear(): void {
-    this.cache.clear();
+    try {
+      clearAstCacheNative();
+    } catch (e) {
+      // Ignored if not yet bound
+    }
+    this.nodeCache.clear();
   }
 }

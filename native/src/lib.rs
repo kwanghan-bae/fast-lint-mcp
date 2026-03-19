@@ -242,6 +242,7 @@ pub fn resolve_module_path_native(
 }
 
 #[napi(object)]
+#[derive(Clone)]
 pub struct SymbolResult {
   pub name: String,
   pub line: u32,
@@ -625,3 +626,4 @@ pub fn run_batch_analysis_native(files: Vec<String>) -> Vec<BatchResult> {
 }
 mod parser;
 pub use parser::extract_symbols_oxc;
+mod cache;

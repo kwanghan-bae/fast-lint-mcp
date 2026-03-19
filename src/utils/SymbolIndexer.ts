@@ -1,8 +1,9 @@
 import { normalize } from 'path';
 import pMap from 'p-map';
 import os from 'os';
-import { extractSymbolsNative, findReferencesNative, scanFiles } from '../../native/index.js';
+import { findReferencesNative, scanFiles } from '../../native/index.js';
 import { SYSTEM } from '../constants.js';
+import { AstCacheManager } from './AstCacheManager.js';
 
 /**
  * 프로젝트 전체 심볼의 정의 및 참조 관계를 인덱싱합니다.
@@ -38,11 +39,12 @@ export class SymbolIndexer {
     }
 
     const cpu = Math.max(1, os.cpus().length - 1);
+    const cache = AstCacheManager.getInstance();
     await pMap(
       this.indexedFiles,
       async (f) => {
         try {
-          const symbols = extractSymbolsNative(f);
+          const symbols = cache.getSymbols(f);
           for (const s of symbols) {
             this.definitions.set(s.name, { file: f, line: s.line });
             if (s.isExported) {

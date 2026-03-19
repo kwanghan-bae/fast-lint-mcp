@@ -3,7 +3,7 @@ import { resolve, dirname } from 'path';
 import { SymbolIndexer } from '../utils/SymbolIndexer.js';
 import { DependencyGraph } from '../utils/DependencyGraph.js';
 import { SymbolMetric, ImpactAnalysis } from '../types/index.js';
-import { extractSymbolsNative } from '../../native/index.js';
+import { AstCacheManager } from '../utils/AstCacheManager.js';
 
 /**
  * 심볼 레벨(함수, 클래스 등)의 시맨틱 분석과 의존성 추적을 담당하는 서비스입니다.
@@ -19,7 +19,7 @@ export class SemanticService {
     this.depGraph = new DependencyGraph();
   }
 
-  /** 인덱서와 의존성 그래프 초기화 */
+  /** 프로젝트 초기화 및 전체 심볼 인덱싱 */
   public async ensureInitialized(force: boolean = false, workspacePath: string = process.cwd()) {
     const absWorkspace = resolve(workspacePath);
     if (!this.initialized || force) {
@@ -37,7 +37,7 @@ export class SemanticService {
 
     try {
       // v0.0.1: Native 단일 패스 메트릭 추출 (정밀 AST 분석 기반)
-      const nativeSymbols = extractSymbolsNative(absPath);
+      const nativeSymbols = AstCacheManager.getInstance().getSymbols(absPath);
       return nativeSymbols.map((s) => ({
         name: s.name,
         kind: s.kind,
@@ -86,27 +86,13 @@ export class SemanticService {
     return this.indexer.findReferences(name);
   }
 
-  /** 심볼 정의로 이동 */
-  goToDefinition(name: string): { file: string; line: number } | null {
+  /** 특정 심볼 정의 조회 */
+  getDefinition(name: string): { file: string; line: number } | null {
     return this.indexer.getDefinition(name);
   }
 
-  /** 역의존성 조회 */
-  getDependents(path: string): string[] {
-    return this.depGraph.getDependents(resolve(path));
-  }
-
-  /** 프로젝트 내의 모든 공개(export) 심볼 목록을 가져옵니다. */
+  /** 모든 공개 심볼 목록 조회 */
   getAllExportedSymbols(): { name: string; file: string }[] {
     return this.indexer.getAllExportedSymbols();
-  }
-
-  /** 미사용 코드(Dead Code)를 탐지합니다. */
-  async findDeadCode(): Promise<{ file: string; symbol: string }[]> {
-    await this.ensureInitialized(true);
-    const symbols = this.indexer.getAllExportedSymbols();
-    return symbols
-      .filter((s) => this.indexer.findReferences(s.name).length <= 1)
-      .map((s) => ({ file: s.file, symbol: s.name }));
   }
 }
