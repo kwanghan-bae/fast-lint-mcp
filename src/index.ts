@@ -9,7 +9,7 @@ import { AgentWorkflow } from './agent/workflow.js';
 import { formatReport, formatCLITable } from './utils/AnalysisUtils.js';
 import { join, dirname } from 'path';
 import { existsSync, statSync, readFileSync } from 'fs';
-import { SYSTEM, SECURITY, VERSION } from './constants.js';
+import { SYSTEM, VERSION } from './constants.js';
 
 /** MCP 서버 인스턴스 설정 및 초기화 */
 const server = new Server(
@@ -55,10 +55,6 @@ function getToolDefinitions() {
       inputSchema: {
         type: 'object',
         properties: {
-          securityThreshold: {
-            type: 'number',
-            description: `Minimum entropy for secret detection (default: ${SECURITY.DEFAULT_ENTROPY_THRESHOLD})`,
-          },
           maxLines: {
             type: 'number',
             description: 'Maximum lines allowed in a single logic file',

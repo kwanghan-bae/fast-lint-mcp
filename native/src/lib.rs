@@ -17,11 +17,6 @@ use once_cell::sync::Lazy;
 
 // 글로벌 정규식 캐시 (성능 최적화)
 static TECH_DEBT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)(TODO|FIXME|HACK|XXX)").unwrap());
-static SECRET_PATTERNS: Lazy<Vec<(&'static str, Regex, &'static str)>> = Lazy::new(|| vec![
-    ("AWS_KEY", Regex::new(r"AKIA[0-9A-Z]{16}").unwrap(), "AWS Access Key가 노출되었습니다!"),
-    ("GENERIC_SECRET", Regex::new(r#"(?i)(password|secret|token|key|api_key|auth_token)\s*[:=]\s*['"].{16,}['"]"#).unwrap(), "하드코딩된 비밀번호나 토큰이 발견되었습니다!"),
-    ("JWT_TOKEN", Regex::new(r"eyJ[a-zA-Z0-9\._\-]{10,}").unwrap(), "JWT 토큰이 노출되었습니다!"),
-]);
 pub static COMPLEXITY_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b(if|for|while|switch|catch)\b|(&&|\|\||\?)").unwrap());
 
 static BUILTINS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
@@ -573,45 +568,11 @@ pub fn parse_lcov_native(path: String, all_files: Vec<String>) -> Option<LcovRes
 }
 
 #[napi(object)]
-pub struct SecretViolation {
-  pub file: String,
-  pub line: u32,
-  pub message: String,
-  pub rationale: String,
-}
-
-#[napi]
-pub fn scan_secrets_native(files: Vec<String>) -> Vec<SecretViolation> {
-  files.into_par_iter()
-    .flat_map(|file_path| {
-      let mut file_violations = Vec::new();
-      if let Ok(content) = fs::read_to_string(&file_path) {
-        let lines: Vec<&str> = content.lines().collect();
-        for (i, line) in lines.iter().enumerate() {
-          for (id, re, msg) in SECRET_PATTERNS.iter() {
-            if re.is_match(line) {
-              file_violations.push(SecretViolation {
-                file: file_path.clone(),
-                line: (i + 1) as u32,
-                message: msg.to_string(),
-                rationale: format!("패턴 일치: {}", id),
-              });
-            }
-          }
-        }
-      }
-      file_violations
-    })
-    .collect()
-}
-
-#[napi(object)]
 pub struct BatchResult {
   pub file: String,
   pub line_count: i32,
   pub complexity: i32,
   pub symbols: Vec<SymbolResult>,
-  pub secrets: Vec<SecretViolation>,
 }
 
 #[napi]
@@ -620,34 +581,18 @@ pub fn run_batch_analysis_native(files: Vec<String>) -> Vec<BatchResult> {
     .map(|file_path| {
       let content_str = fs::read_to_string(&file_path).unwrap_or_default();
       let symbols = parser::extract_symbols_oxc(&content_str, &file_path);
-      let mut secrets = Vec::new();
       let mut line_count = 0;
       let mut overall_complexity = 1;
 
       if let Ok(content) = fs::read_to_string(&file_path) {
         line_count = content.lines().count() as i32;
         overall_complexity = COMPLEXITY_RE.find_iter(&content).count() as i32 + 1;
-
-        let lines: Vec<&str> = content.lines().collect();
-        for (i, line) in lines.iter().enumerate() {
-          for (id, re, msg) in SECRET_PATTERNS.iter() {
-            if re.is_match(line) {
-              secrets.push(SecretViolation {
-                file: file_path.clone(),
-                line: (i + 1) as u32,
-                message: msg.to_string(),
-                rationale: format!("패턴 일치: {}", id),
-              });
-            }
-          }
-        }
       }
       BatchResult {
         file: file_path,
         line_count,
         complexity: overall_complexity,
         symbols,
-        secrets,
       }
     })
     .collect()
@@ -881,20 +826,6 @@ pub fn run_ultimate_analysis_native(
         message: format!("[AI Hallucination] 존재하지 않는 API 호출: {}", h.name),
     }));
     
-    for (id, re, msg) in SECRET_PATTERNS.iter() {
-        for (i, line) in content.lines().enumerate() {
-            if re.is_match(line) {
-                violations.push(Violation {
-                    r#type: "SECURITY".to_string(),
-                    file: Some(file_path.clone()),
-                    line: Some((i + 1) as u32),
-                    rationale: Some(format!("패턴 일치: {}", id)),
-                    message: msg.to_string(),
-                });
-            }
-        }
-    }
-
     if complexity >= 10 { // TODO: use options.max_complexity
         let mut blueprint = String::from("\n\n[Refactoring Blueprint]\n");
         let mut sorted_symbols = symbols.clone();

@@ -36,7 +36,6 @@ export class JavascriptProvider extends BaseQualityProvider {
   async check(
     filePath: string,
     options?: {
-      securityThreshold?: number;
       maxLines?: number;
       maxComplexity?: number;
     }

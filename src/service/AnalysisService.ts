@@ -60,7 +60,6 @@ export class AnalysisService {
    */
   async runAllChecks(
     options: {
-      securityThreshold?: number;
       maxLines?: number;
       maxComplexity?: number;
       incremental?: boolean;

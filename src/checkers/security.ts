@@ -1,7 +1,5 @@
 import { execSync } from 'child_process';
-import { existsSync } from 'fs';
 import { Violation } from '../types/index.js';
-import { scanSecretsNative } from '../../native/index.js';
 
 /**
  * 프로젝트 전체의 보안 상태를 점검합니다. (NPM Audit 등)
@@ -35,28 +33,4 @@ export async function checkPackageAudit(): Promise<Violation[]> {
     } catch (inner) {}
   }
   return [];
-}
-
-/**
- * 민감 정보 노출 여부를 정밀 스캔합니다.
- * v0.0.1: Rust Native 병렬 정규식 엔진을 사용하여 고속 탐색을 수행합니다.
- */
-export async function checkSecrets(
-  filePath: string,
-  _securityThreshold?: number // 유지하되 사용하지 않음 (하위 호환성)
-): Promise<Violation[]> {
-  if (!existsSync(filePath)) return [];
-
-  try {
-    const nativeViolations = scanSecretsNative([filePath]);
-    return nativeViolations.map((nv) => ({
-      type: 'SECURITY',
-      file: filePath,
-      line: nv.line,
-      message: nv.message,
-      rationale: nv.rationale,
-    }));
-  } catch (e) {
-    return [];
-  }
 }

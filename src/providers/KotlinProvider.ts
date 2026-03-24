@@ -1,7 +1,6 @@
 import { BaseQualityProvider } from './BaseQualityProvider.js';
 import { Violation } from '../types/index.js';
 import { analyzeFile } from '../analysis/sg.js';
-import { checkSecrets } from '../checkers/security.js';
 import { runSemanticReview } from '../analysis/reviewer.js';
 
 /**
@@ -14,7 +13,6 @@ export class KotlinProvider extends BaseQualityProvider {
   async check(
     filePath: string,
     options?: {
-      securityThreshold?: number;
       maxLines?: number;
       maxComplexity?: number;
     }
@@ -49,11 +47,7 @@ export class KotlinProvider extends BaseQualityProvider {
       });
     }
 
-    // 2. 보안 스캔
-    const secretViolations = await checkSecrets(filePath, options?.securityThreshold);
-    violations.push(...secretViolations);
-
-    // 3. 정성적 리뷰 (Kotlin AST 구조 지원)
+    // 2. 정성적 리뷰 (Kotlin AST 구조 지원)
     const reviewViolations = await runSemanticReview(filePath, isDataFile);
     violations.push(...reviewViolations);
 
