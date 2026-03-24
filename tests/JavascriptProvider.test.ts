@@ -1,17 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { JavascriptProvider } from '../src/providers/JavascriptProvider.js';
-import { ConfigService } from '../src/config.js';
-import * as sg from '../src/analysis/sg.js';
-import * as importCheck from '../src/analysis/import-check.js';
-import * as security from '../src/checkers/security.js';
-import * as mutation from '../src/analysis/mutation.js';
-import * as reviewer from '../src/analysis/reviewer.js';
+import * as native from '../native/index.js';
 
-vi.mock('../src/analysis/sg.js');
-vi.mock('../src/analysis/import-check.js');
-vi.mock('../src/checkers/security.js');
-vi.mock('../src/analysis/mutation.js');
-vi.mock('../src/analysis/reviewer.js');
+vi.mock('../native/index.js', () => ({
+  runUltimateAnalysisNative: vi.fn(),
+  runMutationTestNative: vi.fn(),
+}));
 
 describe('JavascriptProvider', () => {
   let provider: JavascriptProvider;
@@ -28,51 +22,49 @@ describe('JavascriptProvider', () => {
     provider = new JavascriptProvider(config as any);
 
     // 기본 모킹
-    vi.mocked(sg.analyzeFile).mockResolvedValue({
-      path: 'test.ts',
-      lineCount: 50,
+    vi.mocked(native.runUltimateAnalysisNative).mockReturnValue({
+      file: 'test.ts',
+      line_count: 50,
       complexity: 5,
-      isDataFile: false,
-      topComplexSymbols: [],
-      customViolations: [],
+      violations: [],
+      symbols: [],
     });
-    vi.mocked(importCheck.checkHallucination).mockResolvedValue([]);
-    vi.mocked(importCheck.checkFakeLogic).mockResolvedValue([]);
-    vi.mocked(security.checkSecrets).mockResolvedValue([]);
-    vi.mocked(reviewer.runSemanticReview).mockResolvedValue([]);
-    vi.mocked(mutation.runMutationTest).mockResolvedValue([]);
   });
 
   it('파일 사이즈가 임계값을 초과하면 SIZE 위반을 반환해야 한다', async () => {
-    vi.mocked(sg.analyzeFile).mockResolvedValue({
-      path: 'test.ts',
-      lineCount: 150,
-      complexity: 5,
-      isDataFile: false,
-      topComplexSymbols: [],
-      customViolations: [],
+    vi.mocked(native.runUltimateAnalysisNative).mockReturnValue({
+      file: 'test.ts',
+      line_count: 150,
+      complexity: 20, // Not a data file (20/150 > 0.1)
+      violations: [],
+      symbols: [],
     });
     const violations = await provider.check('test.ts');
     expect(violations.some((v) => v.type === 'SIZE')).toBe(true);
   });
 
   it('복잡도가 임계값을 초과하면 COMPLEXITY 위반을 반환해야 한다', async () => {
-    vi.mocked(sg.analyzeFile).mockResolvedValue({
-      path: 'test.ts',
-      lineCount: 50,
+    vi.mocked(native.runUltimateAnalysisNative).mockReturnValue({
+      file: 'test.ts',
+      line_count: 50,
       complexity: 15,
-      isDataFile: false,
-      topComplexSymbols: [{ name: 'testFunc', complexity: 15, kind: 'function', line: 1 }],
-      customViolations: [],
+      violations: [],
+      symbols: [],
     });
     const violations = await provider.check('test.ts');
     expect(violations.some((v) => v.type === 'COMPLEXITY')).toBe(true);
   });
 
   it('환각이 탐지되면 HALLUCINATION 위반을 포함해야 한다', async () => {
-    vi.mocked(importCheck.checkHallucination).mockResolvedValue([
-      { id: 'HALLUCINATION_FILE', message: 'error' },
-    ]);
+    vi.mocked(native.runUltimateAnalysisNative).mockReturnValue({
+      file: 'test.ts',
+      line_count: 50,
+      complexity: 5,
+      violations: [
+        { type: 'HALLUCINATION', message: 'error', line: 1, rationale: 'test' }
+      ],
+      symbols: [],
+    });
     const violations = await provider.check('test.ts');
     expect(violations.some((v) => v.type === 'HALLUCINATION')).toBe(true);
   });

@@ -24,6 +24,28 @@ static SECRET_PATTERNS: Lazy<Vec<(&'static str, Regex, &'static str)>> = Lazy::n
 ]);
 pub static COMPLEXITY_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b(if|for|while|switch|catch)\b|(&&|\|\||\?)").unwrap());
 
+static BUILTINS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
+    let mut s = HashSet::new();
+    let names = vec![
+        "console", "Math", "JSON", "Promise", "process", "Object", "Array", "String", "Number", "Boolean",
+        "Date", "RegExp", "Error", "setTimeout", "setInterval", "setImmediate", "clearTimeout", "clearInterval",
+        "clearImmediate", "require", "module", "exports", "global", "window", "document", "navigator", "location",
+        "history", "screen", "__dirname", "__filename", "Buffer", "encodeURI", "encodeURIComponent", "decodeURI",
+        "decodeURIComponent", "parseFloat", "parseInt", "isNaN", "isFinite", "fetch", "Headers", "Request",
+        "Response", "URL", "URLSearchParams", "AbortController", "AbortSignal", "FormData", "Blob", "File",
+        "FileReader", "WebSocket", "Event", "CustomEvent", "MessageChannel", "MessagePort", "Worker",
+    ];
+    for name in names { s.insert(name); }
+    s
+});
+
+static NOISE_SYMBOLS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
+    let mut s = HashSet::new();
+    let names = vec!["game", "app", "core", "main", "root", "item", "data", "info", "ctx"];
+    for name in names { s.insert(name); }
+    s
+});
+
 #[napi]
 pub fn hello_rust() -> String {
   "Project Fast-Core is alive!".to_string()
@@ -384,6 +406,7 @@ pub fn verify_hallucination_native(
   for s in imports { allowed.insert(s); }
   for s in builtins { allowed.insert(s); }
   for s in external_exports { allowed.insert(s); }
+  for s in BUILTINS.iter() { allowed.insert(s.to_string()); }
 
   let content = fs::read_to_string(&file_path).unwrap_or_default();
   let symbols = parser::extract_symbols_oxc(&content, &file_path);
@@ -596,6 +619,7 @@ pub fn run_batch_analysis_native(files: Vec<String>) -> Vec<BatchResult> {
 }
 
 #[napi(object)]
+#[derive(Clone)]
 pub struct ReviewOptions {
   pub max_function_lines: i32,
   pub max_parameter_count: i32,
@@ -622,9 +646,12 @@ pub fn run_semantic_review_native(
   let mut violations = Vec::new();
   let content = fs::read_to_string(&file_path).unwrap_or_default();
   let symbols = parser::extract_symbols_oxc(&content, &file_path);
+  let is_dto_or_entity = file_path.to_lowercase().contains("dto") || file_path.to_lowercase().contains("entity");
 
   for s in symbols {
-      if s.name.len() <= 2 || s.name == "anonymous" { continue; }
+      let is_noise = NOISE_SYMBOLS.contains(s.name.as_str()) || s.name.len() <= 2;
+      if is_noise && s.lines < 10 { continue; }
+      if s.name == "anonymous" { continue; }
 
       let start_line = s.line;
 
@@ -636,7 +663,20 @@ pub fn run_semantic_review_native(
                   file: Some(file_path.clone()),
                   line: Some(start_line),
                   rationale: Some(format!("심볼 타입: {} [{}]", s.kind, s.name)),
-                  message: format!("[Senior Advice] {} [{}] 위에 한글 주석을 추가하여 역할을 설명하세요.", label, s.name),
+                  message: format!("[Senior Advice] {} [{}]에 한글 주석이 없습니다. 한글 주석을 추가하세요.", label, s.name),
+              });
+          }
+      }
+
+      if is_test_file && (s.kind == "suite" || s.kind == "test_logic") {
+          if !s.has_korean_comment {
+              let label = if s.kind == "suite" { "테스트 스위트(Suite)" } else { "테스트 설정 로직(Setup)" };
+              violations.push(Violation {
+                  r#type: "READABILITY".to_string(),
+                  file: Some(file_path.clone()),
+                  line: Some(start_line),
+                  rationale: Some(format!("심볼 타입: {}", label)),
+                  message: format!("[Senior Advice] 복잡한 {} [{}] 구간의 의도(Intent)나 Mocking 구조를 설명하는 한글 주석을 추가하세요.", label, s.name),
               });
           }
       }
@@ -663,20 +703,67 @@ pub fn run_semantic_review_native(
                   message: format!("[Senior Advice] 파라미터가 너무 많습니다 ({}개 초과). 객체로 묶으세요.", options.max_parameter_count),
               });
           }
+          
+          if s.lines >= 50 && !s.has_korean_comment {
+               violations.push(Violation {
+                  r#type: "READABILITY".to_string(),
+                  file: Some(file_path.clone()),
+                  line: Some(start_line),
+                  rationale: Some(format!("함수 길이: {}줄, 주석 0개", s.lines)),
+                  message: format!("[Senior Advice] 함수 [{}]의 로직이 복잡하지만 주석이 없습니다. 한글 주석을 추가하세요.", s.name),
+              });
+          }
       }
 
       if !is_test_file && (s.kind == "method" || s.kind == "field") {
           if !s.has_korean_comment {
-              let label = if s.kind == "method" { "메서드" } else { "멤버 변수" };
+              let mut label = if s.kind == "method" { "메서드" } else { "멤버 변수" };
+              if s.kind == "field" && is_dto_or_entity {
+                  label = "필드 (DTO/Entity)";
+              }
+              let display_name = s.name.split('.').last().unwrap_or(&s.name);
               violations.push(Violation {
                   r#type: "READABILITY".to_string(),
                   file: Some(file_path.clone()),
                   line: Some(start_line),
                   rationale: Some(format!("심볼 타입: {} [{}]", s.kind, s.name)),
-                  message: format!("[Senior Advice] {} [{}] 위에 한글 주석을 추가하세요.", label, s.name),
+                  message: format!("[Senior Advice] {} [{}] 위에 한글 주석을 추가하세요.", label, display_name),
               });
           }
       }
+
+      if !is_test_file && s.kind == "assignment" {
+          if !s.has_korean_comment {
+              violations.push(Violation {
+                  r#type: "READABILITY".to_string(),
+                  file: Some(file_path.clone()),
+                  line: Some(start_line),
+                  rationale: Some("심볼 타입: 모듈 할당".to_string()),
+                  message: format!("[Senior Advice] 모듈 할당 [{}] 위에 한글 주석을 추가하세요.", s.name),
+              });
+          }
+      }
+      
+      if !is_test_file && s.kind == "variable" && !s.has_korean_comment {
+          violations.push(Violation {
+              r#type: "READABILITY".to_string(),
+              file: Some(file_path.clone()),
+              line: Some(start_line),
+              rationale: Some("심볼 타입: 전역 변수".to_string()),
+              message: format!("[Senior Advice] 전역 변수 [{}] 위에 한글 주석을 추가하세요.", s.name),
+          });
+      }
+  }
+
+  let deep_lines = parser::detect_deep_nesting_oxc(&content, &file_path);
+  for line in deep_lines {
+      violations.push(Violation {
+          r#type: "READABILITY".to_string(),
+          file: Some(file_path.clone()),
+          line: Some(line),
+          rationale: None,
+          message: "[Senior Advice] 코드 중첩이 너무 깊습니다. 조기 리턴을 활용하세요.".to_string(),
+      });
   }
 
   violations
@@ -743,7 +830,7 @@ pub fn run_ultimate_analysis_native(
     
     let mut violations = Vec::new();
     
-    violations.extend(run_semantic_review_native(file_path.clone(), is_test_file, review_options));
+    violations.extend(run_semantic_review_native(file_path.clone(), is_test_file, review_options.clone()));
     
     violations.extend(verify_hallucination_native(
         file_path.clone(),
@@ -771,6 +858,23 @@ pub fn run_ultimate_analysis_native(
                 });
             }
         }
+    }
+
+    if complexity >= 10 { // TODO: use options.max_complexity
+        let mut blueprint = String::from("\n\n[Refactoring Blueprint]\n");
+        let mut sorted_symbols = symbols.clone();
+        sorted_symbols.sort_by(|a, b| b.complexity.cmp(&a.complexity));
+        for s in sorted_symbols.iter().take(3) {
+            let ratio = if complexity > 0 { (s.complexity * 100) / complexity } else { 0 };
+            blueprint.push_str(&format!("- [{}] {} (Complexity: {} [{}%], L{}-L{})\n", s.kind, s.name, s.complexity, ratio, s.line, s.end_line));
+        }
+        violations.push(Violation {
+            r#type: "COMPLEXITY".to_string(),
+            file: Some(file_path.clone()),
+            line: Some(1),
+            rationale: Some(format!("복잡도: {} (임계값: {})", complexity, 10)),
+            message: format!("전체 복잡도({})가 기준을 초과했습니다. {}", complexity, blueprint),
+        });
     }
 
     UltimateAnalysisResult {

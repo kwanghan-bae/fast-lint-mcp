@@ -6,6 +6,23 @@ import { READABILITY } from '../constants.js';
 import { checkTestValidity } from '../analysis/test-check.js';
 import { runMutationTest } from '../analysis/mutation.js';
 import { checkArchitecture } from '../analysis/import-check.js';
+import { AstCacheManager } from '../utils/AstCacheManager.js';
+
+// AST 패턴 정의 (v3.0 Semantic)
+const UI_AST_PATTERNS = [
+  'use$A($$$)', // Hooks
+  '< $A $$$ />', // JSX
+  'createElement($$$)',
+  'render($$$)',
+];
+
+const LOGIC_AST_PATTERNS = [
+  'Math.$A($$$)',
+  'new Map($$$)',
+  'new Set($$$)',
+  'crypto.$A($$$)',
+  'fetch($$$)',
+];
 
 /**
  * JavaScript 및 TypeScript 언어에 특화된 품질 분석을 수행하는 프로바이더 클래스입니다.
@@ -77,21 +94,45 @@ export class JavascriptProvider extends BaseQualityProvider {
         });
       }
 
+      // 복잡도 위반에 대한 상세 Advice 추가 (JS fallback for rich messaging)
       if (!isDataFile && result.complexity > maxComplexity) {
-          violations.push({
-            type: 'COMPLEXITY',
-            file: filePath,
-            value: result.complexity,
-            limit: maxComplexity,
-            message: `전체 복잡도(${result.complexity})가 기준을 초과했습니다.`,
-          });
+          const root = AstCacheManager.getInstance().getRootNode(filePath);
+          let hasUIPatterns = false;
+          let hasLogicPatterns = false;
+
+          if (root) {
+            hasUIPatterns = UI_AST_PATTERNS.some((p) => root.findAll(p).length > 0);
+            hasLogicPatterns = LOGIC_AST_PATTERNS.some((p) => root.findAll(p).length > 0);
+          }
+
+          let advice = '코드 복잡도가 기준을 초과했습니다. 로직을 더 작은 함수나 클래스로 분리하세요.';
+          if (hasUIPatterns && !hasLogicPatterns) {
+            advice = '이 컴포넌트에는 UI 렌더링과 복잡한 상태 관리가 혼재되어 있습니다. Business Logic을 Custom Hook으로 추출하거나, Presentational Component로 UI를 분리하세요.';
+          } else if (hasLogicPatterns && !hasUIPatterns) {
+            advice = '이 파일에는 고도의 연산 로직이 포함되어 있습니다. 서비스 레이어나 순수 함수 기반의 유틸리티 라이브러리로 로직을 캡슐화하는 것이 좋겠습니다.';
+          } else if (hasUIPatterns && hasLogicPatterns) {
+            advice = '렌더링 코드와 복잡한 계산 로직이 강하게 결합되어 있습니다. 유지보수를 위해 렌더링부와 로직부를 엄격히 분리(SOC: Separation of Concerns)하세요.';
+          }
+
+          // Native 결과에 Advice 추가
+          const compV = violations.find(v => v.type === 'COMPLEXITY');
+          if (compV) {
+              compV.message = `${compV.message}\n\n* Senior Advice: ${advice}`;
+          } else {
+              violations.push({
+                type: 'COMPLEXITY',
+                file: filePath,
+                value: result.complexity,
+                limit: maxComplexity,
+                message: `전체 복잡도(${result.complexity})가 기준을 초과했습니다. \n\n* Senior Advice: ${advice}`,
+              });
+          }
       }
 
     } catch (e) {
-      // Fallback or ignore
+      // Fallback
     }
 
-    // 아키텍처 및 변이 테스트는 여전히 별도 호출 (오케스트레이션 유지)
     const architectureRules = this.config.architectureRules;
     if (architectureRules && architectureRules.length > 0) {
       const archViolations = await checkArchitecture(filePath, architectureRules, process.cwd(), this.config.exclude);

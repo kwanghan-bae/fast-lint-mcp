@@ -1,7 +1,8 @@
 use oxc_allocator::Allocator;
 use oxc_parser::Parser;
 use oxc_span::SourceType;
-use oxc_ast::ast::{Statement, Declaration};
+use oxc_ast::ast::{Statement, Declaration, Expression, ClassElement};
+use oxc_ast::AstKind;
 use crate::{SymbolResult, COMPLEXITY_RE};
 use regex::Regex;
 use once_cell::sync::Lazy;
@@ -26,10 +27,10 @@ pub fn extract_symbols_oxc(source_text: &str, file_path: &str) -> Vec<SymbolResu
                            Declaration::FunctionDeclaration(func) => {
                                if let Some(id) = &func.id {
                                    let start_line = count_lines(&source_text[..func.span.start as usize]) + 1;
-                                   let end_line = count_lines(&source_text[..func.span.end as usize]);
+                                   let end_line = count_lines(&source_text[..func.span.end as usize]) + 1;
                                    let snippet = &source_text[func.span.start as usize..func.span.end as usize];
                                    let complexity = COMPLEXITY_RE.find_iter(snippet).count() as i32 + 1;
-                                   let has_korean = has_korean_comment_above(&lines, start_line as usize, 3);
+                                   let has_korean = has_korean_comment_above(&lines, start_line as usize, 10);
 
                                    symbols.push(SymbolResult {
                                        name: id.name.to_string(),
@@ -47,8 +48,8 @@ pub fn extract_symbols_oxc(source_text: &str, file_path: &str) -> Vec<SymbolResu
                            Declaration::ClassDeclaration(cls) => {
                                if let Some(id) = &cls.id {
                                    let start_line = count_lines(&source_text[..cls.span.start as usize]) + 1;
-                                   let end_line = count_lines(&source_text[..cls.span.end as usize]);
-                                   let has_korean = has_korean_comment_above(&lines, start_line as usize, 3);
+                                   let end_line = count_lines(&source_text[..cls.span.end as usize]) + 1;
+                                   let has_korean = has_korean_comment_above(&lines, start_line as usize, 10);
                                    
                                    symbols.push(SymbolResult {
                                        name: id.name.to_string(),
@@ -69,20 +70,20 @@ pub fn extract_symbols_oxc(source_text: &str, file_path: &str) -> Vec<SymbolResu
                                for declarator in &var_decl.declarations {
                                    if let Some(id) = declarator.id.get_binding_identifier() {
                                        let start_line = count_lines(&source_text[..declarator.span.start as usize]) + 1;
-                                       let end_line = count_lines(&source_text[..declarator.span.end as usize]);
+                                       let end_line = count_lines(&source_text[..declarator.span.end as usize]) + 1;
                                        let snippet = &source_text[declarator.span.start as usize..declarator.span.end as usize];
                                        let complexity = COMPLEXITY_RE.find_iter(snippet).count() as i32 + 1;
-                                       let has_korean = has_korean_comment_above(&lines, start_line as usize, 3);
+                                       let has_korean = has_korean_comment_above(&lines, start_line as usize, 10);
 
                                        symbols.push(SymbolResult {
                                            name: id.name.to_string(),
                                            line: start_line as u32,
                                            end_line: end_line as u32,
                                            is_exported: true,
-                                           kind: "function".to_string(), 
+                                           kind: "variable".to_string(), 
                                            complexity,
                                            lines: (end_line - start_line + 1) as i32,
-                                           parameter_count: 0, 
+                                           parameter_count: 0,
                                            has_korean_comment: has_korean,
                                        });
                                    }
@@ -95,10 +96,10 @@ pub fn extract_symbols_oxc(source_text: &str, file_path: &str) -> Vec<SymbolResu
                Statement::FunctionDeclaration(func) => {
                    if let Some(id) = &func.id {
                        let start_line = count_lines(&source_text[..func.span.start as usize]) + 1;
-                       let end_line = count_lines(&source_text[..func.span.end as usize]);
+                       let end_line = count_lines(&source_text[..func.span.end as usize]) + 1;
                        let snippet = &source_text[func.span.start as usize..func.span.end as usize];
                        let complexity = COMPLEXITY_RE.find_iter(snippet).count() as i32 + 1;
-                       let has_korean = has_korean_comment_above(&lines, start_line as usize, 3);
+                       let has_korean = has_korean_comment_above(&lines, start_line as usize, 10);
 
                        symbols.push(SymbolResult {
                            name: id.name.to_string(),
@@ -117,17 +118,17 @@ pub fn extract_symbols_oxc(source_text: &str, file_path: &str) -> Vec<SymbolResu
                    for declarator in &var_decl.declarations {
                        if let Some(id) = declarator.id.get_binding_identifier() {
                            let start_line = count_lines(&source_text[..declarator.span.start as usize]) + 1;
-                           let end_line = count_lines(&source_text[..declarator.span.end as usize]);
+                           let end_line = count_lines(&source_text[..declarator.span.end as usize]) + 1;
                            let snippet = &source_text[declarator.span.start as usize..declarator.span.end as usize];
                            let complexity = COMPLEXITY_RE.find_iter(snippet).count() as i32 + 1;
-                           let has_korean = has_korean_comment_above(&lines, start_line as usize, 3);
+                           let has_korean = has_korean_comment_above(&lines, start_line as usize, 10);
 
                            symbols.push(SymbolResult {
                                name: id.name.to_string(),
                                line: start_line as u32,
                                end_line: end_line as u32,
                                is_exported: false,
-                               kind: "function".to_string(),
+                               kind: "variable".to_string(),
                                complexity,
                                lines: (end_line - start_line + 1) as i32,
                                parameter_count: 0,
@@ -139,8 +140,8 @@ pub fn extract_symbols_oxc(source_text: &str, file_path: &str) -> Vec<SymbolResu
                Statement::ClassDeclaration(cls) => {
                    if let Some(id) = &cls.id {
                        let start_line = count_lines(&source_text[..cls.span.start as usize]) + 1;
-                       let end_line = count_lines(&source_text[..cls.span.end as usize]);
-                       let has_korean = has_korean_comment_above(&lines, start_line as usize, 3);
+                       let end_line = count_lines(&source_text[..cls.span.end as usize]) + 1;
+                       let has_korean = has_korean_comment_above(&lines, start_line as usize, 10);
                        
                        symbols.push(SymbolResult {
                            name: id.name.to_string(),
@@ -157,6 +158,51 @@ pub fn extract_symbols_oxc(source_text: &str, file_path: &str) -> Vec<SymbolResu
                        process_class_body(cls, &id.name, source_text, &mut symbols, &lines);
                    }
                },
+               Statement::ExpressionStatement(expr_stmt) => {
+                   if let Expression::CallExpression(call) = &expr_stmt.expression {
+                       if let Expression::Identifier(id) = &call.callee {
+                           if id.name == "describe" || id.name == "it" || id.name == "test" || id.name == "beforeEach" || id.name == "afterEach" {
+                               let start_line = count_lines(&source_text[..call.span.start as usize]) + 1;
+                               let end_line = count_lines(&source_text[..call.span.end as usize]) + 1;
+                               let has_korean = has_korean_comment_above(&lines, start_line as usize, 10);
+                               
+                               let label = if id.name == "describe" { "suite" } else { "test_logic" };
+
+                               symbols.push(SymbolResult {
+                                   name: id.name.to_string(),
+                                   line: start_line as u32,
+                                   end_line: end_line as u32,
+                                   is_exported: false,
+                                   kind: label.to_string(),
+                                   complexity: 1,
+                                   lines: (end_line - start_line + 1) as i32,
+                                   parameter_count: 0,
+                                   has_korean_comment: has_korean,
+                               });
+                           }
+                       }
+                   } else if let Expression::AssignmentExpression(assign) = &expr_stmt.expression {
+                       let start_line = count_lines(&source_text[..assign.span.start as usize]) + 1;
+                       let end_line = count_lines(&source_text[..assign.span.end as usize]) + 1;
+                       let has_korean = has_korean_comment_above(&lines, start_line as usize, 10);
+
+                       use oxc_span::GetSpan;
+                       let span = assign.left.span();
+                       let name = source_text[span.start as usize..span.end as usize].to_string();
+
+                       symbols.push(SymbolResult {
+                           name,
+                           line: start_line as u32,
+                           end_line: end_line as u32,
+                           is_exported: false,
+                           kind: "assignment".to_string(),
+                           complexity: 1,
+                           lines: (end_line - start_line + 1) as i32,
+                           parameter_count: 0,
+                           has_korean_comment: has_korean,
+                       });
+                   }
+               },
                _ => {}
            }
        }
@@ -167,51 +213,56 @@ pub fn extract_symbols_oxc(source_text: &str, file_path: &str) -> Vec<SymbolResu
 
 fn process_class_body(cls: &oxc_ast::ast::Class, class_name: &str, source_text: &str, symbols: &mut Vec<SymbolResult>, lines: &[&str]) {
     for el in &cls.body.body {
-        if let oxc_ast::ast::ClassElement::MethodDefinition(method) = el {
-            if let oxc_ast::ast::PropertyKey::StaticIdentifier(method_id) = &method.key {
-                if method_id.name != "constructor" {
-                     let m_start = count_lines(&source_text[..method.span.start as usize]) + 1;
-                     let m_end = count_lines(&source_text[..method.span.end as usize]);
-                     let m_snippet = &source_text[method.span.start as usize..method.span.end as usize];
-                     let m_complexity = COMPLEXITY_RE.find_iter(m_snippet).count() as i32 + 1;
-                     let has_korean = has_korean_comment_above(lines, m_start as usize, 3);
+        match el {
+            ClassElement::MethodDefinition(method) => {
+                if let oxc_ast::ast::PropertyKey::StaticIdentifier(method_id) = &method.key {
+                    if method_id.name != "constructor" {
+                         let m_start = count_lines(&source_text[..method.span.start as usize]) + 1;
+                         let m_end = count_lines(&source_text[..method.span.end as usize]) + 1;
+                         let m_snippet = &source_text[method.span.start as usize..method.span.end as usize];
+                         let m_complexity = COMPLEXITY_RE.find_iter(m_snippet).count() as i32 + 1;
+                         let has_korean = has_korean_comment_above(lines, m_start as usize, 10);
 
-                     symbols.push(SymbolResult {
-                         name: format!("{}.{}", class_name, method_id.name),
-                         line: m_start as u32,
-                         end_line: m_end as u32,
-                         is_exported: false,
-                         kind: "method".to_string(),
-                         complexity: m_complexity,
-                         lines: (m_end - m_start + 1) as i32,
-                         parameter_count: method.value.params.items.len() as i32,
-                         has_korean_comment: has_korean,
-                     });
+                         symbols.push(SymbolResult {
+                             name: format!("{}.{}", class_name, method_id.name),
+                             line: m_start as u32,
+                             end_line: m_end as u32,
+                             is_exported: false,
+                             kind: "method".to_string(),
+                             complexity: m_complexity,
+                             lines: (m_end - m_start + 1) as i32,
+                             parameter_count: method.value.params.items.len() as i32,
+                             has_korean_comment: has_korean,
+                         });
+                    }
                 }
-            }
-        } else if let oxc_ast::ast::ClassElement::PropertyDefinition(prop) = el {
-            if let oxc_ast::ast::PropertyKey::StaticIdentifier(prop_id) = &prop.key {
-                let p_start = count_lines(&source_text[..prop.span.start as usize]) + 1;
-                let p_end = count_lines(&source_text[..prop.span.end as usize]);
-                let has_korean = has_korean_comment_above(lines, p_start as usize, 3);
+            },
+            ClassElement::PropertyDefinition(prop) => {
+                if let oxc_ast::ast::PropertyKey::StaticIdentifier(prop_id) = &prop.key {
+                    let p_start = count_lines(&source_text[..prop.span.start as usize]) + 1;
+                    let p_end = count_lines(&source_text[..prop.span.end as usize]) + 1;
+                    let has_korean = has_korean_comment_above(lines, p_start as usize, 10);
 
-                symbols.push(SymbolResult {
-                    name: format!("{}.{}", class_name, prop_id.name),
-                    line: p_start as u32,
-                    end_line: p_end as u32,
-                    is_exported: false,
-                    kind: "field".to_string(),
-                    complexity: 1,
-                    lines: (p_end - p_start + 1) as i32,
-                    parameter_count: 0,
-                    has_korean_comment: has_korean,
-                });
-            }
+                    symbols.push(SymbolResult {
+                        name: format!("{}.{}", class_name, prop_id.name),
+                        line: p_start as u32,
+                        end_line: p_end as u32,
+                        is_exported: false,
+                        kind: "field".to_string(),
+                        complexity: 1,
+                        lines: (p_end - p_start + 1) as i32,
+                        parameter_count: 0,
+                        has_korean_comment: has_korean,
+                    });
+                }
+            },
+            _ => {}
         }
     }
 }
 
 pub fn count_lines(s: &str) -> usize {
+    if s.is_empty() { return 0; }
     s.chars().filter(|&c| c == '\n').count()
 }
 
@@ -291,7 +342,6 @@ pub fn fix_readability_oxc(source_text: &str, file_path: &str) -> (String, i32) 
     let mut fix_count = 0;
     let lines: Vec<&str> = source_text.lines().collect();
 
-    // We collect points where we want to insert comments
     let mut insert_points = Vec::new();
 
     for stmt in &ret.program.body {
@@ -302,7 +352,7 @@ pub fn fix_readability_oxc(source_text: &str, file_path: &str) -> (String, i32) 
                         Declaration::FunctionDeclaration(func) => {
                             if let Some(id) = &func.id {
                                 let start_line = count_lines(&source_text[..func.span.start as usize]) + 1;
-                                if !has_korean_comment_above(&lines, start_line as usize, 3) {
+                                if !has_korean_comment_above(&lines, start_line as usize, 10) {
                                     insert_points.push((func.span.start as usize, format!("// {} 함수는 역할을 수행합니다.\n", id.name)));
                                 }
                             }
@@ -310,7 +360,7 @@ pub fn fix_readability_oxc(source_text: &str, file_path: &str) -> (String, i32) 
                         Declaration::ClassDeclaration(cls) => {
                             if let Some(id) = &cls.id {
                                 let start_line = count_lines(&source_text[..cls.span.start as usize]) + 1;
-                                if !has_korean_comment_above(&lines, start_line as usize, 3) {
+                                if !has_korean_comment_above(&lines, start_line as usize, 10) {
                                     insert_points.push((cls.span.start as usize, format!("// {} 클래스는 역할을 담당합니다.\n", id.name)));
                                 }
                             }
@@ -322,7 +372,7 @@ pub fn fix_readability_oxc(source_text: &str, file_path: &str) -> (String, i32) 
             Statement::FunctionDeclaration(func) => {
                 if let Some(id) = &func.id {
                     let start_line = count_lines(&source_text[..func.span.start as usize]) + 1;
-                    if !has_korean_comment_above(&lines, start_line as usize, 3) {
+                    if !has_korean_comment_above(&lines, start_line as usize, 10) {
                         insert_points.push((func.span.start as usize, format!("// {} 함수는 내부 로직을 처리합니다.\n", id.name)));
                     }
                 }
@@ -330,7 +380,7 @@ pub fn fix_readability_oxc(source_text: &str, file_path: &str) -> (String, i32) 
             Statement::ClassDeclaration(cls) => {
                 if let Some(id) = &cls.id {
                     let start_line = count_lines(&source_text[..cls.span.start as usize]) + 1;
-                    if !has_korean_comment_above(&lines, start_line as usize, 3) {
+                    if !has_korean_comment_above(&lines, start_line as usize, 10) {
                         insert_points.push((cls.span.start as usize, format!("// {} 클래스는 내부 상태를 관리합니다.\n", id.name)));
                     }
                 }
@@ -350,4 +400,47 @@ pub fn fix_readability_oxc(source_text: &str, file_path: &str) -> (String, i32) 
     fixed_content.push_str(&source_text[last_pos..]);
 
     (fixed_content, fix_count)
+}
+
+pub fn detect_deep_nesting_oxc(source_text: &str, file_path: &str) -> Vec<u32> {
+    let allocator = Allocator::default();
+    let source_type = SourceType::from_path(file_path).unwrap_or_default();
+    let ret = Parser::new(&allocator, source_text, source_type).parse();
+    let mut deep_lines = Vec::new();
+
+    if ret.errors.is_empty() {
+        for stmt in &ret.program.body {
+            walk_statement(stmt, source_text, &mut deep_lines, 0);
+        }
+    }
+    deep_lines
+}
+
+fn walk_statement(stmt: &Statement, source_text: &str, deep_lines: &mut Vec<u32>, depth: i32) {
+    match stmt {
+        Statement::IfStatement(if_stmt) => {
+            let new_depth = depth + 1;
+            if new_depth >= 3 {
+                let line = count_lines(&source_text[..if_stmt.span.start as usize]) + 1;
+                deep_lines.push(line as u32);
+            }
+            walk_statement(&if_stmt.consequent, source_text, deep_lines, new_depth);
+            if let Some(alt) = &if_stmt.alternate {
+                walk_statement(alt, source_text, deep_lines, depth); 
+            }
+        },
+        Statement::BlockStatement(block) => {
+            for s in &block.body {
+                walk_statement(s, source_text, deep_lines, depth);
+            }
+        },
+        Statement::FunctionDeclaration(func) => {
+            if let Some(body) = &func.body {
+                for s in &body.statements {
+                    walk_statement(s, source_text, deep_lines, 0); 
+                }
+            }
+        },
+        _ => {}
+    }
 }

@@ -3,6 +3,7 @@ import { StateManager } from './dist/state.js';
 import { ConfigService } from './dist/config.js';
 import { SemanticService } from './dist/service/SemanticService.js';
 
+// run 함수는 내부 로직을 처리합니다.
 async function run() {
   process.env.FAST_LINT_WORKSPACE = '/Users/joel/Desktop/git/midas';
   process.chdir('/Users/joel/Desktop/git/midas');

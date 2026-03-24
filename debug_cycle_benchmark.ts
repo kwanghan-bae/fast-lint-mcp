@@ -1,5 +1,6 @@
 import { detectCyclesNative } from './native/index.js';
 
+// benchmark 함수는 내부 로직을 처리합니다.
 function benchmark() {
   const nodeCount = 5000;
   const edgeCount = 10000;

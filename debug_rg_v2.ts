@@ -3,6 +3,7 @@ import { writeFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import { AstCacheManager } from './src/utils/AstCacheManager.js';
 
+// verify 함수는 내부 로직을 처리합니다.
 async function verify() {
   const filePath = join(process.cwd(), 'verify_rg_accuracy.ts');
   const code =

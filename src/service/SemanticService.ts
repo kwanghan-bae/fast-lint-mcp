@@ -86,13 +86,35 @@ export class SemanticService {
     return this.indexer.findReferences(name);
   }
 
-  /** 특정 심볼 정의 조회 */
+  /** 특정 심볼 정의 조회 (goToDefinition은 하위 호환성을 위해 유지) */
   getDefinition(name: string): { file: string; line: number } | null {
     return this.indexer.getDefinition(name);
+  }
+
+  /** @deprecated use getDefinition */
+  goToDefinition(name: string): { file: string; line: number } | null {
+    return this.getDefinition(name);
   }
 
   /** 모든 공개 심볼 목록 조회 */
   getAllExportedSymbols(): { name: string; file: string }[] {
     return this.indexer.getAllExportedSymbols();
+  }
+
+  /** 프로젝트 내의 미사용 코드(Dead Code)를 탐색합니다. */
+  async findDeadCode() {
+    await this.ensureInitialized();
+    const allExports = this.getAllExportedSymbols();
+    const deadCode: { symbol: string; file: string }[] = [];
+
+    for (const exp of allExports) {
+      const refs = this.findReferences(exp.name);
+      // 참조가 1개(정의 자체) 이하이면 데드 코드로 간주
+      if (refs.length <= 1) {
+        deadCode.push({ symbol: exp.name, file: exp.file });
+      }
+    }
+
+    return deadCode;
   }
 }

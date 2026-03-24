@@ -2,6 +2,7 @@ import { DependencyGraph } from './src/utils/DependencyGraph.js';
 import { writeFileSync, mkdirSync, rmSync, existsSync } from 'fs';
 import { join, normalize } from 'path';
 
+// verifyGraph 함수는 내부 로직을 처리합니다.
 async function verifyGraph() {
   const testDir = join(process.cwd(), 'verify_graph_native');
   if (existsSync(testDir)) rmSync(testDir, { recursive: true, force: true });

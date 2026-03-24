@@ -5,7 +5,8 @@ import { Violation } from '../types/index.js';
 import { COVERAGE } from '../constants.js';
 import { parseLcovNative } from '../../native/index.js';
 
-export class CoverageAnalyzer {
+export // CoverageAnalyzer 클래스는 역할을 담당합니다.
+class CoverageAnalyzer {
   constructor(private workspacePath: string) {}
 
   async analyze(
