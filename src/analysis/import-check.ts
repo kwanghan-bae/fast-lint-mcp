@@ -155,7 +155,7 @@ export async function checkFakeLogic(
     if (s.name.startsWith('get') || s.name.startsWith('is') || s.name === 'render') continue;
 
     // 대략적인 본문 추출 (line 기반)
-    const body = lines.slice(s.line - 1, s.end_line).join('\n');
+    const body = lines.slice(s.line - 1, s.endLine).join('\n');
 
     // 파라미터 정보가 필요함 (SymbolResult에 parameter_count는 있지만 이름은 없음)
     // TODO: parser.rs에서 파라미터 이름을 반환하도록 개선 필요.

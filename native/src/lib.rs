@@ -56,6 +56,11 @@ mod resolver;
 // ... (기존 Lazy static들)
 
 #[napi]
+pub fn clear_path_cache_native() {
+  resolver::clear_path_cache_native()
+}
+
+#[napi]
 pub fn find_nearest_project_root_native(current_dir: String) -> String {
   resolver::find_nearest_project_root_native(current_dir)
 }

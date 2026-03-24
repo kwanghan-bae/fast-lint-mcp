@@ -46,14 +46,5 @@ export function resolveModulePath(
  * 현재 Native 구현은 내부적으로 Lazy 캐시를 사용하므로 JS 레벨의 캐시는 필요하지 않습니다.
  */
 export function clearPathCache(): void {
-  // Native 캐시 초기화 기능이 필요한 경우 여기에 추가
-}
-
-/**
- * 모든 경로 캐시를 초기화합니다.
- */
-export function clearPathCache(): void {
-  aliasCache.clear();
-  rootCache.clear();
-  fileSetCache = null;
+  // v0.0.1: Native 캐시 초기화 기능이 추가되면 여기서 호출 (현재는 무상태 Lazy 처리)
 }

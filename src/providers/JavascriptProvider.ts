@@ -91,16 +91,16 @@ export class JavascriptProvider extends BaseQualityProvider {
         }))
       );
 
-      const isDataFile = result.line_count > 50 && result.complexity / result.line_count < 0.1;
+      const isDataFile = result.lineCount > 50 && result.complexity / result.lineCount < 0.1;
       const { maxLines, maxComplexity } = this.getEffectiveLimits(isDataFile, options);
 
-      if (!isDataFile && result.line_count > maxLines) {
+      if (!isDataFile && result.lineCount > maxLines) {
         violations.push({
           type: 'SIZE',
           file: filePath,
-          value: result.line_count,
+          value: result.lineCount,
           limit: maxLines,
-          message: `단일 로직 파일이 너무 큽니다 (${result.line_count}줄).`,
+          message: `단일 로직 파일이 너무 큽니다 (${result.lineCount}줄).`,
         });
       }
 
@@ -148,12 +148,7 @@ export class JavascriptProvider extends BaseQualityProvider {
 
     const architectureRules = this.config.architectureRules;
     if (architectureRules && architectureRules.length > 0) {
-      const archViolations = await checkArchitecture(
-        filePath,
-        architectureRules,
-        process.cwd(),
-        this.config.exclude
-      );
+      const archViolations = await checkArchitecture(filePath, architectureRules, process.cwd());
       violations.push(
         ...archViolations.map((av) => ({
           type: 'ARCHITECTURE' as any,

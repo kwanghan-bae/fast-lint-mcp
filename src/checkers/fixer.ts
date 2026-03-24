@@ -18,10 +18,10 @@ export async function runSelfHealing(
     try {
       // v0.0.1: Native Fixer 호출 (주석 누락 등 READABILITY 위반 우선 해결)
       const result = runSelfHealingNative(file);
-      if (result.fixed_count > 0) {
-        totalFixed += result.fixed_count;
+      if (result.fixedCount > 0) {
+        totalFixed += result.fixedCount;
         messages.push(
-          `[Native Fix] ${file}: ${result.fixed_count}개의 품질 이슈를 자동으로 수정했습니다.`
+          `[Native Fix] ${file}: ${result.fixedCount}개의 품질 이슈를 자동으로 수정했습니다.`
         );
       }
     } catch (e) {
