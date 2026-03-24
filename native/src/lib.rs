@@ -49,9 +49,30 @@ static NOISE_SYMBOLS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
     s
 });
 
+mod parser;
+mod cache;
+mod resolver;
+
+// ... (기존 Lazy static들)
+
 #[napi]
-pub fn hello_rust() -> String {
-  "Project Fast-Core is alive!".to_string()
+pub fn find_nearest_project_root_native(current_dir: String) -> String {
+  resolver::find_nearest_project_root_native(current_dir)
+}
+
+#[napi]
+pub fn load_project_aliases_native(workspace_path: String) -> HashMap<String, String> {
+  resolver::load_project_aliases_native(workspace_path)
+}
+
+#[napi]
+pub fn resolve_module_path_native_v2(
+  current_dir: String,
+  import_path: String,
+  all_files: Vec<String>,
+  file_path: Option<String>,
+) -> Option<String> {
+  resolver::resolve_module_path_native_v2(current_dir, import_path, all_files, file_path)
 }
 
 #[napi]
@@ -1012,6 +1033,3 @@ pub fn check_architecture_native(
 
   violations
 }
-
-mod parser;
-mod cache;
