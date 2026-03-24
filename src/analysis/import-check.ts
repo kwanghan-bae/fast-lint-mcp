@@ -1,15 +1,15 @@
 import { readFileSync, existsSync } from 'fs';
-import { Lang, parse, SgNode } from '@ast-grep/napi';
-import { dirname, join, normalize, isAbsolute, relative } from 'path';
-import { scanFiles, checkFakeLogicNative, checkArchitectureNative } from '../../native/index.js';
+import { dirname, join, normalize, isAbsolute } from 'path';
 import {
-  resolveModulePath,
-  loadProjectAliases,
-  findNearestProjectRoot,
-} from '../utils/PathResolver.js';
+  scanFiles,
+  checkFakeLogicNative,
+  checkArchitectureNative,
+  verifyHallucinationNative,
+  extractSymbolsNative,
+} from '../../native/index.js';
+import { loadProjectAliases } from '../utils/PathResolver.js';
 import { ArchitectureRule } from '../config.js';
 import { builtinModules } from 'module';
-import { AstCacheManager } from '../utils/AstCacheManager.js';
 
 import { SYSTEM } from '../constants.js';
 
@@ -54,13 +54,11 @@ export function clearProjectFilesCache() {
 export async function checkArchitecture(
   filePath: string,
   rules: ArchitectureRule[],
-  workspacePath: string = process.cwd(),
-  ignorePatterns: string[] = ['**/node_modules/**', '**/dist/**']
+  workspacePath: string = process.cwd()
 ): Promise<{ id: string; message: string }[]> {
   if (!existsSync(filePath)) return [];
 
   // v0.0.1: Rust Native 검사기 호출
-  // TypeScript 파일 경로를 정규화하여 전달
   const absoluteFilePath = isAbsolute(filePath) ? filePath : join(workspacePath, filePath);
 
   const violations = checkArchitectureNative(absoluteFilePath, rules, workspacePath);
@@ -73,116 +71,32 @@ export async function checkArchitecture(
 
 /**
  * AI 에이전트의 환각(Hallucination) 탐지
+ * v0.0.1: Rust Native 엔진을 사용하여 고속 환각 탐지를 수행합니다.
  */
 export async function checkHallucination(
   filePath: string,
-  workspacePath: string = process.cwd(),
-  ignorePatterns: string[] = ['**/node_modules/**', '**/dist/**']
+  workspacePath: string = process.cwd()
 ): Promise<{ id: string; message: string }[]> {
   if (!existsSync(filePath)) return [];
-  const root = AstCacheManager.getInstance().getRootNode(filePath);
-  if (!root) return [];
 
   const dependencies = await loadAllDependencies(filePath, workspacePath);
-  const allFiles = await getProjectFiles(workspacePath, ignorePatterns);
   const absoluteFilePath = isAbsolute(filePath) ? filePath : join(workspacePath, filePath);
-  const aliases = loadProjectAliases(filePath);
-  const nodeBuiltins = new Set([...builtinModules, ...builtinModules.map((m) => `node:${m}`)]);
+  const nodeBuiltins = [...builtinModules, ...builtinModules.map((m) => `node:${m}`)];
 
-  return scanImportsForHallucination(
-    root,
-    filePath,
+  // v0.0.1: Rust Native 환각 탐지기 호출
+  const violations = verifyHallucinationNative(
     absoluteFilePath,
-    allFiles,
-    workspacePath,
-    aliases,
+    [], // local_defs (Rust에서 내부적으로 추출 가능하면 비워둠)
+    [], // imports (Rust에서 내부적으로 추출 가능하면 비워둠)
     nodeBuiltins,
-    dependencies
+    dependencies // external_exports로 dependencies 전달
   );
-}
 
-/** 모듈 설치 여부 확인 결과를 저장하는 메모리 캐시 (v3.9.1 Performance) */
-const moduleExistenceCache = new Map<string, boolean>();
-
-/**
- * 임포트 구문을 순회하며 파일/라이브러리 환각 여부를 정밀 스캔합니다.
- */
-function scanImportsForHallucination(
-  root: SgNode,
-  filePath: string,
-  absPath: string,
-  allFiles: string[],
-  workspacePath: string,
-  aliases: any,
-  nodeBuiltins: Set<string>,
-  dependencies: string[]
-): { id: string; message: string; line?: number }[] {
-  const violations: { id: string; message: string; line?: number }[] = [];
-  const patterns = ["import $A from '$B'", 'import $A from "$B"', "import '$B'", 'import "$B"'];
-
-  for (const pattern of patterns) {
-    root.findAll(pattern).forEach((m) => {
-      const source = m.getMatch('B')?.text();
-      if (!source) return;
-
-      const line = m.range().start.line + 1;
-      const isAliased = Object.keys(aliases).some((alias) => source.startsWith(alias));
-      if (source.startsWith('.') || isAliased) {
-        const resolved = resolveModulePath(
-          dirname(normalize(absPath)),
-          source,
-          allFiles,
-          workspacePath,
-          filePath
-        );
-        if (!resolved) {
-          violations.push({
-            id: 'HALLUCINATION_FILE',
-            line,
-            message: `존재하지 않는 파일 참조: ${source}${isAliased ? ' (별칭 해석 실패)' : ''}`,
-          });
-        }
-      } else {
-        const libName = source.startsWith('@')
-          ? source.split('/').slice(0, 2).join('/')
-          : source.split('/')[0];
-
-        if (!nodeBuiltins.has(libName) && !dependencies.includes(libName)) {
-          // v3.9.1: 캐시 확인
-          const cacheKey = `${workspacePath}:${libName}`;
-          if (moduleExistenceCache.has(cacheKey)) {
-            if (moduleExistenceCache.get(cacheKey)) return;
-          } else {
-            // v3.8.1: 트랜지티브(Transitive) 의존성 방어 - node_modules에 물리적으로 존재하는지 확인
-            let isInstalled = false;
-            let currentDir = dirname(absPath);
-            while (currentDir.length >= workspacePath.length) {
-              if (existsSync(join(currentDir, 'node_modules', libName))) {
-                isInstalled = true;
-                break;
-              }
-              const parent = dirname(currentDir);
-              if (parent === currentDir) break;
-              currentDir = parent;
-            }
-            if (!isInstalled && existsSync(join(workspacePath, 'node_modules', libName))) {
-              isInstalled = true;
-            }
-
-            moduleExistenceCache.set(cacheKey, isInstalled);
-            if (isInstalled) return;
-          }
-
-          violations.push({
-            id: 'HALLUCINATION_LIB',
-            line,
-            message: `설치되지 않은 라이브러리 참조: ${libName}`,
-          });
-        }
-      }
-    });
-  }
-  return violations;
+  return violations.map((v) => ({
+    id: 'HALLUCINATION',
+    message: `[AI Hallucination] 존재하지 않는 API 호출: ${v.name}`,
+    line: v.line,
+  }));
 }
 
 /**
@@ -192,7 +106,6 @@ function scanImportsForHallucination(
 async function loadAllDependencies(filePath: string, workspacePath: string): Promise<string[]> {
   const deps = new Set<string>();
   let currentDir = dirname(isAbsolute(filePath) ? filePath : join(workspacePath, filePath));
-  const rootDir = dirname(workspacePath); // 워크스페이스 상위까지만 탐색 제한
 
   const load = (p: string) => {
     if (!existsSync(p)) return;
@@ -207,7 +120,7 @@ async function loadAllDependencies(filePath: string, workspacePath: string): Pro
     }
   };
 
-  // 상위로 올라가며 모든 package.json 로드 (Node.js Resolution Strategy 모사)
+  // 상위로 올라가며 모든 package.json 로드
   while (currentDir.length >= workspacePath.length) {
     load(join(currentDir, 'package.json'));
     const parent = dirname(currentDir);
@@ -215,7 +128,6 @@ async function loadAllDependencies(filePath: string, workspacePath: string): Pro
     currentDir = parent;
   }
 
-  // 워크스페이스 루트의 package.json은 반드시 포함
   load(join(workspacePath, 'package.json'));
 
   return Array.from(deps);
@@ -223,93 +135,56 @@ async function loadAllDependencies(filePath: string, workspacePath: string): Pro
 
 /**
  * 에이전트의 '가짜 구현(Fake Logic)' 여부를 탐지합니다.
- * v0.0.1: Rust Native Regex 엔진을 사용하여 GC 부하를 제거하고 성능을 향상시킵니다.
+ * v0.0.1: Rust Native 엔진을 사용하여 고속 논리 검증을 수행합니다.
  */
 export async function checkFakeLogic(
   filePath: string
 ): Promise<{ id: string; message: string; line?: number }[]> {
   if (!existsSync(filePath)) return [];
-  const root = AstCacheManager.getInstance().getRootNode(filePath);
-  if (!root) return [];
 
+  const absoluteFilePath = isAbsolute(filePath) ? filePath : join(process.cwd(), filePath);
+  const symbols = extractSymbolsNative(absoluteFilePath);
   const violations: { id: string; message: string; line?: number }[] = [];
-  const funcKinds = ['function_declaration', 'method_definition', 'arrow_function'];
 
-  for (const kind of funcKinds) {
-    root.findAll({ rule: { kind } }).forEach((m) => {
-      // get/set 접근자는 제외
-      const parent = m.parent();
-      if (parent?.kind() === 'get_accessor' || parent?.kind() === 'set_accessor') return;
+  // 파일 전체 내용을 읽어 본문 추출 (심볼별 본문 추출 기능이 Rust에 있다면 더 좋음)
+  const content = readFileSync(absoluteFilePath, 'utf-8');
+  const lines = content.split('\n');
 
-      const idNode = m.find({
-        rule: { any: [{ kind: 'identifier' }, { kind: 'property_identifier' }] },
-      });
-      const name = idNode?.text().trim() || 'anonymous';
-      if (
-        name.startsWith('get') ||
-        name.startsWith('is') ||
-        name === 'render' ||
-        name === 'useEffect'
-      )
-        return;
+  for (const s of symbols) {
+    if (s.kind !== 'function' && s.kind !== 'method') continue;
+    if (s.name.startsWith('get') || s.name.startsWith('is') || s.name === 'render') continue;
 
-      const bodyNode = m.find({
-        rule: { any: [{ kind: 'statement_block' }, { kind: 'expression' }] },
-      });
-      const body = bodyNode?.text() || '';
+    // 대략적인 본문 추출 (line 기반)
+    const body = lines.slice(s.line - 1, s.end_line).join('\n');
 
-      let paramsNode = m.find({ rule: { kind: 'formal_parameters' } });
-      // 화살표 함수의 단일 파라미터 처리
-      if (!paramsNode && kind === 'arrow_function') {
-        paramsNode = m.child(0); // 첫 번째 자식이 파라미터일 확률이 높음
-      }
+    // 파라미터 정보가 필요함 (SymbolResult에 parameter_count는 있지만 이름은 없음)
+    // TODO: parser.rs에서 파라미터 이름을 반환하도록 개선 필요.
+    // 현재는 SymbolResult 구조체에 파라미터 이름 목록이 없으므로,
+    // 임시로 parameter_count > 0 인 경우 본문에서 추출 시도하거나 Native에서 직접 처리하도록 설계 변경 권장.
 
-      if (paramsNode && bodyNode && body.includes('return ')) {
-        const paramNames = new Set<string>();
+    // v0.0.1: Native Regex 스캐너 호출
+    // 현재 checkFakeLogicNative는 (body, params)를 받음.
+    // 임시 방편으로 본문의 첫 줄에서 파라미터 이름을 추출하는 로직 추가 (추후 Rust 엔진으로 완전 이전 권장)
+    const firstLine = lines[s.line - 1];
+    const paramMatch = firstLine.match(/\((.*?)\)/);
+    if (paramMatch && body.includes('return ')) {
+      const pList = paramMatch[1]
+        .split(',')
+        .map((p) => p.trim().split(':')[0].trim())
+        .filter((p) => p.length > 0 && !['props', 'req', 'res', 'next', 'ctx'].includes(p));
 
-        // 1. 일반 식별자 추출 (타입 선언 내부 제외)
-        paramsNode.findAll({ rule: { kind: 'identifier' } }).forEach((idNode) => {
-          let isType = false;
-          let p = idNode.parent();
-          while (p && p !== paramsNode) {
-            if (
-              p.kind() === 'type_annotation' ||
-              p.kind() === 'type_identifier' ||
-              p.kind() === 'type_parameters'
-            ) {
-              isType = true;
-              break;
-            }
-            p = p.parent();
-          }
-          if (!isType) paramNames.add(idNode.text().trim());
-        });
-
-        // 2. 구조 분해 할당의 단축 속성명 추출 (예: { id })
-        paramsNode
-          .findAll({ rule: { kind: 'shorthand_property_identifier' } })
-          .forEach((idNode) => {
-            paramNames.add(idNode.text().trim());
+      if (pList.length > 0) {
+        const unusedParams = checkFakeLogicNative(body, pList);
+        if (unusedParams.length === pList.length) {
+          violations.push({
+            id: 'FAKE_LOGIC_CONST',
+            line: s.line,
+            message: `[${s.name}] 파라미터를 사용하지 않는 의심스러운 로직 (가짜 구현 가능성)`,
           });
-
-        const pList = Array.from(paramNames).filter(
-          (p) => p.length > 0 && !['props', 'req', 'res', 'next', 'ctx'].includes(p)
-        );
-
-        // v0.0.1: Native Regex 스캐너 호출 (GC 부하 제거)
-        if (pList.length > 0) {
-          const unusedParams = checkFakeLogicNative(body, pList);
-
-          if (unusedParams.length === pList.length) {
-            violations.push({
-              id: 'FAKE_LOGIC_CONST',
-              line: m.range().start.line + 1,
-              message: `[${name}] 파라미터를 사용하지 않는 의심스러운 로직 (가짜 구현 가능성)`,
-            });
-          }
         }
       }
-    });
+    }
   }
+
   return violations;
 }

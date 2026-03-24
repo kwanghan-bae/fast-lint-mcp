@@ -34,6 +34,9 @@ static BUILTINS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
         "decodeURIComponent", "parseFloat", "parseInt", "isNaN", "isFinite", "fetch", "Headers", "Request",
         "Response", "URL", "URLSearchParams", "AbortController", "AbortSignal", "FormData", "Blob", "File",
         "FileReader", "WebSocket", "Event", "CustomEvent", "MessageChannel", "MessagePort", "Worker",
+        // Node.js Builtins
+        "fs", "path", "os", "crypto", "http", "https", "url", "util", "events", "stream", "buffer", "child_process",
+        "cluster", "dns", "net", "readline", "tls", "zlib", "v8", "vm", "worker_threads", "perf_hooks", "async_hooks",
     ];
     for name in names { s.insert(name); }
     s
@@ -403,7 +406,13 @@ pub fn verify_hallucination_native(
   
   let mut allowed = HashSet::new();
   for s in local_defs { allowed.insert(s); }
-  for s in imports { allowed.insert(s); }
+  for s in imports { 
+      allowed.insert(s.clone());
+      // Handle node: builtins and common libs in imports
+      if s.starts_with("node:") {
+          allowed.insert(s.replace("node:", ""));
+      }
+  }
   for s in builtins { allowed.insert(s); }
   for s in external_exports { allowed.insert(s); }
   for s in BUILTINS.iter() { allowed.insert(s.to_string()); }

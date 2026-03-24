@@ -7,6 +7,7 @@ import { checkTestValidity } from '../analysis/test-check.js';
 import { runMutationTest } from '../analysis/mutation.js';
 import { checkArchitecture } from '../analysis/import-check.js';
 import { AstCacheManager } from '../utils/AstCacheManager.js';
+import { runSelfHealing } from '../checkers/fixer.js';
 
 // AST 패턴 정의 (v3.0 Semantic)
 const UI_AST_PATTERNS = [
@@ -166,11 +167,13 @@ export class JavascriptProvider extends BaseQualityProvider {
       violations.push(...(await runMutationTest(filePath)));
     }
 
+    // v3.7.1: 분석 완료 후 캐시 초기화 (환각 방어 및 메모리 효율화)
+    AstCacheManager.getInstance().clear();
+
     return violations;
   }
 
   override async fix(files: string[], workspacePath: string) {
-    const { runSelfHealing } = await import('../checkers/fixer.js');
     return runSelfHealing(files, workspacePath);
   }
 }
