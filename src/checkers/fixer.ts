@@ -20,7 +20,9 @@ export async function runSelfHealing(
       const result = runSelfHealingNative(file);
       if (result.fixed_count > 0) {
         totalFixed += result.fixed_count;
-        messages.push(`[Native Fix] ${file}: ${result.fixed_count}개의 품질 이슈를 자동으로 수정했습니다.`);
+        messages.push(
+          `[Native Fix] ${file}: ${result.fixed_count}개의 품질 이슈를 자동으로 수정했습니다.`
+        );
       }
     } catch (e) {
       // Ignore

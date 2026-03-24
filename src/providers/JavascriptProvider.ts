@@ -67,19 +67,28 @@ export class JavascriptProvider extends BaseQualityProvider {
       minFunctionLinesForComment: READABILITY.MIN_FUNCTION_LINES_FOR_COMMENT,
     };
 
-    const externalExports = this.semantic ? this.semantic.getAllExportedSymbols().map(s => s.name) : [];
+    const externalExports = this.semantic
+      ? this.semantic.getAllExportedSymbols().map((s) => s.name)
+      : [];
 
     try {
       // v0.0.1: Native 통합 분석 실행
-      const result = runUltimateAnalysisNative(filePath, Boolean(isTestFile), reviewOptions, externalExports);
-      
-      violations.push(...result.violations.map(v => ({
+      const result = runUltimateAnalysisNative(
+        filePath,
+        Boolean(isTestFile),
+        reviewOptions,
+        externalExports
+      );
+
+      violations.push(
+        ...result.violations.map((v) => ({
           type: v.type as any,
           file: filePath,
           line: v.line || 1,
           rationale: v.rationale || undefined,
-          message: v.message
-      })));
+          message: v.message,
+        }))
+      );
 
       const isDataFile = result.line_count > 50 && result.complexity / result.line_count < 0.1;
       const { maxLines, maxComplexity } = this.getEffectiveLimits(isDataFile, options);
@@ -96,51 +105,65 @@ export class JavascriptProvider extends BaseQualityProvider {
 
       // 복잡도 위반에 대한 상세 Advice 추가 (JS fallback for rich messaging)
       if (!isDataFile && result.complexity > maxComplexity) {
-          const root = AstCacheManager.getInstance().getRootNode(filePath);
-          let hasUIPatterns = false;
-          let hasLogicPatterns = false;
+        const root = AstCacheManager.getInstance().getRootNode(filePath);
+        let hasUIPatterns = false;
+        let hasLogicPatterns = false;
 
-          if (root) {
-            hasUIPatterns = UI_AST_PATTERNS.some((p) => root.findAll(p).length > 0);
-            hasLogicPatterns = LOGIC_AST_PATTERNS.some((p) => root.findAll(p).length > 0);
-          }
+        if (root) {
+          hasUIPatterns = UI_AST_PATTERNS.some((p) => root.findAll(p).length > 0);
+          hasLogicPatterns = LOGIC_AST_PATTERNS.some((p) => root.findAll(p).length > 0);
+        }
 
-          let advice = '코드 복잡도가 기준을 초과했습니다. 로직을 더 작은 함수나 클래스로 분리하세요.';
-          if (hasUIPatterns && !hasLogicPatterns) {
-            advice = '이 컴포넌트에는 UI 렌더링과 복잡한 상태 관리가 혼재되어 있습니다. Business Logic을 Custom Hook으로 추출하거나, Presentational Component로 UI를 분리하세요.';
-          } else if (hasLogicPatterns && !hasUIPatterns) {
-            advice = '이 파일에는 고도의 연산 로직이 포함되어 있습니다. 서비스 레이어나 순수 함수 기반의 유틸리티 라이브러리로 로직을 캡슐화하는 것이 좋겠습니다.';
-          } else if (hasUIPatterns && hasLogicPatterns) {
-            advice = '렌더링 코드와 복잡한 계산 로직이 강하게 결합되어 있습니다. 유지보수를 위해 렌더링부와 로직부를 엄격히 분리(SOC: Separation of Concerns)하세요.';
-          }
+        let advice =
+          '코드 복잡도가 기준을 초과했습니다. 로직을 더 작은 함수나 클래스로 분리하세요.';
+        if (hasUIPatterns && !hasLogicPatterns) {
+          advice =
+            '이 컴포넌트에는 UI 렌더링과 복잡한 상태 관리가 혼재되어 있습니다. Business Logic을 Custom Hook으로 추출하거나, Presentational Component로 UI를 분리하세요.';
+        } else if (hasLogicPatterns && !hasUIPatterns) {
+          advice =
+            '이 파일에는 고도의 연산 로직이 포함되어 있습니다. 서비스 레이어나 순수 함수 기반의 유틸리티 라이브러리로 로직을 캡슐화하는 것이 좋겠습니다.';
+        } else if (hasUIPatterns && hasLogicPatterns) {
+          advice =
+            '렌더링 코드와 복잡한 계산 로직이 강하게 결합되어 있습니다. 유지보수를 위해 렌더링부와 로직부를 엄격히 분리(SOC: Separation of Concerns)하세요.';
+        }
 
-          // Native 결과에 Advice 추가
-          const compV = violations.find(v => v.type === 'COMPLEXITY');
-          if (compV) {
-              compV.message = `${compV.message}\n\n* Senior Advice: ${advice}`;
-          } else {
-              violations.push({
-                type: 'COMPLEXITY',
-                file: filePath,
-                value: result.complexity,
-                limit: maxComplexity,
-                message: `전체 복잡도(${result.complexity})가 기준을 초과했습니다. \n\n* Senior Advice: ${advice}`,
-              });
-          }
+        // Native 결과에 Advice 추가
+        const compV = violations.find((v) => v.type === 'COMPLEXITY');
+        if (compV) {
+          compV.message = `${compV.message}\n\n* Senior Advice: ${advice}`;
+        } else {
+          violations.push({
+            type: 'COMPLEXITY',
+            file: filePath,
+            value: result.complexity,
+            limit: maxComplexity,
+            message: `전체 복잡도(${result.complexity})가 기준을 초과했습니다. \n\n* Senior Advice: ${advice}`,
+          });
+        }
       }
-
     } catch (e) {
       // Fallback
     }
 
     const architectureRules = this.config.architectureRules;
     if (architectureRules && architectureRules.length > 0) {
-      const archViolations = await checkArchitecture(filePath, architectureRules, process.cwd(), this.config.exclude);
-      violations.push(...archViolations.map(av => ({ type: 'ARCHITECTURE' as any, file: filePath, message: av.message })));
+      const archViolations = await checkArchitecture(
+        filePath,
+        architectureRules,
+        process.cwd(),
+        this.config.exclude
+      );
+      violations.push(
+        ...archViolations.map((av) => ({
+          type: 'ARCHITECTURE' as any,
+          file: filePath,
+          message: av.message,
+        }))
+      );
     }
 
     if (this.config.enableMutationTest) {
-      violations.push(...await runMutationTest(filePath));
+      violations.push(...(await runMutationTest(filePath)));
     }
 
     return violations;

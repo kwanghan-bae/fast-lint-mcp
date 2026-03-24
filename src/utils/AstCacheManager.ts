@@ -21,12 +21,20 @@ export class AstCacheManager {
     return AstCacheManager.instance;
   }
 
+  /**
+   * [getSymbols] 메서드는 파일에서 심볼 정보를 추출하고 캐싱합니다.
+   * Rust Native 레벨의 캐시를 우선적으로 사용합니다.
+   */
   public getSymbols(filePath: string) {
     const absPath = isAbsolute(filePath) ? normalize(filePath) : resolve(process.cwd(), filePath);
     if (!existsSync(absPath)) return [];
     return parseAndCacheNative(absPath);
   }
 
+  /**
+   * [getRootNode] 메서드는 파일의 AST 루트 노드를 반환합니다.
+   * mtime을 기반으로 V8 레벨에서 SgNode를 캐싱합니다.
+   */
   public getRootNode(filePath: string, force: boolean = false): SgNode | null {
     const absPath = isAbsolute(filePath) ? normalize(filePath) : resolve(process.cwd(), filePath);
     if (!existsSync(absPath)) return null;
@@ -64,11 +72,14 @@ export class AstCacheManager {
     }
   }
 
+  /**
+   * [clear] 메서드는 JS와 Rust 레벨의 모든 AST 캐시를 초기화합니다.
+   */
   public clear(): void {
     try {
       clearAstCacheNative();
     } catch (e) {
-      // Ignored if not yet bound
+      // 바인딩되지 않은 경우 무시
     }
     this.nodeCache.clear();
   }
