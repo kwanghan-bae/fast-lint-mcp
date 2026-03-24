@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from 'fs';
 import { Lang, parse, SgNode } from '@ast-grep/napi';
 import { dirname, join, normalize, isAbsolute, relative } from 'path';
-import { scanFiles, checkFakeLogicNative } from '../../native/index.js';
+import { scanFiles, checkFakeLogicNative, checkArchitectureNative } from '../../native/index.js';
 import {
   resolveModulePath,
   loadProjectAliases,
@@ -49,6 +49,7 @@ export function clearProjectFilesCache() {
 
 /**
  * 레이어 간 의존성 방향(아키텍처 규칙)이 올바른지 검사합니다.
+ * v0.0.1: Rust Native 엔진을 사용하여 대규모 프로젝트에서도 고속 아키텍처 검증을 수행합니다.
  */
 export async function checkArchitecture(
   filePath: string,
@@ -57,49 +58,17 @@ export async function checkArchitecture(
   ignorePatterns: string[] = ['**/node_modules/**', '**/dist/**']
 ): Promise<{ id: string; message: string }[]> {
   if (!existsSync(filePath)) return [];
-  const root = AstCacheManager.getInstance().getRootNode(filePath);
-  if (!root) return [];
 
+  // v0.0.1: Rust Native 검사기 호출
+  // TypeScript 파일 경로를 정규화하여 전달
   const absoluteFilePath = isAbsolute(filePath) ? filePath : join(workspacePath, filePath);
-  const relativeFilePath = relative(workspacePath, absoluteFilePath);
 
-  const activeRules = rules.filter((r) =>
-    new RegExp('^' + r.from.replace(/\*\*/g, '.*').replace(/\*/g, '[^/]*') + '$').test(
-      relativeFilePath
-    )
-  );
-  if (activeRules.length === 0) return [];
+  const violations = checkArchitectureNative(absoluteFilePath, rules, workspacePath);
 
-  const allFiles = await getProjectFiles(workspacePath, ignorePatterns);
-  const violations: { id: string; message: string }[] = [];
-
-  const patterns = ["import $A from '$B'", 'import $A from "$B"', "export { $$$ } from '$B'"];
-  for (const pattern of patterns) {
-    root.findAll(pattern).forEach((match) => {
-      const source = match.getMatch('B')?.text();
-      if (!source) return;
-      const resolved = resolveModulePath(
-        dirname(normalize(absoluteFilePath)),
-        source,
-        allFiles,
-        workspacePath,
-        filePath
-      );
-      if (resolved) {
-        const relResolved = relative(workspacePath, resolved);
-        activeRules.forEach((rule) => {
-          if (
-            new RegExp('^' + rule.to.replace(/\*\*/g, '.*').replace(/\*/g, '[^/]*') + '$').test(
-              relResolved
-            )
-          ) {
-            violations.push({ id: 'ARCHITECTURE_VIOLATION', message: rule.message });
-          }
-        });
-      }
-    });
-  }
-  return violations;
+  return violations.map((v) => ({
+    id: v.type,
+    message: v.message,
+  }));
 }
 
 /**

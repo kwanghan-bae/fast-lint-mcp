@@ -907,5 +907,102 @@ pub fn run_self_healing_native(file_path: String) -> SelfHealingResult {
     }
 }
 
+#[napi(object)]
+#[derive(Clone, Deserialize)]
+pub struct ArchitectureRule {
+  pub from: String,
+  pub to: String,
+  pub message: String,
+}
+
+#[napi]
+pub fn check_architecture_native(
+  file_path: String,
+  rules: Vec<ArchitectureRule>,
+  workspace_path: String,
+) -> Vec<Violation> {
+  let mut violations = Vec::new();
+  let absolute_path = if Path::new(&file_path).is_absolute() {
+    PathBuf::from(&file_path)
+  } else {
+    Path::new(&workspace_path).join(&file_path)
+  };
+  
+  let relative_file_path = match absolute_path.strip_prefix(&workspace_path) {
+    Ok(p) => p.to_string_lossy().to_string(),
+    Err(_) => return violations,
+  };
+
+  let active_rules: Vec<ArchitectureRule> = rules.into_iter()
+    .filter(|r| {
+      let pattern = r.from.replace("**/", ".*").replace("*", "[^/]*");
+      let re = Regex::new(&format!("^{}$", pattern)).unwrap_or_else(|_| Regex::new(".*").unwrap());
+      re.is_match(&relative_file_path)
+    })
+    .collect();
+
+  if active_rules.is_empty() {
+    return violations;
+  }
+
+  if let Ok(content) = fs::read_to_string(&absolute_path) {
+    let re_import = Regex::new(r#"(?:import|export)\s+.*?\s+from\s+['"](.*?)['"]|import\(['"](.*?)['"]\)"#).unwrap();
+    let lines: Vec<&str> = content.lines().collect();
+
+    for (i, line_text) in lines.iter().enumerate() {
+      for cap in re_import.captures_iter(line_text) {
+        if let Some(m) = cap.get(1).or(cap.get(2)) {
+          let source = m.as_str();
+          if source.starts_with('.') {
+            let parent = absolute_path.parent().unwrap_or(Path::new(""));
+            let resolved = parent.join(source);
+            
+            // Simple path normalization
+            let mut components = Vec::new();
+            for component in resolved.components() {
+                match component {
+                    std::path::Component::ParentDir => { components.pop(); }
+                    std::path::Component::CurDir => {}
+                    std::path::Component::Normal(c) => { components.push(c); }
+                    std::path::Component::RootDir => { components.clear(); components.push(std::ffi::OsStr::new("/")); }
+                    _ => {}
+                }
+            }
+            let normalized_resolved: PathBuf = components.iter().collect();
+
+            let rel_resolved = match normalized_resolved.strip_prefix(&workspace_path) {
+               Ok(p) => p.to_string_lossy().to_string(),
+               Err(_) => {
+                  let ws_path = Path::new(&workspace_path);
+                  if normalized_resolved.starts_with(ws_path) {
+                      normalized_resolved.strip_prefix(ws_path).unwrap().to_string_lossy().to_string()
+                  } else {
+                      continue;
+                  }
+               }
+            };
+
+            for rule in &active_rules {
+              let to_pattern = rule.to.replace("**/", ".*").replace("*", "[^/]*");
+              let re_to = Regex::new(&format!("^{}$", to_pattern)).unwrap_or_else(|_| Regex::new(".*").unwrap());
+              if re_to.is_match(&rel_resolved) {
+                violations.push(Violation {
+                  r#type: "ARCHITECTURE_VIOLATION".to_string(),
+                  file: Some(file_path.clone()),
+                  line: Some((i + 1) as u32),
+                  rationale: None,
+                  message: rule.message.clone(),
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  violations
+}
+
 mod parser;
 mod cache;
