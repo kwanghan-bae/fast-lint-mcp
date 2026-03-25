@@ -9,6 +9,7 @@ import { countTechDebt } from '../analysis/rg.js';
 import { checkEnv } from '../checkers/env.js';
 import { JavascriptProvider } from '../providers/JavascriptProvider.js';
 import { KotlinProvider } from '../providers/KotlinProvider.js';
+import { RustProvider } from '../providers/RustProvider.js';
 import { Violation, QualityReport, QualityProvider } from '../types/index.js';
 import { checkStructuralIntegrity } from '../utils/AnalysisUtils.js';
 import { getProjectFiles, clearProjectFilesCache } from '../analysis/import-check.js';
@@ -53,6 +54,7 @@ export class AnalysisService {
 
     this.providers.push(new JavascriptProvider(this.config, this.semantic));
     this.providers.push(new KotlinProvider(this.config, this.semantic));
+    this.providers.push(new RustProvider(this.config, this.semantic));
   }
 
   /**

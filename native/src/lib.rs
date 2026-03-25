@@ -45,6 +45,7 @@ static NOISE_SYMBOLS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
 });
 
 mod parser;
+mod parser_rust;
 mod cache;
 mod resolver;
 
@@ -305,6 +306,11 @@ pub struct SymbolResult {
 pub fn extract_symbols_native(file_path: String) -> Vec<SymbolResult> {
   let content = fs::read_to_string(&file_path).unwrap_or_default();
   parser::extract_symbols_oxc(&content, &file_path)
+}
+
+#[napi]
+pub fn extract_symbols_rust_native(file_path: String, content: String) -> Vec<SymbolResult> {
+  parser_rust::extract_symbols_syn(&content, &file_path)
 }
 
 #[napi(object)]
