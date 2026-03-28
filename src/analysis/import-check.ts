@@ -70,24 +70,60 @@ export async function checkArchitecture(
 }
 
 /**
+ * 파일 내용에서 임포트된 심볼 목록을 추출합니다.
+ */
+export function extractImportsFromFile(content: string): string[] {
+  const imports: string[] = [];
+  
+  // v3.7.9: 가장 안전한 방식으로 임포트 심볼 추출
+  const rawImportRegex = /import\s+(?:type\s+)?([\s\S]*?)\s+from\s+['"].*?['"]/g;
+  let match;
+  while ((match = rawImportRegex.exec(content)) !== null) {
+    const rawMatch = match[1].trim();
+    if (rawMatch.startsWith('{')) {
+      // { a, b as c } 형태
+      const inner = rawMatch.replace(/[\{\}]/g, '');
+      inner.split(',').forEach(s => {
+        const parts = s.trim().split(/\s+as\s+/);
+        const name = parts[parts.length - 1].trim().replace(/^type\s+/, '');
+        if (name) imports.push(name);
+      });
+    } else if (rawMatch.includes('* as ')) {
+      // * as name 형태
+      const name = rawMatch.split('* as ')[1].trim().split(/\s+/)[0];
+      if (name) imports.push(name);
+    } else {
+      // defaultExport 형태
+      const name = rawMatch.split(/\s+/)[0];
+      if (name) imports.push(name);
+    }
+  }
+  return imports;
+}
+
+/**
  * AI 에이전트의 환각(Hallucination) 탐지
  * v0.0.1: Rust Native 엔진을 사용하여 고속 환각 탐지를 수행합니다.
  */
 export async function checkHallucination(
   filePath: string,
   workspacePath: string = process.cwd()
-): Promise<{ id: string; message: string }[]> {
+): Promise<{ id: string; message: string; line?: number }[]> {
   if (!existsSync(filePath)) return [];
 
   const dependencies = await loadAllDependencies(filePath, workspacePath);
   const absoluteFilePath = isAbsolute(filePath) ? filePath : join(workspacePath, filePath);
   const nodeBuiltins = [...builtinModules, ...builtinModules.map((m) => `node:${m}`)];
 
+  // 파일에서 임포트된 심볼 추출
+  const content = readFileSync(absoluteFilePath, 'utf-8');
+  const imports = extractImportsFromFile(content);
+
   // v0.0.1: Rust Native 환각 탐지기 호출
   const violations = verifyHallucinationNative(
     absoluteFilePath,
-    [], // local_defs (Rust에서 내부적으로 추출 가능하면 비워둠)
-    [], // imports (Rust에서 내부적으로 추출 가능하면 비워둠)
+    [], // local_defs (Rust에서 내부적으로 추출)
+    imports, // 추출된 임포트 목록 전달
     nodeBuiltins,
     dependencies // external_exports로 dependencies 전달
   );

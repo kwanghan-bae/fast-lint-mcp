@@ -12,7 +12,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "vitest run --coverage --coverage.reporter=text --coverage.reporter=json-summary --coverage.exclude=src/index.ts",
-    "quality-check": "node dist/index.js --check"
+    "quality-check": "node dist/cli.js check"
   },
   "dependencies": {
     "@ast-grep/napi": "^0.40.5",

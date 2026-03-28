@@ -84,6 +84,7 @@ export class AnalysisService {
     // 2. 프로젝트 파일 스캔 및 의존성 구축
     const allProjectFiles = await this.scanProjectFiles();
     await this.depGraph.build(allProjectFiles);
+    await this.semantic.ensureInitialized(false, this.workspacePath);
 
     // 3. 분석 대상 파일 확정
     const files = await this.resolveTargetFiles(incrementalOption, allProjectFiles);

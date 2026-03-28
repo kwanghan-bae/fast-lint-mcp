@@ -23,15 +23,22 @@ static BUILTINS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
     let mut s = HashSet::new();
     let names = vec![
         "console", "Math", "JSON", "Promise", "process", "Object", "Array", "String", "Number", "Boolean",
-        "Date", "RegExp", "Error", "setTimeout", "setInterval", "setImmediate", "clearTimeout", "clearInterval",
+        "Date", "RegExp", "Error", "Map", "Set", "WeakMap", "Uint8Array", "Intl",
+        "setTimeout", "setInterval", "setImmediate", "clearTimeout", "clearInterval",
         "clearImmediate", "require", "module", "exports", "global", "window", "document", "navigator", "location",
         "history", "screen", "__dirname", "__filename", "Buffer", "encodeURI", "encodeURIComponent", "decodeURI",
         "decodeURIComponent", "parseFloat", "parseInt", "isNaN", "isFinite", "fetch", "Headers", "Request",
         "Response", "URL", "URLSearchParams", "AbortController", "AbortSignal", "FormData", "Blob", "File",
         "FileReader", "WebSocket", "Event", "CustomEvent", "MessageChannel", "MessagePort", "Worker",
-        // Node.js Builtins
-        "fs", "path", "os", "crypto", "http", "https", "url", "util", "events", "stream", "buffer", "child_process",
-        "cluster", "dns", "net", "readline", "tls", "zlib", "v8", "vm", "worker_threads", "perf_hooks", "async_hooks",
+        // Node.js Builtins (Common Methods)
+        "fs", "readFileSync", "writeFileSync", "existsSync", "mkdirSync", "rmSync", "readdirSync", "statSync", "renameSync", "appendFileSync",
+        "path", "join", "resolve", "dirname", "basename", "extname", "relative", "normalize", "isAbsolute",
+        "os", "homedir", "arch", "platform", "cpus", "totalmem", "freemem", "networkInterfaces",
+        "crypto", "createHash", "createHmac", "randomBytes", "createCipheriv", "createDecipheriv",
+        "child_process", "exec", "execSync", "spawn", "spawnSync", "fork",
+        "util", "promisify", "inherits", "format", "inspect",
+        // Test Frameworks (Jest, Vitest, Mocha)
+        "describe", "it", "test", "expect", "beforeEach", "afterEach", "beforeAll", "afterAll", "vi", "jest", "assert", "chai",
     ];
     for name in names { s.insert(name); }
     s
@@ -446,17 +453,40 @@ pub fn verify_hallucination_native(
 
   let content = fs::read_to_string(&file_path).unwrap_or_default();
   let symbols = parser::extract_symbols_oxc(&content, &file_path);
-  for s in symbols { allowed.insert(s.name); }
+  for s in symbols { 
+      allowed.insert(s.name.clone()); 
+      // 클래스 메서드(ClassName.methodName)의 경우 메서드 이름만 따로 허용 목록에 추가
+      if let Some(pos) = s.name.find('.') {
+          allowed.insert(s.name[pos+1..].to_string());
+      }
+  }
+
+  // 1. 전처리: 주석과 문자열을 제거하되 라인 번호 보존을 위해 \n은 남김
+  let re_noise = Regex::new(r#"(?m)//.*|/\*[\s\S]*?\*/|'[^']*'|"[^"]*"|`[^`]*`"#).unwrap();
+  let clean_content = re_noise.replace_all(&content, |caps: &regex::Captures| {
+      let mut res = String::new();
+      for c in caps[0].chars() {
+          if c == '\n' { res.push('\n'); }
+          else { res.push(' '); }
+      }
+      res
+  }).to_string();
 
   let re_call = Regex::new(r#"(?P<prefix>[\.\?])?\b(?P<name>[a-zA-Z0-9_$]+)\b\s*\("#).unwrap();
-  let lines: Vec<&str> = content.lines().collect();
-  for (i, line) in lines.iter().enumerate() {
-      if line.trim().starts_with("//") || line.trim().starts_with("*") { continue; }
+  let skip_keywords = vec![
+      "if", "for", "while", "switch", "catch", "super", "import", "require", 
+      "return", "await", "yield", "constructor", "async", "get", "set", "new"
+  ];
+
+  for (i, line) in clean_content.lines().enumerate() {
+      if line.trim().is_empty() { continue; }
+      
       for cap in re_call.captures_iter(line) {
           let prefix = cap.name("prefix").map(|m| m.as_str());
           let name = cap.name("name").unwrap().as_str();
           if prefix.is_some() { continue; }
-          if vec!["if", "for", "while", "switch", "catch", "super", "import", "require", "return", "await", "yield"].contains(&name) { continue; }
+          if skip_keywords.contains(&name) { continue; }
+          
           if !allowed.contains(name) {
               violations.push(HallucinationViolation {
                   name: name.to_string(),
@@ -807,6 +837,7 @@ pub fn run_ultimate_analysis_native(
     is_test_file: bool,
     review_options: ReviewOptions,
     external_exports: Vec<String>,
+    imports: Vec<String>,
 ) -> UltimateAnalysisResult {
     let content = fs::read_to_string(&file_path).unwrap_or_default();
     let symbols = parser::extract_symbols_oxc(&content, &file_path);
@@ -821,7 +852,7 @@ pub fn run_ultimate_analysis_native(
     violations.extend(verify_hallucination_native(
         file_path.clone(),
         Vec::new(),
-        Vec::new(),
+        imports,
         Vec::new(),
         external_exports,
     ).into_iter().map(|h| Violation {

@@ -100,7 +100,13 @@ export class RustProvider extends BaseQualityProvider {
     const architectureRules = this.config.architectureRules;
     if (architectureRules && architectureRules.length > 0) {
       const archViolations = await checkArchitecture(filePath, architectureRules, process.cwd());
-      violations.push(...archViolations);
+      violations.push(
+        ...archViolations.map((av) => ({
+          type: 'ARCHITECTURE' as any,
+          file: filePath,
+          message: av.message,
+        }))
+      );
     }
 
     return violations;

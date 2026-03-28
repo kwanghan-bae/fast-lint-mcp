@@ -215,10 +215,12 @@ As an AI Agent, you are bound by these Standard Operating Procedures. This tool 
       return { content: [{ type: 'text', text: formatReport(report) }] };
     }
     case 'get-symbol-metrics': {
+      await semanticSvc.ensureInitialized(false, workspace);
       const metrics = semanticSvc.getSymbolMetrics(join(workspace, String(args?.filePath)));
       return { content: [{ type: 'text', text: JSON.stringify(metrics, null, 2) }] };
     }
     case 'get-symbol-content': {
+      await semanticSvc.ensureInitialized(false, workspace);
       const content = semanticSvc.getSymbolContent(
         join(workspace, String(args?.filePath)),
         String(args?.symbolName)
@@ -226,6 +228,7 @@ As an AI Agent, you are bound by these Standard Operating Procedures. This tool 
       return { content: [{ type: 'text', text: content || '심볼을 찾을 수 없습니다.' }] };
     }
     case 'analyze-impact': {
+      await semanticSvc.ensureInitialized(false, workspace);
       const impact = await semanticSvc.analyzeImpact(
         join(workspace, String(args?.filePath)),
         String(args?.symbolName)
@@ -233,14 +236,17 @@ As an AI Agent, you are bound by these Standard Operating Procedures. This tool 
       return { content: [{ type: 'text', text: JSON.stringify(impact, null, 2) }] };
     }
     case 'find-references': {
+      await semanticSvc.ensureInitialized(false, workspace);
       const refs = semanticSvc.findReferences(String(args?.symbolName));
       return { content: [{ type: 'text', text: JSON.stringify(refs, null, 2) }] };
     }
     case 'go-to-definition': {
+      await semanticSvc.ensureInitialized(false, workspace);
       const def = semanticSvc.goToDefinition(String(args?.symbolName));
       return { content: [{ type: 'text', text: JSON.stringify(def, null, 2) }] };
     }
     case 'find-dead-code': {
+      await semanticSvc.ensureInitialized(false, workspace);
       const dead = await semanticSvc.findDeadCode();
       return { content: [{ type: 'text', text: JSON.stringify(dead, null, 2) }] };
     }

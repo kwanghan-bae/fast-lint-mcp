@@ -1,11 +1,11 @@
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { runUltimateAnalysisNative, ReviewOptions } from '../../native/index.js';
 import { Violation } from '../types/index.js';
 import { BaseQualityProvider } from './BaseQualityProvider.js';
 import { READABILITY } from '../constants.js';
 import { checkTestValidity } from '../analysis/test-check.js';
 import { runMutationTest } from '../analysis/mutation.js';
-import { checkArchitecture } from '../analysis/import-check.js';
+import { checkArchitecture, extractImportsFromFile } from '../analysis/import-check.js';
 import { AstCacheManager } from '../utils/AstCacheManager.js';
 import { runSelfHealing } from '../checkers/fixer.js';
 
@@ -72,12 +72,17 @@ export class JavascriptProvider extends BaseQualityProvider {
       : [];
 
     try {
-      // v0.0.1: Native 통합 분석 실행
+      // 파일에서 임포트 추출
+      const content = readFileSync(filePath, 'utf-8');
+      const imports = extractImportsFromFile(content);
+
+      // v0.0.1: Native 통합 분석 실행 (v3.7.9: imports 인자 추가)
       const result = runUltimateAnalysisNative(
         filePath,
         Boolean(isTestFile),
         reviewOptions,
-        externalExports
+        externalExports,
+        imports
       );
 
       violations.push(
