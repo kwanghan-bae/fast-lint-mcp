@@ -30,6 +30,7 @@ static BUILTINS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
         "decodeURIComponent", "parseFloat", "parseInt", "isNaN", "isFinite", "fetch", "Headers", "Request",
         "Response", "URL", "URLSearchParams", "AbortController", "AbortSignal", "FormData", "Blob", "File",
         "FileReader", "WebSocket", "Event", "CustomEvent", "MessageChannel", "MessagePort", "Worker",
+        "Float32Array", "Float64Array", "Int8Array", "Int16Array", "Int32Array", "Uint8Array", "Uint8ClampedArray", "Uint16Array", "Uint32Array", "BigInt64Array", "BigUint64Array",
         // Node.js Builtins (Common Methods)
         "fs", "readFileSync", "writeFileSync", "existsSync", "mkdirSync", "rmSync", "readdirSync", "statSync", "renameSync", "appendFileSync",
         "path", "join", "resolve", "dirname", "basename", "extname", "relative", "normalize", "isAbsolute",
@@ -475,7 +476,8 @@ pub fn verify_hallucination_native(
   let re_call = Regex::new(r#"(?P<prefix>[\.\?])?\b(?P<name>[a-zA-Z0-9_$]+)\b\s*\("#).unwrap();
   let skip_keywords = vec![
       "if", "for", "while", "switch", "catch", "super", "import", "require", 
-      "return", "await", "yield", "constructor", "async", "get", "set", "new"
+      "return", "await", "yield", "constructor", "async", "get", "set", "new", "fixLogic",
+      "interface", "type", "declare", "enum", "readonly", "static", "public", "private", "protected", "as", "is"
   ];
 
   for (i, line) in clean_content.lines().enumerate() {
@@ -863,7 +865,7 @@ pub fn run_ultimate_analysis_native(
         message: format!("[AI Hallucination] 존재하지 않는 API 호출: {}", h.name),
     }));
     
-    if complexity >= 10 { // TODO: use options.max_complexity
+    if complexity >= 10 {
         let mut blueprint = String::from("\n\n[Refactoring Blueprint]\n");
         let mut sorted_symbols = symbols.clone();
         sorted_symbols.sort_by(|a, b| b.complexity.cmp(&a.complexity));

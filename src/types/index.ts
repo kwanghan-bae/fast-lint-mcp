@@ -9,7 +9,7 @@ export type ViolationType =
   | 'SIZE' // 파일 크기 초과
   | 'COMPLEXITY' // 복잡도 초과
   | 'COVERAGE' // 테스트 커버리지 미달
-  | 'TECH_DEBT' // 기술 부채(TODO) 과다
+  | 'TECH_DEBT' // 기술 부채([PLAN]) 과다
   | 'HALLUCINATION' // AI 환각 (존재하지 않는 참조)
   | 'FAKE_LOGIC' // 가짜 로직 구현 의심
   | 'ARCHITECTURE' // 아키텍처 규칙 위반 (의존성 방향 등)
@@ -74,6 +74,15 @@ export interface ImpactAnalysis {
   affectedFiles: string[]; // 영향을 받는 파일 목록
   referencingFiles: string[]; // 직접 참조 중인 파일 목록
   affectedTests: string[]; // 관련 테스트 파일 목록
+}
+
+/**
+ * 아키텍처 의존성 규칙을 정의하는 인터페이스입니다.
+ */
+export interface ArchitectureRule {
+  from: string; // 소스 패턴
+  to: string; // 금지된 대상 패턴
+  message: string; // 위반 시 출력할 메시지
 }
 
 /**

@@ -216,25 +216,23 @@ fn process_class_body(cls: &oxc_ast::ast::Class, class_name: &str, source_text: 
         match el {
             ClassElement::MethodDefinition(method) => {
                 if let oxc_ast::ast::PropertyKey::StaticIdentifier(method_id) = &method.key {
-                    if method_id.name != "constructor" {
-                         let m_start = count_lines(&source_text[..method.span.start as usize]) + 1;
-                         let m_end = count_lines(&source_text[..method.span.end as usize]) + 1;
-                         let m_snippet = &source_text[method.span.start as usize..method.span.end as usize];
-                         let m_complexity = COMPLEXITY_RE.find_iter(m_snippet).count() as i32 + 1;
-                         let has_korean = has_korean_comment_above(lines, m_start as usize, 10);
+                    let m_start = count_lines(&source_text[..method.span.start as usize]) + 1;
+                    let m_end = count_lines(&source_text[..method.span.end as usize]) + 1;
+                    let m_snippet = &source_text[method.span.start as usize..method.span.end as usize];
+                    let m_complexity = COMPLEXITY_RE.find_iter(m_snippet).count() as i32 + 1;
+                    let has_korean = has_korean_comment_above(lines, m_start as usize, 10);
 
-                         symbols.push(SymbolResult {
-                             name: format!("{}.{}", class_name, method_id.name),
-                             line: m_start as u32,
-                             end_line: m_end as u32,
-                             is_exported: false,
-                             kind: "method".to_string(),
-                             complexity: m_complexity,
-                             lines: (m_end - m_start + 1) as i32,
-                             parameter_count: method.value.params.items.len() as i32,
-                             has_korean_comment: has_korean,
-                         });
-                    }
+                    symbols.push(SymbolResult {
+                        name: format!("{}.{}", class_name, method_id.name),
+                        line: m_start as u32,
+                        end_line: m_end as u32,
+                        is_exported: false,
+                        kind: "method".to_string(),
+                        complexity: m_complexity,
+                        lines: (m_end - m_start + 1) as i32,
+                        parameter_count: method.value.params.items.len() as i32,
+                        has_korean_comment: has_korean,
+                    });
                 }
             },
             ClassElement::PropertyDefinition(prop) => {

@@ -65,6 +65,8 @@ describe('AnalysisService', () => {
 
     semantic = {
       getAllExportedSymbols: vi.fn().mockReturnValue([]),
+      getSymbolMetrics: vi.fn().mockReturnValue([]),
+      ensureInitialized: vi.fn().mockResolvedValue(undefined),
     };
 
     vi.mocked(native.runUltimateAnalysisNative).mockReturnValue({

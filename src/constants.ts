@@ -87,6 +87,10 @@ export const SYSTEM = {
   ],
 };
 
+/**
+ * 코드 가독성 및 복잡도 정책을 정의하는 상수들입니다.
+ * 이 수치들은 품질 검사 시 가이드라인으로 활용됩니다.
+ */
 export const READABILITY = {
   /** 한글 주석 탐색 최대 깊이 (위로 몇 줄까지 볼 것인가) */
   KOREAN_COMMENT_SEARCH_DEPTH: 10,

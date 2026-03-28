@@ -9,17 +9,43 @@ import Table from 'cli-table3';
  * @param report 품질 분석 결과 데이터 객체
  * @returns Markdown 형식의 리포트 문자열
  */
+/**
+ * 품질 분석 결과를 Markdown 형식의 문자열 리포트로 변환합니다.
+ */
 export function formatReport(report: QualityReport): string {
   let output = '';
 
+  // 1. 헤더 및 종합 상태 (v3.8)
+  output += formatHeader(report);
+
+  // 2. 위반 사항 목록 및 자가 수정 가이드
+  if (report.violations.length > 0) {
+    output += formatViolationsTable(report.violations);
+    output += formatSelfCorrectionGuide();
+  } else {
+    output += `\n> 🎉 **발견된 위반 사항이 없습니다. 완벽한 코드 품질을 유지하고 있습니다!**\n`;
+  }
+
+  // 3. 리팩토링 제안
+  if (report.suggestion) {
+    output += `\n### 💡 리팩토링 조치 가이드\n\n${report.suggestion}\n`;
+  }
+
+  // 4. 지능형 딥다이브 (v5.1)
+  if (report.deepDive && Object.keys(report.deepDive).length > 0) {
+    output += formatDeepDive(report.deepDive);
+  }
+
+  return output;
+}
+
+/** 리포트의 헤더와 종합 상태 섹션을 생성합니다. */
+function formatHeader(report: QualityReport): string {
   const statusIcon = report.pass ? '✅' : '❌';
   const statusText = report.pass ? 'PASS' : 'FAIL';
-
   const versionStr = report.metadata?.version || 'v3.x';
-  // 1. 헤더 및 종합 상태 출력
-  output += `## ${statusIcon} 프로젝트 품질 인증 결과: **${statusText}** (${versionStr})\n\n`;
+  let header = `## ${statusIcon} 프로젝트 품질 인증 결과: **${statusText}** (${versionStr})\n\n`;
 
-  // 메타데이터 출력 (v3.8)
   if (report.metadata) {
     const meta = report.metadata;
     const freshnessIcon =
@@ -27,62 +53,56 @@ export function formatReport(report: QualityReport): string {
     const modeLabel = meta.analysisMode === 'incremental' ? '증분 분석' : '전체 분석';
     const coverageVal =
       meta.coveragePercentage !== undefined ? ` (${meta.coveragePercentage.toFixed(1)}%)` : '';
-    output += `> **분석 모드**: \`${modeLabel}\` | **분석된 파일**: \`${meta.filesAnalyzed}개\` | **커버리지**: ${freshnessIcon} \`${meta.coverageFreshness || 'unknown'}\`${coverageVal}\n\n`;
+    header += `> **분석 모드**: \`${modeLabel}\` | **분석된 파일**: \`${meta.filesAnalyzed}개\` | **커버리지**: ${freshnessIcon} \`${meta.coverageFreshness || 'unknown'}\`${coverageVal}\n\n`;
   }
+  return header;
+}
 
-  if (report.violations.length > 0) {
-    // 2. 위반 사항 목록을 Markdown 테이블로 구성
-    output += `### 🚨 발견된 위반 사항 (${report.violations.length}건)\n\n`;
-    output += `| 구분(Type) | 대상 파일(File) | 위반 내용(Message) | 판단 근거(Rationale) |\n`;
-    output += `| :--- | :--- | :--- | :--- |\n`;
+/** 발견된 위반 사항들을 Markdown 테이블 형식으로 생성합니다. */
+function formatViolationsTable(violations: Violation[]): string {
+  let table = `### 🚨 발견된 위반 사항 (${violations.length}건)\n\n`;
+  table += `| 구분(Type) | 대상 파일(File) | 위반 내용(Message) | 판단 근거(Rationale) |\n`;
+  table += `| :--- | :--- | :--- | :--- |\n`;
 
-    report.violations.forEach((v: Violation) => {
-      // 테이블 깨짐 방지를 위해 파이프(|) 기호 이스케이프 처리
-      const safeMessage = v.message.replace(/\|/g, '\\|');
-      let safeRationale = (v.rationale || '-').replace(/\|/g, '\\|');
+  violations.forEach((v: Violation) => {
+    const safeMessage = v.message.replace(/\|/g, '\\|');
+    let safeRationale = (v.rationale || '-').replace(/\|/g, '\\|');
 
-      // v6.0.2: 환각 위반에 대한 지능형 힌트 추가
-      if (v.type === 'HALLUCINATION') {
-        safeRationale += ' **(👉 Action: Call `go-to-definition` or `find-references`)**';
-      }
-
-      const fileWithLine = v.file ? `\`${v.file}${v.line ? `:L${v.line}` : ''}\`` : '`-`';
-      output += `| **${v.type}** | ${fileWithLine} | ${safeMessage} | *${safeRationale}* |\n`;
-    });
-
-    // 2.1 에이전트 자가 수정 가이드 (Self-Correction Guide v6.0.2)
-    output += `\n### 🧠 에이전트 자가 수정 가이드 (Self-Correction Guide)\n`;
-    output += `> 발견된 위반 사항을 해결하기 위해 다음 단계를 권장합니다:\n`;
-    output += `- **Hallucination 해결**: 해당 심볼의 정의가 프로젝트 내에 존재하는지 \`go-to-definition\`으로 확인하고, 없다면 실제 존재하는 API로 교체하십시오.\n`;
-    output += `- **Complexity/Size 해결**: 하단의 **Deep Dive** 섹션에서 분석된 함수 범위를 참고하여 로직을 작은 단위로 추출하십시오.\n`;
-    output += `- **Architecture 해결**: 의존성 그래프의 방향을 확인하고, 상위 레이어에서 하위 레이어를 참조하도록 구조를 변경하십시오.\n`;
-  } else {
-    // 3. 위반 사항이 없는 경우의 축하 메시지
-    output += `\n> 🎉 **발견된 위반 사항이 없습니다. 완벽한 코드 품질을 유지하고 있습니다!**\n`;
-  }
-
-  // 4. 리팩토링 제안 및 조치 가이드 추가
-  if (report.suggestion) {
-    output += `\n### 💡 리팩토링 조치 가이드\n\n${report.suggestion}\n`;
-  }
-
-  // 5. 지능형 딥다이브 (Deep Dive) 섹션 추가 (v5.1: Agent Turn Optimization)
-  if (report.deepDive && Object.keys(report.deepDive).length > 0) {
-    output += `\n### 🔍 Deep Dive: Problematic Symbols (Auto-Analyzed)\n`;
-    output += `> 위반 사항이 발견된 파일 내에서 복잡도나 크기가 임계치를 초과한 심볼들입니다.\n\n`;
-    output += `| 파일(File) | 심볼명(Symbol) | 라인수(Lines) | 복잡도(Complexity) | 범위(Range) |\n`;
-    output += `| :--- | :--- | :--- | :--- | :--- |\n`;
-
-    for (const [file, symbols] of Object.entries(report.deepDive)) {
-      symbols.forEach((s: any) => {
-        const fileName = file.split('/').pop();
-        output += `| \`${fileName}\` | **${s.name}** | ${s.lineCount} | \`${s.complexity}\` | L${s.startLine}-L${s.endLine} |\n`;
-      });
+    if (v.type === 'HALLUCINATION') {
+      safeRationale += ' **(👉 Action: Call `go-to-definition` or `find-references`)**';
     }
-    output += `\n*에이전트 팁: 위 심볼 정보를 바탕으로 \`get-symbol-content\`를 호출하여 즉시 수정을 시작하세요.*\n`;
-  }
 
-  return output;
+    const fileWithLine = v.file ? `\`${v.file}${v.line ? `:L${v.line}` : ''}\`` : '`-`';
+    table += `| **${v.type}** | ${fileWithLine} | ${safeMessage} | *${safeRationale}* |\n`;
+  });
+  return table;
+}
+
+/** 에이전트를 위한 자가 수정 가이드 섹션을 생성합니다. */
+function formatSelfCorrectionGuide(): string {
+  let guide = `\n### 🧠 에이전트 자가 수정 가이드 (Self-Correction Guide)\n`;
+  guide += `> 발견된 위반 사항을 해결하기 위해 다음 단계를 권장합니다:\n`;
+  guide += `- **Hallucination 해결**: 해당 심볼의 정의가 프로젝트 내에 존재하는지 \`go-to-definition\`으로 확인하고, 없다면 실제 존재하는 API로 교체하십시오.\n`;
+  guide += `- **Complexity/Size 해결**: 하단의 **Deep Dive** 섹션에서 분석된 함수 범위를 참고하여 로직을 작은 단위로 추출하십시오.\n`;
+  guide += `- **Architecture 해결**: 의존성 그래프의 방향을 확인하고, 상위 레이어에서 하위 레이어를 참조하도록 구조를 변경하십시오.\n`;
+  return guide;
+}
+
+/** 복잡도가 높은 심볼들에 대한 상세 분석(Deep Dive) 섹션을 생성합니다. */
+function formatDeepDive(deepDive: { [file: string]: any[] }): string {
+  let section = `\n### 🔍 Deep Dive: Problematic Symbols (Auto-Analyzed)\n`;
+  section += `> 위반 사항이 발견된 파일 내에서 복잡도나 크기가 임계치를 초과한 심볼들입니다.\n\n`;
+  section += `| 파일(File) | 심볼명(Symbol) | 라인수(Lines) | 복잡도(Complexity) | 범위(Range) |\n`;
+  section += `| :--- | :--- | :--- | :--- | :--- |\n`;
+
+  for (const [file, symbols] of Object.entries(deepDive)) {
+    symbols.forEach((s: any) => {
+      const fileName = file.split('/').pop();
+      section += `| \`${fileName}\` | **${s.name}** | ${s.lineCount} | \`${s.complexity}\` | L${s.startLine}-L${s.endLine} |\n`;
+    });
+  }
+  section += `\n*에이전트 팁: 위 심볼 정보를 바탕으로 \`get-symbol-content\`를 호출하여 즉시 수정을 시작하세요.*\n`;
+  return section;
 }
 
 /**

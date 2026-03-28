@@ -10,10 +10,12 @@ vi.mock('../native/index.js', () => ({
 
 vi.mock('../src/utils/AstCacheManager.js', () => {
   const mockGetRootNode = vi.fn();
+  const mockClear = vi.fn();
   return {
     AstCacheManager: {
       getInstance: () => ({
         getRootNode: mockGetRootNode,
+        clear: mockClear,
       }),
     },
   };

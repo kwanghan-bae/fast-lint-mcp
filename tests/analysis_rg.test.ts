@@ -18,10 +18,10 @@ describe('countTechDebt', () => {
     if (existsSync(testDir)) rmSync(testDir, { recursive: true, force: true });
   });
 
-  it('src 디렉토리의 TODO, FIXME 개수를 정확히 세어야 한다', async () => {
+  it('src 디렉토리의 [PLAN], FIXME 개수를 정확히 세어야 한다', async () => {
     const fileA = join(srcDir, 'a.ts');
     const fileB = join(srcDir, 'b.ts');
-    writeFileSync(fileA, '// TODO: fix this\n// FIXME: urgent');
+    writeFileSync(fileA, '// [PLAN]: fix this\n// FIXME: urgent');
     writeFileSync(fileB, '/* HACK: work around */\n// XXX: check this');
 
     const count = await countTechDebt([fileA, fileB]);

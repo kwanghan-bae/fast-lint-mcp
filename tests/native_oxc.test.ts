@@ -24,7 +24,7 @@ describe('Native Oxc AST Parser', () => {
 
     writeFileSync(filePath, code);
 
-    // TODO: bind extract_symbols_oxc to napi
+    // [PLAN]: bind extract_symbols_oxc to napi
     // const result = extractSymbolsOxc(code, filePath);
     // expect(result.length).toBe(4);
   });
