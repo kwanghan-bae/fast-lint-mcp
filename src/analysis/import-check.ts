@@ -98,13 +98,39 @@ export async function checkHallucination(
   const absoluteFilePath = isAbsolute(filePath) ? filePath : join(workspacePath, filePath);
   const nodeBuiltins = [...builtinModules, ...builtinModules.map((m) => `node:${m}`)];
 
+  // v3.8.2: 프레임워크 및 환경별 전역 심볼 추가
+  const frameworkGlobals: string[] = [];
+  
+  // 1. 테스트 환경 감지
+  if (filePath.includes('/tests/') || filePath.includes('/__tests__/') || filePath.match(/\.(test|spec)\./)) {
+    frameworkGlobals.push(
+      'describe', 'it', 'test', 'expect', 'vi', 'jest', 'beforeEach', 'afterEach', 
+      'beforeAll', 'afterAll', 'fixture', 'assert', 'chai'
+    );
+  }
+
+  // 2. Next.js / React 감지 (dependencies 기반)
+  const isNext = dependencies.some(d => d === 'next');
+  const isReact = dependencies.some(d => d === 'react');
+
+  if (isNext || isReact) {
+    frameworkGlobals.push('React', 'JSX', 'Fragment', 'useEffect', 'useState', 'useMemo', 'useCallback');
+    if (isNext) {
+      // Next.js 예약어 및 컴포넌트명
+      const fileName = filePath.split('/').pop() || '';
+      if (fileName.match(/^(layout|page|route|template|loading|error|not-found)\.[tj]sx?$/)) {
+        frameworkGlobals.push('RootLayout', 'Home', 'Metadata', 'generateMetadata', 'dynamic', 'revalidate', 'viewport', 'config');
+      }
+    }
+  }
+
   const content = readFileSync(absoluteFilePath, 'utf-8');
   const imports = extractImportsFromFile(content);
 
   const violations = verifyHallucinationNative(
     absoluteFilePath,
     [], 
-    imports, 
+    [...imports, ...frameworkGlobals], // 프레임워크 전역 심볼 포함
     nodeBuiltins,
     dependencies 
   );

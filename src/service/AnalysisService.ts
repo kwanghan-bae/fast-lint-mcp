@@ -47,20 +47,21 @@ class AnalysisService {
     const envCheck = await this.validateEnvironment();
     if (!envCheck.pass) return envCheck.report!;
     const rules = this.resolveRules(options);
-    const incremental = options.forceFullScan ? false : (options.incremental ?? this.config.incremental);
+    const incrementalOption = options.forceFullScan ? false : (options.incremental ?? this.config.incremental);
     const allFiles = await this.scanProjectFiles();
+
     await this.depGraph.build(allFiles);
     if (this.semantic && typeof (this.semantic as any).ensureInitialized === 'function') {
       await (this.semantic as any).ensureInitialized(false, this.workspacePath);
     }
-    const targetFiles = await this.resolveTargetFiles(incremental, allFiles);
+    const targetFiles = await this.resolveTargetFiles(incrementalOption, allFiles);
     const lastUpdate = await this.getLatestMtime(targetFiles);
     const healing = await this.performSelfHealing(targetFiles);
     const violations = await this.performFileAnalysis(targetFiles, options);
     violations.push(...checkStructuralIntegrity(this.depGraph));
     await this.scanTechDebt(allFiles, rules, violations);
     const coverage = await this.coverageAnalyzer.analyze(options, rules, lastUpdate, allFiles, violations);
-    const report = await this.reportService.assemble(violations, coverage, healing, targetFiles, incremental && targetFiles.length < allFiles.length);
+    const report = await this.reportService.assemble(violations, coverage, healing, targetFiles, incrementalOption && targetFiles.length < allFiles.length);
     this.cleanupCaches();
     return report;
   }

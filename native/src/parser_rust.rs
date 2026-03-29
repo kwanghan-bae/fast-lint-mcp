@@ -53,8 +53,8 @@ impl<'a> SymbolVisitor<'a> {
         }
     }
 
-    fn check_korean_comment(&self, line: u32) -> bool {
-        has_korean_comment_above(self.lines, line as usize, 5)
+    fn check_korean_comment(&self, name: &str, line: u32) -> bool {
+        crate::parser::is_trivial_symbol(name) || has_korean_comment_above(self.lines, line as usize, 5)
     }
 }
 
@@ -72,7 +72,7 @@ impl<'ast, 'a> Visit<'ast> for SymbolVisitor<'a> {
         comp_visitor.visit_item_fn(node);
         
         self.symbols.push(SymbolResult {
-            name,
+            name: name.clone(),
             line: start_line,
             end_line,
             is_exported,
@@ -80,7 +80,8 @@ impl<'ast, 'a> Visit<'ast> for SymbolVisitor<'a> {
             complexity: comp_visitor.complexity,
             lines: lines_count,
             parameter_count,
-            has_korean_comment: self.check_korean_comment(start_line),
+            has_korean_comment: self.check_korean_comment(&name, start_line),
+            local_identifiers: Vec::new(),
         });
 
         syn::visit::visit_item_fn(self, node);
@@ -95,7 +96,7 @@ impl<'ast, 'a> Visit<'ast> for SymbolVisitor<'a> {
         let is_exported = matches!(node.vis, syn::Visibility::Public(_));
         
         self.symbols.push(SymbolResult {
-            name,
+            name: name.clone(),
             line: start_line,
             end_line,
             is_exported,
@@ -103,7 +104,8 @@ impl<'ast, 'a> Visit<'ast> for SymbolVisitor<'a> {
             complexity: 1,
             lines: lines_count,
             parameter_count: 0,
-            has_korean_comment: self.check_korean_comment(start_line),
+            has_korean_comment: self.check_korean_comment(&name, start_line),
+            local_identifiers: Vec::new(),
         });
 
         syn::visit::visit_item_struct(self, node);
@@ -117,7 +119,7 @@ impl<'ast, 'a> Visit<'ast> for SymbolVisitor<'a> {
         let is_exported = matches!(node.vis, syn::Visibility::Public(_));
         
         self.symbols.push(SymbolResult {
-            name,
+            name: name.clone(),
             line: start_line,
             end_line,
             is_exported,
@@ -125,7 +127,8 @@ impl<'ast, 'a> Visit<'ast> for SymbolVisitor<'a> {
             complexity: 1,
             lines: lines_count,
             parameter_count: 0,
-            has_korean_comment: self.check_korean_comment(start_line),
+            has_korean_comment: self.check_korean_comment(&name, start_line),
+            local_identifiers: Vec::new(),
         });
 
         syn::visit::visit_item_enum(self, node);
@@ -139,7 +142,7 @@ impl<'ast, 'a> Visit<'ast> for SymbolVisitor<'a> {
         let is_exported = matches!(node.vis, syn::Visibility::Public(_));
         
         self.symbols.push(SymbolResult {
-            name,
+            name: name.clone(),
             line: start_line,
             end_line,
             is_exported,
@@ -147,7 +150,8 @@ impl<'ast, 'a> Visit<'ast> for SymbolVisitor<'a> {
             complexity: 1,
             lines: lines_count,
             parameter_count: 0,
-            has_korean_comment: self.check_korean_comment(start_line),
+            has_korean_comment: self.check_korean_comment(&name, start_line),
+            local_identifiers: Vec::new(),
         });
 
         syn::visit::visit_item_trait(self, node);
@@ -180,7 +184,7 @@ impl<'ast, 'a> Visit<'ast> for SymbolVisitor<'a> {
         comp_visitor.visit_impl_item_fn(node);
         
         self.symbols.push(SymbolResult {
-            name,
+            name: name.clone(),
             line: start_line,
             end_line,
             is_exported,
@@ -188,7 +192,8 @@ impl<'ast, 'a> Visit<'ast> for SymbolVisitor<'a> {
             complexity: comp_visitor.complexity,
             lines: lines_count,
             parameter_count,
-            has_korean_comment: self.check_korean_comment(start_line),
+            has_korean_comment: self.check_korean_comment(&name, start_line),
+            local_identifiers: Vec::new(),
         });
 
         syn::visit::visit_impl_item_fn(self, node);

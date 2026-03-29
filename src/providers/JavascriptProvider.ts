@@ -181,8 +181,24 @@ export class JavascriptProvider extends BaseQualityProvider {
 
   /** AST 패턴 분석을 통해 복잡도 해결을 위한 구체적인 가이드를 생성합니다. */
   private generateComplexityAdvice(filePath: string): string {
-    const root = AstCacheManager.getInstance().getRootNode(filePath);
+    const cache = AstCacheManager.getInstance();
+    const root = cache.getRootNode(filePath);
+    const symbols = cache.getSymbols(filePath);
+    
     if (!root) return '코드 복잡도가 기준을 초과했습니다. 로직을 더 작은 함수나 클래스로 분리하세요.';
+
+    // 1. 거대 함수 여부 판별 (단일 함수가 전체 복잡도의 50% 이상 차지하는지)
+    const totalComplexity = symbols.reduce((acc, s) => acc + s.complexity, 0);
+    const giantSymbol = symbols.find(s => s.complexity > 10 && s.complexity > totalComplexity * 0.5);
+
+    if (giantSymbol) {
+      return `[거대 함수 발견] '${giantSymbol.name}' 함수의 복잡도가 너무 높습니다. 이 함수 내부의 조건문이나 반복문을 별도의 작은 함수로 추출(Extract Method)하여 책임을 분산시키세요.`;
+    }
+
+    // 2. 함수 과다 여부 판별
+    if (symbols.length > 15) {
+      return `[함수 과다 존재] 파일 내에 너무 많은 함수(${symbols.length}개)가 정의되어 있어 관리 복잡도가 높습니다. 서로 연관된 기능들을 새로운 클래스나 모듈로 분리(Extract Class/Module)하는 것을 권장합니다.`;
+    }
 
     const hasUIPatterns = UI_AST_PATTERNS.some((p) => root.findAll(p).length > 0);
     const hasLogicPatterns = LOGIC_AST_PATTERNS.some((p) => root.findAll(p).length > 0);

@@ -17,7 +17,7 @@ use once_cell::sync::Lazy;
 
 // 글로벌 정규식 캐시 (성능 최적화)
 static TECH_DEBT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)(TODO|FIXME|HACK|XXX)").unwrap());
-pub static COMPLEXITY_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b(if|for|while|switch|catch)\b|(&&|\|\||\?)").unwrap());
+pub static COMPLEXITY_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b(if|for|while|switch|catch|case|default)\b|(&&|\|\||\?|\.map\(|\.filter\(|\.reduce\()").unwrap());
 
 static BUILTINS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
     let mut s = HashSet::new();
@@ -297,7 +297,7 @@ pub fn resolve_module_path_native(
 }
 
 #[napi(object)]
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 pub struct SymbolResult {
   pub name: String,
   pub line: u32,
@@ -308,6 +308,7 @@ pub struct SymbolResult {
   pub lines: i32,
   pub parameter_count: i32,
   pub has_korean_comment: bool,
+  pub local_identifiers: Vec<String>, // 함수/클래스 내부의 로컬 변수 및 파라미터 이름
 }
 
 #[napi]
@@ -438,27 +439,25 @@ pub fn verify_hallucination_native(
   external_exports: Vec<String>,
 ) -> Vec<HallucinationViolation> {
   let mut violations = Vec::new();
+  let content = fs::read_to_string(&file_path).unwrap_or_default();
   
-  let mut allowed = HashSet::new();
-  for s in local_defs { allowed.insert(s); }
+  let mut global_allowed = HashSet::new();
+  for s in local_defs { global_allowed.insert(s); }
   for s in imports { 
-      allowed.insert(s.clone());
-      // Handle node: builtins and common libs in imports
+      global_allowed.insert(s.clone());
       if s.starts_with("node:") {
-          allowed.insert(s.replace("node:", ""));
+          global_allowed.insert(s.replace("node:", ""));
       }
   }
-  for s in builtins { allowed.insert(s); }
-  for s in external_exports { allowed.insert(s); }
-  for s in BUILTINS.iter() { allowed.insert(s.to_string()); }
+  for s in builtins { global_allowed.insert(s); }
+  for s in external_exports { global_allowed.insert(s); }
+  for s in BUILTINS.iter() { global_allowed.insert(s.to_string()); }
 
-  let content = fs::read_to_string(&file_path).unwrap_or_default();
   let symbols = parser::extract_symbols_oxc(&content, &file_path);
-  for s in symbols { 
-      allowed.insert(s.name.clone()); 
-      // 클래스 메서드(ClassName.methodName)의 경우 메서드 이름만 따로 허용 목록에 추가
+  for s in &symbols { 
+      global_allowed.insert(s.name.clone()); 
       if let Some(pos) = s.name.find('.') {
-          allowed.insert(s.name[pos+1..].to_string());
+          global_allowed.insert(s.name[pos+1..].to_string());
       }
   }
 
@@ -477,22 +476,35 @@ pub fn verify_hallucination_native(
   let skip_keywords = vec![
       "if", "for", "while", "switch", "catch", "super", "import", "require", 
       "return", "await", "yield", "constructor", "async", "get", "set", "new", "fixLogic",
-      "interface", "type", "declare", "enum", "readonly", "static", "public", "private", "protected", "as", "is"
+      "interface", "type", "declare", "enum", "readonly", "static", "public", "private", "protected", "as", "is",
+      "typeof", "instanceof"
   ];
 
   for (i, line) in clean_content.lines().enumerate() {
       if line.trim().is_empty() { continue; }
+      let line_num = (i + 1) as u32;
+      
+      // 현재 라인이 속한 심볼(함수/메서드)의 로컬 식별자들을 수집
+      let mut current_local_allowed = HashSet::new();
+      for s in &symbols {
+          if line_num >= s.line && line_num <= s.end_line {
+              for id in &s.local_identifiers {
+                  current_local_allowed.insert(id.clone());
+              }
+          }
+      }
       
       for cap in re_call.captures_iter(line) {
           let prefix = cap.name("prefix").map(|m| m.as_str());
           let name = cap.name("name").unwrap().as_str();
+          
           if prefix.is_some() { continue; }
           if skip_keywords.contains(&name) { continue; }
           
-          if !allowed.contains(name) {
+          if !global_allowed.contains(name) && !current_local_allowed.contains(name) {
               violations.push(HallucinationViolation {
                   name: name.to_string(),
-                  line: (i + 1) as u32,
+                  line: line_num,
               });
           }
       }

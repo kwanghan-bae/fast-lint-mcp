@@ -7,17 +7,17 @@ import {
   readdirSync,
   statSync,
 } from 'fs';
-import { join, dirname } from 'path';
-import { homedir } from 'os';
+import { join, normalize } from 'path';
+import { homedir, tmpdir } from 'os';
 import { createHash } from 'crypto';
 import { simpleGit } from 'simple-git';
 
 /**
  * 프로젝트 및 브랜치별 상태를 관리하며, 자동 청소 기능을 지원합니다. (v3.7 Collaboration)
- * 사용자 홈 디렉토리(~/.fast-lint-mcp)를 저장소로 활용하여 프로젝트 오염을 방지합니다.
+ * 사용자 홈 디렉토리(~/.fast-lint-mcp) 또는 임시 디렉토리를 저장소로 활용하여 프로젝트 오염을 방지합니다.
  */
 export class StateManager {
-  /** 전역 저장소 루트 경로 (~/.fast-lint-mcp) */
+  /** 전역 저장소 루트 경로 */
   private globalStoragePath: string;
   /** 프로젝트 및 브랜치별 고유 저장소 경로 */
   private projectStoragePath: string = '';
@@ -29,9 +29,20 @@ export class StateManager {
    * @param workspacePath 분석할 프로젝트의 루트 경로
    */
   constructor(private workspacePath: string = process.cwd()) {
-    this.globalStoragePath = join(homedir(), '.fast-lint-mcp');
-    if (!existsSync(this.globalStoragePath)) {
-      mkdirSync(this.globalStoragePath, { recursive: true });
+    // v3.8: 홈 디렉토리를 우선 사용하되, 권한 문제 등이 있을 경우 임시 디렉토리로 폴백
+    const baseDir = homedir() || tmpdir();
+    this.globalStoragePath = join(baseDir, '.fast-lint-mcp');
+    
+    try {
+      if (!existsSync(this.globalStoragePath)) {
+        mkdirSync(this.globalStoragePath, { recursive: true });
+      }
+    } catch (e) {
+      // 폴백: 임시 디렉토리 내 유니크한 경로 사용
+      this.globalStoragePath = join(tmpdir(), `fast-lint-mcp-${process.getuid?.() || 'default'}`);
+      if (!existsSync(this.globalStoragePath)) {
+        mkdirSync(this.globalStoragePath, { recursive: true });
+      }
     }
   }
 
