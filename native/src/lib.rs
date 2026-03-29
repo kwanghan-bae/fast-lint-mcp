@@ -40,6 +40,10 @@ static BUILTINS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
         "util", "promisify", "inherits", "format", "inspect",
         // Test Frameworks (Jest, Vitest, Mocha)
         "describe", "it", "test", "expect", "beforeEach", "afterEach", "beforeAll", "afterAll", "vi", "jest", "assert", "chai",
+        "render", "renderHook", "fireEvent", "waitFor", "waitForElementToBeRemoved", "act", "screen", "within", "userEvent", "cleanup", "setup",
+        // React Native & Expo
+        "StyleSheet", "View", "Text", "Image", "ScrollView", "TouchableOpacity", "Dimensions", "Platform",
+        "Animated", "Easing", "Keyboard", "KeyboardAvoidingView", "SafeAreaView", "StatusBar", "Alert", "Linking",
     ];
     for name in names { s.insert(name); }
     s
@@ -504,7 +508,10 @@ pub fn verify_hallucination_native(
           // v3.8.3: React Hook Setter (setSomething) 자동 허용
           let is_hook_setter = name.starts_with("set") && name.len() > 3 && name.chars().nth(3).unwrap_or(' ').is_uppercase();
           
-          if !global_allowed.contains(name) && !current_local_allowed.contains(name) && !is_hook_setter {
+          // v3.8.8: Prisma 등 프레임워크 특화 $ 메서드 체이닝 자동 허용
+          let is_dollar_method = name.starts_with("$");
+          
+          if !global_allowed.contains(name) && !current_local_allowed.contains(name) && !is_hook_setter && !is_dollar_method {
               violations.push(HallucinationViolation {
                   name: name.to_string(),
                   line: line_num,

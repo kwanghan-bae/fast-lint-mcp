@@ -64,6 +64,8 @@ function formatViolationsTable(violations: Violation[]): string {
   table += `| 구분(Type) | 대상 파일(File) | 위반 내용(Message) | 판단 근거(Rationale) |\n`;
   table += `| :--- | :--- | :--- | :--- |\n`;
 
+  let fixSuggestionsText = '';
+
   violations.forEach((v: Violation) => {
     const safeMessage = v.message.replace(/\|/g, '\\|');
     let safeRationale = (v.rationale || '-').replace(/\|/g, '\\|');
@@ -74,7 +76,21 @@ function formatViolationsTable(violations: Violation[]): string {
 
     const fileWithLine = v.file ? `\`${v.file}${v.line ? `:L${v.line}` : ''}\`` : '`-`';
     table += `| **${v.type}** | ${fileWithLine} | ${safeMessage} | *${safeRationale}* |\n`;
+
+    // v3.9.2: 에이전트를 위한 Auto-Fix 제안 수집
+    if (v.fixSuggestion) {
+      fixSuggestionsText += `\n**[Auto-Fix Suggestion for ${v.file}:${v.line}]**\n\`\`\`json\n${JSON.stringify({
+        file_path: v.file,
+        old_string: v.fixSuggestion.old_string,
+        new_string: v.fixSuggestion.new_string
+      }, null, 2)}\n\`\`\`\n`;
+    }
   });
+
+  if (fixSuggestionsText) {
+    table += `\n### 💡 에이전트 전용 Auto-Fix 패치 제안 (복사해서 replace 툴에 사용하세요)\n${fixSuggestionsText}`;
+  }
+
   return table;
 }
 

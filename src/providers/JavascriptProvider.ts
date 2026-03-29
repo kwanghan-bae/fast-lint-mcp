@@ -123,14 +123,41 @@ export class JavascriptProvider extends BaseQualityProvider {
 
   /** Native 분석 결과를 프로젝트 표준 Violation 형식으로 변환합니다. */
   private mapNativeViolations(filePath: string, nativeViolations: any[], violations: Violation[]) {
+    let lines: string[] | null = null;
+
     violations.push(
-      ...nativeViolations.map((v) => ({
-        type: v.type as any,
-        file: filePath,
-        line: v.line || 1,
-        rationale: v.rationale || undefined,
-        message: v.message,
-      }))
+      ...nativeViolations.map((v) => {
+        const violation: Violation = {
+          type: v.type as any,
+          file: filePath,
+          line: v.line || 1,
+          rationale: v.rationale || undefined,
+          message: v.message,
+        };
+
+        // v3.9.2: READABILITY (주석 누락) 위반 시 Auto-Fix 패치 제안(fixSuggestion) 생성
+        if (violation.type === 'READABILITY' && violation.message.includes('주석이 없습니다')) {
+          try {
+            if (!lines) lines = readFileSync(filePath, 'utf-8').split('\n');
+            const targetLine = lines[(violation.line || 1) - 1];
+            if (targetLine) {
+              const indentMatch = targetLine.match(/^(\s*)/);
+              const indent = indentMatch ? indentMatch[1] : '';
+              
+              // 추출된 심볼명 찾기
+              const symbolMatch = violation.message.match(/\[(.*?)\]에 한글 주석이/);
+              const symbolName = symbolMatch ? symbolMatch[1] : '해당 심볼';
+
+              violation.fixSuggestion = {
+                old_string: targetLine,
+                new_string: `${indent}/**\n${indent} * [작성 필요] ${symbolName}의 역할과 목적을 한글로 설명하세요.\n${indent} */\n${targetLine}`
+              };
+            }
+          } catch (e) {}
+        }
+
+        return violation;
+      })
     );
   }
 
@@ -187,12 +214,37 @@ export class JavascriptProvider extends BaseQualityProvider {
     
     if (!root) return '코드 복잡도가 기준을 초과했습니다. 로직을 더 작은 함수나 클래스로 분리하세요.';
 
-    // 1. 거대 함수 여부 판별 (단일 함수가 전체 복잡도의 50% 이상 차지하는지)
+    // v3.8.6: Actionable Advice 강화
     const totalComplexity = symbols.reduce((acc, s) => acc + s.complexity, 0);
     const giantSymbol = symbols.find(s => s.complexity > 10 && s.complexity > totalComplexity * 0.5);
 
     if (giantSymbol) {
-      return `[거대 함수 발견] '${giantSymbol.name}' 함수의 복잡도가 너무 높습니다. 이 함수 내부의 조건문이나 반복문을 별도의 작은 함수로 추출(Extract Method)하여 책임을 분산시키세요.`;
+      let advice = `[거대 함수 발견] '${giantSymbol.name}' 함수의 복잡도가 너무 높습니다. `;
+      
+      // 파일 내용 읽어서 switch/case 비율 분석 (간이 휴리스틱)
+      try {
+        const content = readFileSync(filePath, 'utf-8');
+        const lines = content.split('\n').slice(giantSymbol.line - 1, giantSymbol.endLine);
+        const snippet = lines.join('\n');
+        
+        const switchCount = (snippet.match(/\bswitch\s*\(/g) || []).length;
+        const caseCount = (snippet.match(/\bcase\b/g) || []).length;
+        
+        if (caseCount > 5 || switchCount > 1) {
+          advice += `이 코드는 로직이 꼬여있기보다는 단순 분기(Switch)가 많습니다. 다형성(Polymorphism)이나 전략 패턴(Strategy Pattern) 도입을 고려하세요. `;
+        } else {
+          advice += `이 함수 내부의 중첩된 조건문이나 반복문을 별도의 작은 함수로 추출(Extract Method)하여 책임을 분산시키세요. `;
+        }
+
+        if (giantSymbol.lines > 100) {
+          // 대략적으로 가장 긴 코드 블록(Lxx-Lyy) 추출 권장
+          const midPoint = Math.floor((giantSymbol.line + giantSymbol.endLine) / 2);
+          advice += `특히 크기가 비대한 구간(예: L${giantSymbol.line}-L${midPoint})을 독립된 Private Method로 추출할 것을 권장합니다.`;
+        }
+      } catch (e) {
+        advice += `이 함수 내부의 조건문이나 반복문을 별도의 작은 함수로 추출(Extract Method)하여 책임을 분산시키세요.`;
+      }
+      return advice;
     }
 
     // 2. 함수 과다 여부 판별

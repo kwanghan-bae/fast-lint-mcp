@@ -105,7 +105,8 @@ export async function checkHallucination(
   if (filePath.includes('/tests/') || filePath.includes('/__tests__/') || filePath.match(/\.(test|spec)\./)) {
     frameworkGlobals.push(
       'describe', 'it', 'test', 'expect', 'vi', 'jest', 'beforeEach', 'afterEach', 
-      'beforeAll', 'afterAll', 'fixture', 'assert', 'chai'
+      'beforeAll', 'afterAll', 'fixture', 'assert', 'chai',
+      'render', 'renderHook', 'fireEvent', 'waitFor', 'waitForElementToBeRemoved', 'act', 'screen', 'within', 'userEvent'
     );
   }
 

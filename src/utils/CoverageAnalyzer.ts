@@ -48,13 +48,19 @@ class CoverageAnalyzer {
     try {
       if (existsSync(coveragePath)) {
         const coverageStat = statSync(coveragePath);
-        const isStale = coverageStat.mtimeMs < lastSrcUpdate - COVERAGE.STALE_BUFFER_MS;
+        // v3.8.5: forceRefresh 옵션이 있으면 강제로 fresh 취급
+        // v3.9.0: 15분(900,000ms) 이내의 차이는 Grace Period로 인정하여 stale 경고 무시
+        const timeDiff = lastSrcUpdate - coverageStat.mtimeMs;
+        const GRACE_PERIOD_MS = 15 * 60 * 1000; 
+        
+        const isStale = !options.forceRefresh && timeDiff > GRACE_PERIOD_MS;
         coverageFreshness = isStale ? 'stale' : 'fresh';
+        
         if (isStale && rules.minCoverage > 0) {
           violations.push({
             type: 'COVERAGE',
             message: `테스트 리포트가 만료되었습니다.`,
-            rationale: `리포트: ${new Date(coverageStat.mtimeMs).toLocaleTimeString()}, 소스최신: ${new Date(lastSrcUpdate).toLocaleTimeString()}`,
+            rationale: `리포트: ${new Date(coverageStat.mtimeMs).toLocaleTimeString()}, 소스최신: ${new Date(lastSrcUpdate).toLocaleTimeString()} (차이: ${Math.round(timeDiff / 60000)}분)`,
           });
         }
       }

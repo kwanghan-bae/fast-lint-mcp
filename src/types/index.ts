@@ -33,6 +33,11 @@ export interface Violation {
   value?: any; // 현재 측정값 (선택 사항)
   limit?: any; // 허용되는 기준값 (선택 사항)
   id?: string; // 규칙 식별자 (선택 사항)
+  /** 
+   * (v3.9.2 Agentic DX) 에이전트가 즉시 적용할 수 있는 수치 제안 
+   * old_string을 찾아 new_string으로 교체하도록 가이드합니다.
+   */
+  fixSuggestion?: { old_string: string; new_string: string };
 }
 
 /**

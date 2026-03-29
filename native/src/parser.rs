@@ -131,6 +131,18 @@ fn collect_binding_pattern(pat: &oxc_ast::ast::BindingPattern, ids: &mut Vec<Str
     }
 }
 
+pub fn is_ignored_by_comment(lines: &[&str], start_line: usize) -> bool {
+    let check_start = if start_line > 3 { start_line - 3 } else { 0 };
+    for i in check_start..start_line {
+        if let Some(line) = lines.get(i) {
+            if line.contains("fast-lint-ignore") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 pub fn extract_symbols_oxc(source_text: &str, file_path: &str) -> Vec<SymbolResult> {
     let allocator = Allocator::default();
     let source_type = SourceType::from_path(file_path).unwrap_or_default();
@@ -139,6 +151,24 @@ pub fn extract_symbols_oxc(source_text: &str, file_path: &str) -> Vec<SymbolResu
     let mut symbols = Vec::new();
     let lines: Vec<&str> = source_text.lines().collect();
     
+    // v3.8.9: 설정 파일 및 테스트 파일은 가독성(한글 주석) 검사 우회
+    let is_test_or_config = file_path.contains(".config.") 
+        || file_path.contains(".setup.") 
+        || file_path.contains("rc.") 
+        || file_path.ends_with("rc")
+        || file_path.contains("/tests/") 
+        || file_path.contains("/__tests__/")
+        || file_path.contains(".test.")
+        || file_path.contains(".spec.");
+
+    // v3.8.9: 복잡도 계산 시 문자열 리터럴 및 JSX 텍스트 제거를 위한 정규식
+    let re_strings_for_complexity = Regex::new(r#"'[^']*'|"[^"]*"|`[^`]*`|<[^>]+>"#).unwrap();
+
+    let get_clean_complexity = |snippet: &str| -> i32 {
+        let clean_snippet = re_strings_for_complexity.replace_all(snippet, " ");
+        COMPLEXITY_RE.find_iter(&clean_snippet).count() as i32 + 1
+    };
+
     if ret.errors.is_empty() {
        for stmt in &ret.program.body {
            match stmt {
@@ -150,19 +180,9 @@ pub fn extract_symbols_oxc(source_text: &str, file_path: &str) -> Vec<SymbolResu
                                    let start_line = count_lines(&source_text[..func.span.start as usize]) + 1;
                                    let end_line = count_lines(&source_text[..func.span.end as usize]) + 1;
                                    let snippet = &source_text[func.span.start as usize..func.span.end as usize];
-                                   let complexity = COMPLEXITY_RE.find_iter(snippet).count() as i32 + 1;
+                                   let complexity = get_clean_complexity(snippet);
                                    let name = id.name.to_string();
-                                   let has_korean = has_korean_comment_above(&lines, start_line as usize, 10) || is_trivial_symbol(&name);
-
-                                   let mut local_identifiers = Vec::new();
-                                   for param in &func.params.items {
-                                       collect_binding_pattern(&param.pattern, &mut local_identifiers);
-                                   }
-                                   if let Some(body) = &func.body {
-                                       for s in &body.statements {
-                                           collect_local_identifiers(s, &mut local_identifiers);
-                                       }
-                                   }
+                                   let has_korean = is_test_or_config || has_korean_comment_above(&lines, start_line as usize, 10) || is_trivial_symbol(&name);
 
                                    symbols.push(SymbolResult {
                                        name,
@@ -174,7 +194,7 @@ pub fn extract_symbols_oxc(source_text: &str, file_path: &str) -> Vec<SymbolResu
                                        lines: (end_line - start_line + 1) as i32,
                                        parameter_count: func.params.items.len() as i32,
                                        has_korean_comment: has_korean,
-                                       local_identifiers,
+                                       local_identifiers: Vec::new(),
                                    });
                                }
                            },
@@ -183,7 +203,7 @@ pub fn extract_symbols_oxc(source_text: &str, file_path: &str) -> Vec<SymbolResu
                                    let start_line = count_lines(&source_text[..cls.span.start as usize]) + 1;
                                    let end_line = count_lines(&source_text[..cls.span.end as usize]) + 1;
                                    let name = id.name.to_string();
-                                   let has_korean = has_korean_comment_above(&lines, start_line as usize, 10) || is_trivial_symbol(&name);
+                                   let has_korean = is_test_or_config || has_korean_comment_above(&lines, start_line as usize, 10) || is_trivial_symbol(&name);
                                    
                                    symbols.push(SymbolResult {
                                        name: name.clone(),
@@ -198,7 +218,7 @@ pub fn extract_symbols_oxc(source_text: &str, file_path: &str) -> Vec<SymbolResu
                                        local_identifiers: Vec::new(),
                                    });
 
-                                   process_class_body(cls, &name, source_text, &mut symbols, &lines);
+                                   process_class_body(cls, &name, source_text, &mut symbols, &lines, is_test_or_config, &re_strings_for_complexity);
                                }
                            },
                            Declaration::VariableDeclaration(var_decl) => {
@@ -207,9 +227,9 @@ pub fn extract_symbols_oxc(source_text: &str, file_path: &str) -> Vec<SymbolResu
                                        let start_line = count_lines(&source_text[..declarator.span.start as usize]) + 1;
                                        let end_line = count_lines(&source_text[..declarator.span.end as usize]) + 1;
                                        let snippet = &source_text[declarator.span.start as usize..declarator.span.end as usize];
-                                       let complexity = COMPLEXITY_RE.find_iter(snippet).count() as i32 + 1;
+                                       let complexity = get_clean_complexity(snippet);
                                        let name = id.name.to_string();
-                                       let has_korean = has_korean_comment_above(&lines, start_line as usize, 10) || is_trivial_symbol(&name);
+                                       let has_korean = is_test_or_config || has_korean_comment_above(&lines, start_line as usize, 10) || is_trivial_symbol(&name);
 
                                        symbols.push(SymbolResult {
                                            name,
@@ -230,14 +250,83 @@ pub fn extract_symbols_oxc(source_text: &str, file_path: &str) -> Vec<SymbolResu
                        }
                    }
                },
+               Statement::ExportDefaultDeclaration(decl) => {
+                   match &decl.declaration {
+                       oxc_ast::ast::ExportDefaultDeclarationKind::FunctionDeclaration(func) => {
+                           let start_line = count_lines(&source_text[..func.span.start as usize]) + 1;
+                           let end_line = count_lines(&source_text[..func.span.end as usize]) + 1;
+                           let snippet = &source_text[func.span.start as usize..func.span.end as usize];
+                           let complexity = get_clean_complexity(snippet);
+                           
+                           let name = if let Some(id) = &func.id {
+                               id.name.to_string()
+                           } else {
+                               let file_name = std::path::Path::new(file_path).file_name().unwrap_or_default().to_string_lossy();
+                               format!("default ({})", file_name)
+                           };
+                           let has_korean = is_test_or_config || has_korean_comment_above(&lines, start_line as usize, 10) || is_trivial_symbol(&name);
+
+                           let mut local_identifiers = Vec::new();
+                           for param in &func.params.items {
+                               collect_binding_pattern(&param.pattern, &mut local_identifiers);
+                           }
+                           if let Some(body) = &func.body {
+                               for s in &body.statements {
+                                   collect_local_identifiers(s, &mut local_identifiers);
+                               }
+                           }
+
+                           symbols.push(SymbolResult {
+                               name,
+                               line: start_line as u32,
+                               end_line: end_line as u32,
+                               is_exported: true,
+                               kind: "function".to_string(),
+                               complexity,
+                               lines: (end_line - start_line + 1) as i32,
+                               parameter_count: func.params.items.len() as i32,
+                               has_korean_comment: has_korean,
+                               local_identifiers,
+                           });
+                       },
+                       oxc_ast::ast::ExportDefaultDeclarationKind::ClassDeclaration(cls) => {
+                           let start_line = count_lines(&source_text[..cls.span.start as usize]) + 1;
+                           let end_line = count_lines(&source_text[..cls.span.end as usize]) + 1;
+                           let name = if let Some(id) = &cls.id {
+                               id.name.to_string()
+                           } else {
+                               let file_name = std::path::Path::new(file_path).file_name().unwrap_or_default().to_string_lossy();
+                               format!("default ({})", file_name)
+                           };
+                           let has_korean = is_test_or_config || has_korean_comment_above(&lines, start_line as usize, 10) || is_trivial_symbol(&name);
+                           
+                           symbols.push(SymbolResult {
+                               name: name.clone(),
+                               line: start_line as u32,
+                               end_line: end_line as u32,
+                               is_exported: true,
+                               kind: "class".to_string(),
+                               complexity: 1,
+                               lines: (end_line - start_line + 1) as i32,
+                               parameter_count: 0,
+                               has_korean_comment: has_korean,
+                               local_identifiers: Vec::new(),
+                           });
+
+                           process_class_body(cls, &name, source_text, &mut symbols, &lines, is_test_or_config, &re_strings_for_complexity);
+                       },
+                       _ => {}
+                   }
+               },
                Statement::FunctionDeclaration(func) => {
                    if let Some(id) = &func.id {
                        let start_line = count_lines(&source_text[..func.span.start as usize]) + 1;
                        let end_line = count_lines(&source_text[..func.span.end as usize]) + 1;
                        let snippet = &source_text[func.span.start as usize..func.span.end as usize];
-                       let complexity = COMPLEXITY_RE.find_iter(snippet).count() as i32 + 1;
+                       let complexity = get_clean_complexity(snippet);
                        let name = id.name.to_string();
-                       let has_korean = has_korean_comment_above(&lines, start_line as usize, 10) || is_trivial_symbol(&name);
+                       // v3.8.7: Export 되지 않은 내부 함수는 한글 주석 요구 완화
+                       let has_korean = true; 
 
                        let mut local_identifiers = Vec::new();
                        for param in &func.params.items {
@@ -269,9 +358,10 @@ pub fn extract_symbols_oxc(source_text: &str, file_path: &str) -> Vec<SymbolResu
                            let start_line = count_lines(&source_text[..declarator.span.start as usize]) + 1;
                            let end_line = count_lines(&source_text[..declarator.span.end as usize]) + 1;
                            let snippet = &source_text[declarator.span.start as usize..declarator.span.end as usize];
-                           let complexity = COMPLEXITY_RE.find_iter(snippet).count() as i32 + 1;
+                           let complexity = get_clean_complexity(snippet);
                            let name = id.name.to_string();
-                           let has_korean = has_korean_comment_above(&lines, start_line as usize, 10) || is_trivial_symbol(&name);
+                           // v3.8.7: Export 되지 않은 로컬 변수는 한글 주석 요구 완화
+                           let has_korean = true; 
 
                            symbols.push(SymbolResult {
                                name,
@@ -293,7 +383,8 @@ pub fn extract_symbols_oxc(source_text: &str, file_path: &str) -> Vec<SymbolResu
                        let start_line = count_lines(&source_text[..cls.span.start as usize]) + 1;
                        let end_line = count_lines(&source_text[..cls.span.end as usize]) + 1;
                        let name = id.name.to_string();
-                       let has_korean = has_korean_comment_above(&lines, start_line as usize, 10) || is_trivial_symbol(&name);
+                       // v3.8.7: Export 되지 않은 내부 클래스는 한글 주석 요구 완화
+                       let has_korean = true; 
                        
                        symbols.push(SymbolResult {
                            name: name.clone(),
@@ -308,7 +399,7 @@ pub fn extract_symbols_oxc(source_text: &str, file_path: &str) -> Vec<SymbolResu
                            local_identifiers: Vec::new(),
                        });
 
-                       process_class_body(cls, &name, source_text, &mut symbols, &lines);
+                       process_class_body(cls, &name, source_text, &mut symbols, &lines, is_test_or_config, &re_strings_for_complexity);
                    }
                },
                Statement::ExpressionStatement(expr_stmt) => {
@@ -318,7 +409,7 @@ pub fn extract_symbols_oxc(source_text: &str, file_path: &str) -> Vec<SymbolResu
                                let start_line = count_lines(&source_text[..call.span.start as usize]) + 1;
                                let end_line = count_lines(&source_text[..call.span.end as usize]) + 1;
                                let name = id.name.to_string();
-                               let has_korean = has_korean_comment_above(&lines, start_line as usize, 10) || is_trivial_symbol(&name);
+                               let has_korean = is_test_or_config || has_korean_comment_above(&lines, start_line as usize, 10) || is_trivial_symbol(&name);
                                
                                let label = if id.name == "describe" { "suite" } else { "test_logic" };
 
@@ -343,7 +434,7 @@ pub fn extract_symbols_oxc(source_text: &str, file_path: &str) -> Vec<SymbolResu
                        use oxc_span::GetSpan;
                        let span = assign.left.span();
                        let name = source_text[span.start as usize..span.end as usize].to_string();
-                       let has_korean = has_korean_comment_above(&lines, start_line as usize, 10) || is_trivial_symbol(&name);
+                       let has_korean = is_test_or_config || has_korean_comment_above(&lines, start_line as usize, 10) || is_trivial_symbol(&name);
 
                        symbols.push(SymbolResult {
                            name,
@@ -364,10 +455,13 @@ pub fn extract_symbols_oxc(source_text: &str, file_path: &str) -> Vec<SymbolResu
        }
     }
     
+    // v3.9.1: 인라인 무시(Inline Ignore) 태그가 있는 심볼은 결과에서 제외
+    symbols.retain(|s| !is_ignored_by_comment(&lines, s.line as usize));
+    
     symbols
 }
 
-fn process_class_body(cls: &oxc_ast::ast::Class, class_name: &str, source_text: &str, symbols: &mut Vec<SymbolResult>, lines: &[&str]) {
+fn process_class_body(cls: &oxc_ast::ast::Class, class_name: &str, source_text: &str, symbols: &mut Vec<SymbolResult>, lines: &[&str], is_test_or_config: bool, re_strings: &Regex) {
     for el in &cls.body.body {
         match el {
             ClassElement::MethodDefinition(method) => {
@@ -375,9 +469,18 @@ fn process_class_body(cls: &oxc_ast::ast::Class, class_name: &str, source_text: 
                     let m_start = count_lines(&source_text[..method.span.start as usize]) + 1;
                     let m_end = count_lines(&source_text[..method.span.end as usize]) + 1;
                     let m_snippet = &source_text[method.span.start as usize..method.span.end as usize];
-                    let m_complexity = COMPLEXITY_RE.find_iter(m_snippet).count() as i32 + 1;
+                    
+                    let clean_snippet = re_strings.replace_all(m_snippet, " ");
+                    let m_complexity = COMPLEXITY_RE.find_iter(&clean_snippet).count() as i32 + 1;
+                    
                     let name = format!("{}.{}", class_name, method_id.name);
-                    let has_korean = has_korean_comment_above(lines, m_start as usize, 10) || is_trivial_symbol(&name);
+                    
+                    // v3.8.7: Private 메서드(_, # 등)는 주석 요구 완화
+                    let has_korean = if is_test_or_config || method_id.name.starts_with('_') || method_id.name.starts_with('#') {
+                        true
+                    } else {
+                        has_korean_comment_above(lines, m_start as usize, 10) || is_trivial_symbol(&name)
+                    };
 
                     let mut local_identifiers = Vec::new();
                     for param in &method.value.params.items {
@@ -408,7 +511,7 @@ fn process_class_body(cls: &oxc_ast::ast::Class, class_name: &str, source_text: 
                     let p_start = count_lines(&source_text[..prop.span.start as usize]) + 1;
                     let p_end = count_lines(&source_text[..prop.span.end as usize]) + 1;
                     let name = format!("{}.{}", class_name, prop_id.name);
-                    let has_korean = has_korean_comment_above(lines, p_start as usize, 10) || is_trivial_symbol(&name);
+                    let has_korean = is_test_or_config || has_korean_comment_above(lines, p_start as usize, 10) || is_trivial_symbol(&name);
 
                     symbols.push(SymbolResult {
                         name,

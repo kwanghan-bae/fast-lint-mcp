@@ -68,10 +68,13 @@ function getToolDefinitions() {
             description: 'Whether to use incremental analysis based on git changes',
           },
           forceFullScan: {
-            type: 'boolean',
-            description: 'Force a full project scan, ignoring incremental cache and git status',
+              type: 'boolean',
+              description: 'Force a full project scan, ignoring incremental cache and git status',
           },
-          targetPath: {
+          forceRefresh: {
+              type: 'boolean',
+              description: 'Force refresh coverage and other cached reports from disk',
+          },          targetPath: {
             type: 'string',
             description: 'Absolute path to the project directory to analyze (optional)',
           },
