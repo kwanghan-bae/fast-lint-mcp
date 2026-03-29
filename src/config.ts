@@ -33,12 +33,12 @@ export const ConfigSchema = z.object({
   /** 세부 품질 측정 규칙 */
   rules: z
     .object({
-      maxLineCount: z.number().default(1000),
-      maxComplexity: z.number().default(200),
+      maxLineCount: z.number().default(300),
+      maxComplexity: z.number().default(15),
       coveragePath: z.string().optional(),
       coverageDirectory: z.string().default('coverage'),
-      minCoverage: z.number().default(0),
-      techDebtLimit: z.number().default(100),
+      minCoverage: z.number().default(85),
+      techDebtLimit: z.number().default(10),
     })
     .default({}),
   /** 증분 분석 사용 여부 */

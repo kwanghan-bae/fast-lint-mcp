@@ -17,13 +17,13 @@ use once_cell::sync::Lazy;
 
 // 글로벌 정규식 캐시 (성능 최적화)
 static TECH_DEBT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)(TODO|FIXME|HACK|XXX)").unwrap());
-pub static COMPLEXITY_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b(if|for|while|switch|catch|case|default)\b|(&&|\|\||\?|\.map\(|\.filter\(|\.reduce\()").unwrap());
+pub static COMPLEXITY_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b(if|for|while|switch|catch|case|default)\b|(\?|\.map\(|\.filter\(|\.reduce\()").unwrap());
 
 static BUILTINS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
     let mut s = HashSet::new();
     let names = vec![
         "console", "Math", "JSON", "Promise", "process", "Object", "Array", "String", "Number", "Boolean",
-        "Date", "RegExp", "Error", "Map", "Set", "WeakMap", "Uint8Array", "Intl",
+        "Date", "RegExp", "Error", "Map", "Set", "WeakMap", "Uint8Array", "Intl", "BigInt", "Symbol", "Reflect", "Proxy",
         "setTimeout", "setInterval", "setImmediate", "clearTimeout", "clearInterval",
         "clearImmediate", "require", "module", "exports", "global", "window", "document", "navigator", "location",
         "history", "screen", "__dirname", "__filename", "Buffer", "encodeURI", "encodeURIComponent", "decodeURI",
@@ -461,8 +461,8 @@ pub fn verify_hallucination_native(
       }
   }
 
-  // 1. 전처리: 주석과 문자열을 제거하되 라인 번호 보존을 위해 \n은 남김
-  let re_noise = Regex::new(r#"(?m)//.*|/\*[\s\S]*?\*/|'[^']*'|"[^"]*"|`[^`]*`"#).unwrap();
+  // 1. 전처리: 주석, 문자열, 정규식 리터럴, JSX 태그를 제거하되 라인 번호 보존을 위해 \n은 남김
+  let re_noise = Regex::new(r#"(?m)//.*|/\*[\s\S]*?\*/|'[^']*'|"[^"]*"|`[^`]*`|/[^/\n]+/[gimuy]*|<[^>]+>"#).unwrap();
   let clean_content = re_noise.replace_all(&content, |caps: &regex::Captures| {
       let mut res = String::new();
       for c in caps[0].chars() {
@@ -501,7 +501,10 @@ pub fn verify_hallucination_native(
           if prefix.is_some() { continue; }
           if skip_keywords.contains(&name) { continue; }
           
-          if !global_allowed.contains(name) && !current_local_allowed.contains(name) {
+          // v3.8.3: React Hook Setter (setSomething) 자동 허용
+          let is_hook_setter = name.starts_with("set") && name.len() > 3 && name.chars().nth(3).unwrap_or(' ').is_uppercase();
+          
+          if !global_allowed.contains(name) && !current_local_allowed.contains(name) && !is_hook_setter {
               violations.push(HallucinationViolation {
                   name: name.to_string(),
                   line: line_num,

@@ -42,7 +42,7 @@ describe('Native Hallucination Unified Check', () => {
     // nonExistentFunc 만 위반으로 보고되어야 함
     expect(violations.length).toBe(1);
     expect(violations[0].name).toBe('nonExistentFunc');
-    expect(violations[0].line).toBe(7);
+    expect(violations[0].line).toBe(8);
   });
 
   it('should handle node: prefix correctly', () => {

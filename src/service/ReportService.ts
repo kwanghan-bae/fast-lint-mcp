@@ -45,6 +45,12 @@ export class ReportService {
     const pass = uniqueViolations.length === 0;
     let suggestion = pass ? '모든 품질 기준을 통과했습니다.' : '위반 사항을 조치하세요.';
     if (healingMessages.length > 0) suggestion += `\n\n[Self-Healing Result]\n${healingMessages.join('\n')}`;
+    
+    // v3.8.5: 커버리지가 stale 상태일 때 에이전트 가이드 추가
+    if (cov.coverageFreshness === 'stale') {
+      suggestion += `\n\n[에이전트 팁] 테스트 리포트가 만료되었습니다. 커버리지 갱신을 위해 \`npm test -- --coverage\` (또는 프로젝트에 맞는 테스트 명령어)를 실행하고 결과 경로를 제공하세요.`;
+    }
+    
     if (cov.coverageInsight) suggestion += `\n${cov.coverageInsight}`;
 
     await this.stateManager.saveCoverage(cov.currentCoverage);

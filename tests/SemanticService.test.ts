@@ -47,8 +47,8 @@ describe('SemanticService (Ultimate Coverage & Precision)', () => {
 
     // 2. 복잡도 검증
     const calcMetric = metrics.find((m) => m.name === 'OrderManager.calculate');
-    // base(1) + if(1) + &&(1) = 3
-    expect(calcMetric?.complexity).toBe(3);
+    // v3.8.3: base(1) + if(1) = 2 (논리 연산자 && 는 제외됨)
+    expect(calcMetric?.complexity).toBe(2);
 
     const standaloneMetric = metrics.find((m) => m.name === 'standalone');
     // base(1) + ternary(1) = 2
