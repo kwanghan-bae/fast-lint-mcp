@@ -9,14 +9,16 @@ import {
 } from '../../native/index.js';
 import { AstCacheManager } from '../utils/AstCacheManager.js';
 
+import { checkHallucination } from './import-check.js';
+
 /**
  * AST 기반의 결정론적 API 계약 검증을 수행하여 환각(Hallucination)을 탐지합니다.
- * v0.0.1: Rust Native HashSet 엔진을 사용하여 O(1) 속도로 검증합니다.
+ * v3.9.5: TypeScript 컴파일러 API를 사용하여 오탐 없는 정밀 검증을 수행합니다.
  */
 export async function verifyAPIContracts(
-  root: SgNode,
+  _root: SgNode,
   filePath: string,
-  allExportedSymbols: { name: string; file: string }[] = [],
+  _allExportedSymbols: { name: string; file: string }[] = [],
   isTestFile: boolean = false
 ): Promise<Violation[]> {
   if (isTestFile) return [];
@@ -25,26 +27,11 @@ export async function verifyAPIContracts(
   const isJsTs = ext && ['ts', 'tsx', 'js', 'jsx'].includes(ext);
 
   if (isJsTs) {
-    // v6.4.0: JS/TS는 전용 Rust Native 엔진 사용
-    const results = verifyHallucinationNative(
-      filePath,
-      [],
-      [],
-      [],
-      allExportedSymbols.map((s) => s.name)
-    );
-
-    return results.map((r) => ({
-      type: 'HALLUCINATION',
-      file: filePath,
-      line: r.line,
-      message: `[AI Hallucination] 존재하지 않는 API 호출이 감지되었습니다: ${r.name}`,
-      rationale: `심볼 [${r.name}]이 현재 파일의 정의나 임포트 목록에 존재하지 않습니다.`,
-    }));
+    return await checkHallucination(filePath);
   }
 
   // Fallback for other languages (using ast-grep)
-  return []; // Currently hallucination check is mostly focused on JS/TS
+  return []; 
 }
 
 /**

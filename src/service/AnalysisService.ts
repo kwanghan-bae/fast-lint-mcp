@@ -21,6 +21,8 @@ import { CoverageAnalyzer } from '../utils/CoverageAnalyzer.js';
 import { runBatchAnalysisNative } from '../../native/index.js';
 import { QualityReport, Violation, QualityProvider } from '../types/index.js';
 
+import { TsProgramManager } from '../utils/TsProgramManager.js';
+
 export // AnalysisService 클래스는 역할을 담당합니다.
 class AnalysisService {
   private git: SimpleGit;
@@ -49,6 +51,9 @@ class AnalysisService {
     const rules = this.resolveRules(options);
     const incrementalOption = options.forceFullScan ? false : (options.incremental ?? this.config.incremental);
     const allFiles = await this.scanProjectFiles();
+
+    // v3.9.5: TypeScript 컴파일러 서비스 초기화
+    TsProgramManager.getInstance().init(this.workspacePath, allFiles);
 
     await this.depGraph.build(allFiles);
     if (this.semantic && typeof (this.semantic as any).ensureInitialized === 'function') {

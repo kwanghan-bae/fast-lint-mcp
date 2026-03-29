@@ -19,36 +19,6 @@ use once_cell::sync::Lazy;
 static TECH_DEBT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)(TODO|FIXME|HACK|XXX)").unwrap());
 pub static COMPLEXITY_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b(if|for|while|switch|catch|case|default)\b|(\?|\.map\(|\.filter\(|\.reduce\()").unwrap());
 
-static BUILTINS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
-    let mut s = HashSet::new();
-    let names = vec![
-        "console", "Math", "JSON", "Promise", "process", "Object", "Array", "String", "Number", "Boolean",
-        "Date", "RegExp", "Error", "Map", "Set", "WeakMap", "Uint8Array", "Intl", "BigInt", "Symbol", "Reflect", "Proxy",
-        "setTimeout", "setInterval", "setImmediate", "clearTimeout", "clearInterval",
-        "clearImmediate", "require", "module", "exports", "global", "window", "document", "navigator", "location",
-        "history", "screen", "__dirname", "__filename", "Buffer", "encodeURI", "encodeURIComponent", "decodeURI",
-        "decodeURIComponent", "parseFloat", "parseInt", "isNaN", "isFinite", "fetch", "Headers", "Request",
-        "Response", "URL", "URLSearchParams", "AbortController", "AbortSignal", "FormData", "Blob", "File",
-        "FileReader", "WebSocket", "Event", "CustomEvent", "MessageChannel", "MessagePort", "Worker",
-        "Float32Array", "Float64Array", "Int8Array", "Int16Array", "Int32Array", "Uint8Array", "Uint8ClampedArray", "Uint16Array", "Uint32Array", "BigInt64Array", "BigUint64Array",
-        // Node.js Builtins (Common Methods)
-        "fs", "readFileSync", "writeFileSync", "existsSync", "mkdirSync", "rmSync", "readdirSync", "statSync", "renameSync", "appendFileSync",
-        "path", "join", "resolve", "dirname", "basename", "extname", "relative", "normalize", "isAbsolute",
-        "os", "homedir", "arch", "platform", "cpus", "totalmem", "freemem", "networkInterfaces",
-        "crypto", "createHash", "createHmac", "randomBytes", "createCipheriv", "createDecipheriv",
-        "child_process", "exec", "execSync", "spawn", "spawnSync", "fork",
-        "util", "promisify", "inherits", "format", "inspect",
-        // Test Frameworks (Jest, Vitest, Mocha)
-        "describe", "it", "test", "expect", "beforeEach", "afterEach", "beforeAll", "afterAll", "vi", "jest", "assert", "chai",
-        "render", "renderHook", "fireEvent", "waitFor", "waitForElementToBeRemoved", "act", "screen", "within", "userEvent", "cleanup", "setup",
-        // React Native & Expo
-        "StyleSheet", "View", "Text", "Image", "ScrollView", "TouchableOpacity", "Dimensions", "Platform",
-        "Animated", "Easing", "Keyboard", "KeyboardAvoidingView", "SafeAreaView", "StatusBar", "Alert", "Linking",
-    ];
-    for name in names { s.insert(name); }
-    s
-});
-
 static NOISE_SYMBOLS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
     let mut s = HashSet::new();
     let names = vec!["game", "app", "core", "main", "root", "item", "data", "info", "ctx"];
@@ -60,8 +30,6 @@ mod parser;
 mod parser_rust;
 mod cache;
 mod resolver;
-
-// ... (기존 Lazy static들)
 
 #[napi]
 pub fn clear_path_cache_native() {
@@ -312,7 +280,7 @@ pub struct SymbolResult {
   pub lines: i32,
   pub parameter_count: i32,
   pub has_korean_comment: bool,
-  pub local_identifiers: Vec<String>, // 함수/클래스 내부의 로컬 변수 및 파라미터 이름
+  pub local_identifiers: Vec<String>,
 }
 
 #[napi]
@@ -436,91 +404,15 @@ pub struct HallucinationViolation {
 
 #[napi]
 pub fn verify_hallucination_native(
-  file_path: String,
-  local_defs: Vec<String>,
-  imports: Vec<String>,
-  builtins: Vec<String>,
-  external_exports: Vec<String>,
+  _file_path: String,
+  _local_defs: Vec<String>,
+  _imports: Vec<String>,
+  _builtins: Vec<String>,
+  _external_exports: Vec<String>,
 ) -> Vec<HallucinationViolation> {
-  let mut violations = Vec::new();
-  let content = fs::read_to_string(&file_path).unwrap_or_default();
-  
-  let mut global_allowed = HashSet::new();
-  for s in local_defs { global_allowed.insert(s); }
-  for s in imports { 
-      global_allowed.insert(s.clone());
-      if s.starts_with("node:") {
-          global_allowed.insert(s.replace("node:", ""));
-      }
-  }
-  for s in builtins { global_allowed.insert(s); }
-  for s in external_exports { global_allowed.insert(s); }
-  for s in BUILTINS.iter() { global_allowed.insert(s.to_string()); }
-
-  let symbols = parser::extract_symbols_oxc(&content, &file_path);
-  for s in &symbols { 
-      global_allowed.insert(s.name.clone()); 
-      if let Some(pos) = s.name.find('.') {
-          global_allowed.insert(s.name[pos+1..].to_string());
-      }
-  }
-
-  // 1. 전처리: 주석, 문자열, 정규식 리터럴, JSX 태그를 제거하되 라인 번호 보존을 위해 \n은 남김
-  let re_noise = Regex::new(r#"(?m)//.*|/\*[\s\S]*?\*/|'[^']*'|"[^"]*"|`[^`]*`|/[^/\n]+/[gimuy]*|<[^>]+>"#).unwrap();
-  let clean_content = re_noise.replace_all(&content, |caps: &regex::Captures| {
-      let mut res = String::new();
-      for c in caps[0].chars() {
-          if c == '\n' { res.push('\n'); }
-          else { res.push(' '); }
-      }
-      res
-  }).to_string();
-
-  let re_call = Regex::new(r#"(?P<prefix>[\.\?])?\b(?P<name>[a-zA-Z0-9_$]+)\b\s*\("#).unwrap();
-  let skip_keywords = vec![
-      "if", "for", "while", "switch", "catch", "super", "import", "require", 
-      "return", "await", "yield", "constructor", "async", "get", "set", "new", "fixLogic",
-      "interface", "type", "declare", "enum", "readonly", "static", "public", "private", "protected", "as", "is",
-      "typeof", "instanceof"
-  ];
-
-  for (i, line) in clean_content.lines().enumerate() {
-      if line.trim().is_empty() { continue; }
-      let line_num = (i + 1) as u32;
-      
-      // 현재 라인이 속한 심볼(함수/메서드)의 로컬 식별자들을 수집
-      let mut current_local_allowed = HashSet::new();
-      for s in &symbols {
-          if line_num >= s.line && line_num <= s.end_line {
-              for id in &s.local_identifiers {
-                  current_local_allowed.insert(id.clone());
-              }
-          }
-      }
-      
-      for cap in re_call.captures_iter(line) {
-          let prefix = cap.name("prefix").map(|m| m.as_str());
-          let name = cap.name("name").unwrap().as_str();
-          
-          if prefix.is_some() { continue; }
-          if skip_keywords.contains(&name) { continue; }
-          
-          // v3.8.3: React Hook Setter (setSomething) 자동 허용
-          let is_hook_setter = name.starts_with("set") && name.len() > 3 && name.chars().nth(3).unwrap_or(' ').is_uppercase();
-          
-          // v3.8.8: Prisma 등 프레임워크 특화 $ 메서드 체이닝 자동 허용
-          let is_dollar_method = name.starts_with("$");
-          
-          if !global_allowed.contains(name) && !current_local_allowed.contains(name) && !is_hook_setter && !is_dollar_method {
-              violations.push(HallucinationViolation {
-                  name: name.to_string(),
-                  line: line_num,
-              });
-          }
-      }
-  }
-
-  violations
+  // v3.9.5: 이 로직은 TypeScript 컴파일러 API로 완전히 대체되었습니다.
+  // 하위 호환성을 위해 빈 배열을 반환합니다.
+  Vec::new()
 }
 
 #[napi]
@@ -646,7 +538,8 @@ pub fn run_batch_analysis_native(files: Vec<String>) -> Vec<BatchResult> {
 
       if let Ok(content) = fs::read_to_string(&file_path) {
         line_count = content.lines().count() as i32;
-        overall_complexity = COMPLEXITY_RE.find_iter(&content).count() as i32 + 1;
+        let clean_content = Regex::new(r#"(?m)//.*|/\*[\s\S]*?\*/|'[^']*'|"[^"]*"|`[^`]*`|/[^/\n]+/[gimuy]*|<[^>]+>"#).unwrap().replace_all(&content, " ");
+        overall_complexity = COMPLEXITY_RE.find_iter(&clean_content).count() as i32 + 1;
       }
       BatchResult {
         file: file_path,
@@ -860,32 +753,20 @@ pub fn run_ultimate_analysis_native(
     file_path: String,
     is_test_file: bool,
     review_options: ReviewOptions,
-    external_exports: Vec<String>,
-    imports: Vec<String>,
+    _external_exports: Vec<String>,
+    _imports: Vec<String>,
 ) -> UltimateAnalysisResult {
     let content = fs::read_to_string(&file_path).unwrap_or_default();
     let symbols = parser::extract_symbols_oxc(&content, &file_path);
     
     let line_count = content.lines().count() as i32;
-    let complexity = COMPLEXITY_RE.find_iter(&content).count() as i32 + 1;
+    // v3.9.5: 복잡도 계산 전 전처리(주석/문자열 제거) 수행
+    let clean_content = Regex::new(r#"(?m)//.*|/\*[\s\S]*?\*/|'[^']*'|"[^"]*"|`[^`]*`|/[^/\n]+/[gimuy]*|<[^>]+>"#).unwrap().replace_all(&content, " ");
+    let complexity = COMPLEXITY_RE.find_iter(&clean_content).count() as i32 + 1;
     
     let mut violations = Vec::new();
     
     violations.extend(run_semantic_review_native(file_path.clone(), is_test_file, review_options.clone()));
-    
-    violations.extend(verify_hallucination_native(
-        file_path.clone(),
-        Vec::new(),
-        imports,
-        Vec::new(),
-        external_exports,
-    ).into_iter().map(|h| Violation {
-        r#type: "HALLUCINATION".to_string(),
-        file: Some(file_path.clone()),
-        line: Some(h.line),
-        rationale: Some(format!("심볼 [{}]이 존재하지 않음", h.name)),
-        message: format!("[AI Hallucination] 존재하지 않는 API 호출: {}", h.name),
-    }));
     
     if complexity >= 10 {
         let mut blueprint = String::from("\n\n[Refactoring Blueprint]\n");

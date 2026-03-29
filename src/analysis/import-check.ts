@@ -80,66 +80,27 @@ export function extractImportsFromFile(content: string): string[] {
   return imports;
 }
 
+import { TsProgramManager } from '../utils/TsProgramManager.js';
+
 /**
  * AI 에이전트의 환각(Hallucination) 탐지
- * v0.0.1: Rust Native 엔진을 사용하여 고속 환각 탐지를 수행합니다.
+ * v3.9.5: TypeScript 컴파일러 API(Semantic Diagnostics)를 사용하여 실제 타입 체킹 결과 기반으로 환각을 탐지합니다.
  */
 export async function checkHallucination(
   filePath: string,
-  workspacePath: string = process.cwd()
-): Promise<{ id: string; message: string; line?: number }[]> {
-  // v3.8.1: JS/TS 파일이 아닌 경우 환각 검사 스킵 (오탐 방지)
+  _workspacePath: string = process.cwd()
+): Promise<Violation[]> {
   const ext = extname(filePath).toLowerCase();
   if (!['.js', '.ts', '.jsx', '.tsx'].includes(ext)) return [];
 
-  if (!existsSync(filePath)) return [];
+  const hallucinations = TsProgramManager.getInstance().getHallucinations(filePath);
 
-  const dependencies = await loadAllDependencies(filePath, workspacePath);
-  const absoluteFilePath = isAbsolute(filePath) ? filePath : join(workspacePath, filePath);
-  const nodeBuiltins = [...builtinModules, ...builtinModules.map((m) => `node:${m}`)];
-
-  // v3.8.2: 프레임워크 및 환경별 전역 심볼 추가
-  const frameworkGlobals: string[] = [];
-  
-  // 1. 테스트 환경 감지
-  if (filePath.includes('/tests/') || filePath.includes('/__tests__/') || filePath.match(/\.(test|spec)\./)) {
-    frameworkGlobals.push(
-      'describe', 'it', 'test', 'expect', 'vi', 'jest', 'beforeEach', 'afterEach', 
-      'beforeAll', 'afterAll', 'fixture', 'assert', 'chai',
-      'render', 'renderHook', 'fireEvent', 'waitFor', 'waitForElementToBeRemoved', 'act', 'screen', 'within', 'userEvent'
-    );
-  }
-
-  // 2. Next.js / React 감지 (dependencies 기반)
-  const isNext = dependencies.some(d => d === 'next');
-  const isReact = dependencies.some(d => d === 'react');
-
-  if (isNext || isReact) {
-    frameworkGlobals.push('React', 'JSX', 'Fragment', 'useEffect', 'useState', 'useMemo', 'useCallback');
-    if (isNext) {
-      // Next.js 예약어 및 컴포넌트명
-      const fileName = filePath.split('/').pop() || '';
-      if (fileName.match(/^(layout|page|route|template|loading|error|not-found)\.[tj]sx?$/)) {
-        frameworkGlobals.push('RootLayout', 'Home', 'Metadata', 'generateMetadata', 'dynamic', 'revalidate', 'viewport', 'config');
-      }
-    }
-  }
-
-  const content = readFileSync(absoluteFilePath, 'utf-8');
-  const imports = extractImportsFromFile(content);
-
-  const violations = verifyHallucinationNative(
-    absoluteFilePath,
-    [], 
-    [...imports, ...frameworkGlobals], // 프레임워크 전역 심볼 포함
-    nodeBuiltins,
-    dependencies 
-  );
-
-  return violations.map((v) => ({
-    id: 'HALLUCINATION',
-    message: `[AI Hallucination] 존재하지 않는 API 호출: ${v.name}`,
-    line: v.line,
+  return hallucinations.map((h) => ({
+    type: 'HALLUCINATION',
+    file: filePath,
+    line: h.line,
+    message: `[AI Hallucination] 존재하지 않는 API 호출: ${h.name}`,
+    rationale: `심볼 [${h.name}]이 TypeScript 타입 시스템에 의해 유효하지 않은 것으로 판명되었습니다.`,
   }));
 }
 
