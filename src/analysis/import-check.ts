@@ -4,22 +4,30 @@ import {
   scanFiles,
   checkFakeLogicNative,
   checkArchitectureNative,
-  verifyHallucinationNative,
   extractSymbolsNative,
 } from '../../native/index.js';
 import { ArchitectureRule, Violation } from '../types/index.js';
 import { builtinModules } from 'module';
 
+/** 프로젝트 파일 캐시 */
+const projectFilesCache = new Map<string, string[]>();
+
+const DEFAULT_IGNORE = ['node_modules/**', 'dist/**', 'build/**', 'coverage/**', '.git/**', '.next/**'];
+
 /**
  * 프로젝트 내의 모든 소스 파일 목록을 가져옵니다.
  */
 export async function getProjectFiles(workspacePath: string, ignorePatterns: string[] = []) {
-  return scanFiles(workspacePath, ignorePatterns);
+  const key = workspacePath;
+  if (projectFilesCache.has(key)) return projectFilesCache.get(key)!;
+  const files = scanFiles(workspacePath, [...DEFAULT_IGNORE, ...ignorePatterns]);
+  projectFilesCache.set(key, files);
+  return files;
 }
 
 /** 프로젝트 파일 캐시를 초기화합니다. */
 export function clearProjectFilesCache() {
-  // Native 레벨에서 캐시 관리 (필요 시 호출)
+  projectFilesCache.clear();
 }
 
 /**
@@ -176,7 +184,8 @@ function shouldCheckFakeLogic(s: any): boolean {
 function extractParamsFromLine(line: string): string[] {
   const match = line.match(/\((.*?)\)/);
   if (!match) return [];
-  return match[1]
+  const raw = match[1].replace(/[{}]/g, '');
+  return raw
     .split(',')
     .map((p) => p.trim().split(':')[0].trim())
     .filter((p) => p.length > 0 && !['props', 'req', 'res', 'next', 'ctx'].includes(p));

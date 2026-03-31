@@ -7,6 +7,34 @@ vi.mock('../native/index.js', () => ({
   runMutationTestNative: vi.fn(),
 }));
 
+vi.mock('fs', async () => {
+  const actual = await vi.importActual('fs');
+  return {
+    ...actual,
+    readFileSync: vi.fn().mockReturnValue('// mock content'),
+    existsSync: vi.fn().mockReturnValue(true),
+  };
+});
+
+vi.mock('../src/analysis/test-check.js', () => ({
+  checkTestValidity: vi.fn().mockReturnValue({ isValid: true }),
+}));
+
+vi.mock('../src/utils/AstCacheManager.js', () => {
+  const mockGetRootNode = vi.fn();
+  const mockClear = vi.fn();
+  const mockGetSymbols = vi.fn().mockReturnValue([]);
+  return {
+    AstCacheManager: {
+      getInstance: () => ({
+        getRootNode: mockGetRootNode,
+        clear: mockClear,
+        getSymbols: mockGetSymbols,
+      }),
+    },
+  };
+});
+
 describe('JavascriptProvider', () => {
   let provider: JavascriptProvider;
   let config: any;

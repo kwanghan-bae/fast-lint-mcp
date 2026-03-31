@@ -1,6 +1,5 @@
 import ts from 'typescript';
-import { existsSync, readFileSync } from 'fs';
-import { join, dirname } from 'path';
+import { dirname } from 'path';
 
 /**
  * TypeScript 컴파일러 프로그램을 관리하고 캐싱하는 싱글톤 클래스입니다.

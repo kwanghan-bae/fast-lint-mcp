@@ -1,9 +1,32 @@
-use std::path::{Path, PathBuf};
+use std::path::{Path, PathBuf, Component};
 use std::collections::HashMap;
 use std::fs;
 use serde::Deserialize;
 use once_cell::sync::Lazy;
 use std::sync::RwLock;
+
+/// 경로의 `.` 및 `..` 세그먼트를 정규화합니다.
+fn normalize_path(path: &Path) -> PathBuf {
+    let mut components = Vec::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if matches!(components.last(), Some(Component::Normal(_))) {
+                    components.pop();
+                } else {
+                    components.push(component);
+                }
+            }
+            c => components.push(c),
+        }
+    }
+    if components.is_empty() {
+        PathBuf::from(".")
+    } else {
+        components.iter().collect()
+    }
+}
 
 // 전역 캐시: 프로젝트 루트 및 별칭 정보 보관
 static ROOT_CACHE: Lazy<RwLock<HashMap<String, String>>> = Lazy::new(|| RwLock::new(HashMap::new()));
@@ -175,7 +198,9 @@ pub fn resolve_module_path_native_v2(
         }
     }
 
-    let file_set: std::collections::HashSet<String> = all_files.into_iter().collect();
+    let file_set: std::collections::HashSet<String> = all_files.into_iter()
+        .map(|f| normalize_path(Path::new(&f)).to_string_lossy().to_string())
+        .collect();
     
     let mut clean_path = resolved_import_path.clone();
     if clean_path.ends_with(".js") {
@@ -185,16 +210,16 @@ pub fn resolve_module_path_native_v2(
     }
 
     let base_path = if Path::new(&clean_path).is_absolute() {
-        PathBuf::from(&clean_path)
+        normalize_path(&PathBuf::from(&clean_path))
     } else {
-        Path::new(&current_dir).join(&clean_path)
+        normalize_path(&Path::new(&current_dir).join(&clean_path))
     };
 
     let extensions = vec![".ts", ".tsx", ".js", ".jsx", ".json", ".d.ts"];
     
     // 1. 확장자 탐색
     for ext in &extensions {
-        let s = format!("{}{}", base_path.to_string_lossy(), ext);
+        let s = normalize_path(Path::new(&format!("{}{}", base_path.to_string_lossy(), ext))).to_string_lossy().to_string();
         if file_set.contains(&s) {
             return Some(s);
         }
@@ -202,7 +227,7 @@ pub fn resolve_module_path_native_v2(
 
     // 2. index 탐색
     for ext in &extensions {
-        let p = base_path.join(format!("index{}", ext));
+        let p = normalize_path(&base_path.join(format!("index{}", ext)));
         let s = p.to_string_lossy().to_string();
         if file_set.contains(&s) {
             return Some(s);
@@ -211,12 +236,24 @@ pub fn resolve_module_path_native_v2(
 
     // 3. 원본 확인
     let original = if Path::new(&resolved_import_path).is_absolute() {
-        resolved_import_path.clone()
+        normalize_path(Path::new(&resolved_import_path)).to_string_lossy().to_string()
     } else {
-        Path::new(&current_dir).join(&resolved_import_path).to_string_lossy().to_string()
+        normalize_path(&Path::new(&current_dir).join(&resolved_import_path)).to_string_lossy().to_string()
     };
     if file_set.contains(&original) {
         return Some(original);
+    }
+
+    // 4. 퍼지 매칭: allFiles에서 끝자리 일치로 탐색
+    let suffixes: Vec<String> = extensions.iter()
+        .map(|ext| format!("{}{}", clean_path.trim_start_matches("./").trim_start_matches("../"), ext))
+        .collect();
+    for file in &file_set {
+        for suffix in &suffixes {
+            if file.ends_with(suffix) {
+                return Some(file.clone());
+            }
+        }
     }
 
     None

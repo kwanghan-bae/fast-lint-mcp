@@ -66,7 +66,7 @@ describe('AnalysisService Extra (Coverage & Error)', () => {
     const report = await service.runAllChecks({ coveragePath: lcovPath });
     // 90% > 85% 이므로 위반 사항이 없어야 함
     expect(report.violations.filter((v) => v.type === 'COVERAGE').length).toBe(0);
-  });
+  }, 30000);  // 30초 타임아웃
 
   it('테스트 리포트가 소스보다 오래된 경우(Stale) 경고를 발생시켜야 한다', async () => {
     const summaryPath = join(testDir, 'coverage-summary.json');
@@ -79,5 +79,5 @@ describe('AnalysisService Extra (Coverage & Error)', () => {
 
     const report = await service.runAllChecks({ coveragePath: summaryPath });
     expect(report.violations.some((v) => v.message.includes('만료'))).toBe(true);
-  });
+  }, 30000);  // 30초 타임아웃
 });

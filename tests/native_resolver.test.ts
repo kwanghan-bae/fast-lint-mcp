@@ -3,6 +3,7 @@ import {
   findNearestProjectRootNative,
   loadProjectAliasesNative,
   resolveModulePathNativeV2,
+  clearPathCacheNative,
 } from '../native/index.js';
 import { writeFileSync, rmSync, existsSync, mkdirSync } from 'fs';
 import { join, normalize } from 'path';
@@ -13,6 +14,7 @@ describe('Native Path Resolver V2 (Commit 4.2)', () => {
   const utilsDir = join(srcDir, 'utils');
 
   beforeEach(() => {
+    clearPathCacheNative();
     if (!existsSync(testDir)) mkdirSync(testDir, { recursive: true });
     if (!existsSync(srcDir)) mkdirSync(srcDir, { recursive: true });
     if (!existsSync(utilsDir)) mkdirSync(utilsDir, { recursive: true });

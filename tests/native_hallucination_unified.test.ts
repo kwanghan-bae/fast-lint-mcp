@@ -3,7 +3,8 @@ import { verifyHallucinationNative } from '../native/index.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
-describe('Native Hallucination Unified Check', () => {
+// v3.9.5: verifyHallucinationNative는 TypeScript Compiler API로 대체되어 빈 배열을 반환합니다.
+describe.skip('Native Hallucination Unified Check', () => {
   const testFilePath = path.join(process.cwd(), 'temp_hallucination_test.js');
 
   beforeAll(() => {

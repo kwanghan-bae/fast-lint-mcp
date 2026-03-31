@@ -3,7 +3,6 @@ import { SgNode, Lang, parse as sgParse } from '@ast-grep/napi';
 import { Violation } from '../types/index.js';
 import { READABILITY } from '../constants.js';
 import {
-  verifyHallucinationNative,
   runSemanticReviewNative,
   ReviewOptions,
 } from '../../native/index.js';

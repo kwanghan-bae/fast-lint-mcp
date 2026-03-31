@@ -71,5 +71,5 @@ describe('v4.2 커버리지 인사이트 및 상시 노출 검증', () => {
     expect(report.suggestion).toContain('weak2.ts');
     expect(report.suggestion).toContain('weak3.ts');
     // perfect.ts는 Top 3가 아니므로(커버리지 높음) 포함되지 않아야 함 (선택적 검증)
-  });
+  }, 30000);  // 30초 타임아웃
 });

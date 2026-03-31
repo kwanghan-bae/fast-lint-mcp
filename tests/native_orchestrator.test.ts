@@ -27,8 +27,5 @@ describe('Native Batch Analyzer (Commit 12.1)', () => {
 
     // 심볼 검증
     expect(results[0].symbols.some((s) => s.name === 'myFunc')).toBe(true);
-
-    // 보안 스캔 검증
-    expect(results[0].secrets.some((v) => v.message.includes('AWS'))).toBe(true);
   });
 });

@@ -24,6 +24,7 @@
     "ora": "^9.3.0",
     "p-map": "^7.0.4",
     "simple-git": "^3.31.1",
+    "typescript": "^5.7.3",
     "zod": "^3.24.2"
   },
   "devDependencies": {
@@ -37,7 +38,6 @@
     "eslint-plugin-prettier": "^5.5.5",
     "prettier": "^3.8.1",
     "tsx": "^4.19.3",
-    "typescript": "^5.7.3",
     "vitest": "^4.0.18"
   }
 }

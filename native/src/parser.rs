@@ -326,7 +326,7 @@ pub fn extract_symbols_oxc(source_text: &str, file_path: &str) -> Vec<SymbolResu
                        let complexity = get_clean_complexity(snippet);
                        let name = id.name.to_string();
                        // v3.8.7: Export 되지 않은 내부 함수는 한글 주석 요구 완화
-                       let has_korean = true; 
+                       let has_korean = has_korean_comment_above(&lines, start_line as usize, 10) || is_trivial_symbol(&name); 
 
                        let mut local_identifiers = Vec::new();
                        for param in &func.params.items {
@@ -361,7 +361,7 @@ pub fn extract_symbols_oxc(source_text: &str, file_path: &str) -> Vec<SymbolResu
                            let complexity = get_clean_complexity(snippet);
                            let name = id.name.to_string();
                            // v3.8.7: Export 되지 않은 로컬 변수는 한글 주석 요구 완화
-                           let has_korean = true; 
+                           let has_korean = has_korean_comment_above(&lines, start_line as usize, 10) || is_trivial_symbol(&name); 
 
                            symbols.push(SymbolResult {
                                name,
@@ -384,7 +384,7 @@ pub fn extract_symbols_oxc(source_text: &str, file_path: &str) -> Vec<SymbolResu
                        let end_line = count_lines(&source_text[..cls.span.end as usize]) + 1;
                        let name = id.name.to_string();
                        // v3.8.7: Export 되지 않은 내부 클래스는 한글 주석 요구 완화
-                       let has_korean = true; 
+                       let has_korean = has_korean_comment_above(&lines, start_line as usize, 10) || is_trivial_symbol(&name); 
                        
                        symbols.push(SymbolResult {
                            name: name.clone(),
@@ -409,7 +409,7 @@ pub fn extract_symbols_oxc(source_text: &str, file_path: &str) -> Vec<SymbolResu
                                let start_line = count_lines(&source_text[..call.span.start as usize]) + 1;
                                let end_line = count_lines(&source_text[..call.span.end as usize]) + 1;
                                let name = id.name.to_string();
-                               let has_korean = is_test_or_config || has_korean_comment_above(&lines, start_line as usize, 10) || is_trivial_symbol(&name);
+                               let has_korean = has_korean_comment_above(&lines, start_line as usize, 10) || is_trivial_symbol(&name);
                                
                                let label = if id.name == "describe" { "suite" } else { "test_logic" };
 

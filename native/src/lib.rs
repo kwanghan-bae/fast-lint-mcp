@@ -16,7 +16,7 @@ use std::fs;
 use once_cell::sync::Lazy;
 
 // 글로벌 정규식 캐시 (성능 최적화)
-static TECH_DEBT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)(TODO|FIXME|HACK|XXX)").unwrap());
+static TECH_DEBT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)(TODO|FIXME|HACK|XXX|\[PLAN\])").unwrap());
 pub static COMPLEXITY_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b(if|for|while|switch|catch|case|default)\b|(\?|\.map\(|\.filter\(|\.reduce\()").unwrap());
 
 static NOISE_SYMBOLS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
@@ -429,13 +429,15 @@ pub fn has_korean_comment_native(file_path: String, line: u32, search_depth: u32
 pub fn check_fake_logic_native(body: String, params: Vec<String>) -> Vec<String> {
   let re_comments = Regex::new(r"(?m)//.*|/\*[\s\S]*?\*/").unwrap();
   let clean_body = re_comments.replace_all(&body, "");
+  // 함수 선언 라인(첫 줄)을 제외 — 파라미터가 시그니처에 자연스럽게 존재하므로
+  let body_without_first_line = clean_body.lines().skip(1).collect::<Vec<_>>().join("\n");
 
   let mut unused = Vec::new();
   for p in params {
     let pattern = format!(r"\b{}\b", regex::escape(&p));
     let re = Regex::new(&pattern).unwrap();
     
-    if re.find_iter(&clean_body).count() == 0 {
+    if re.find_iter(&body_without_first_line).count() == 0 {
       unused.push(p);
     }
   }
