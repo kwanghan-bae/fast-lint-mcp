@@ -40,9 +40,10 @@ function initializeServer() {
   }));
 
   // 2. 도구 실행 핸들러
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  server.setRequestHandler(CallToolRequestSchema, async (request): Promise<any> => {
     try {
-      return await handleToolCall(request.params.name, request.params.arguments);
+      return await handleToolCall(request.params.name, (request.params.arguments ?? {}) as Record<string, unknown>);
     } catch (error) {
       return {
         content: [
@@ -128,8 +129,8 @@ function getToolDefinitions() {
 }
 
 /** 에이전트의 도구 호출을 처리하는 핵심 로직입니다. */
-async function handleToolCall(name: string, args: any) {
-  const workspace = args?.targetPath || process.env.FAST_LINT_WORKSPACE || process.cwd();
+async function handleToolCall(name: string, args: Record<string, unknown>) {
+  const workspace = String(args?.targetPath ?? '') || process.env.FAST_LINT_WORKSPACE || process.cwd();
   // 동적으로 설정한 workspace 경로로 프로세스의 작업 디렉토리를 변경합니다.
   process.chdir(workspace);
   const semanticSvc = getSemantic();

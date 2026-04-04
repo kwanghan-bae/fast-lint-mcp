@@ -1,17 +1,10 @@
 import { join } from 'path';
-import { AnalysisService } from '../service/AnalysisService.js';
-import { SemanticService } from '../service/SemanticService.js';
 import { AgentWorkflow } from './workflow.js';
 import { formatReport } from '../utils/AnalysisUtils.js';
-
-/** 지연 로딩을 위한 팩토리 함수 타입 */
-type AnalyzerFactory = (workspace: string) => AnalysisService;
+import type { ToolHandler, ToolResponse } from '../types/index.js';
 
 /** 도구별 실행 로직을 관리하는 전략 객체 */
-export const toolHandlers: Record<
-  string,
-  (args: any, semanticSvc: SemanticService, workspace: string, getAnalyzer: AnalyzerFactory) => Promise<any>
-> = {
+export const toolHandlers: Record<string, ToolHandler> = {
   'guide': async () => {
     const guideText = `
 # 🚨 FAST-LINT-MCP ZERO-CONFIG MANDATES (AGENT SOP v6.0) 🚨
@@ -46,33 +39,33 @@ As an AI Agent, you are bound by these Standard Operating Procedures. This tool 
   },
   'get-symbol-metrics': async (args, semanticSvc, workspace) => {
     await semanticSvc.ensureInitialized(false, workspace);
-    const metrics = semanticSvc.getSymbolMetrics(join(workspace, String(args?.filePath)));
+    const metrics = semanticSvc.getSymbolMetrics(join(workspace, String(args.filePath ?? '')));
     return { content: [{ type: 'text', text: JSON.stringify(metrics, null, 2) }] };
   },
   'get-symbol-content': async (args, semanticSvc, workspace) => {
     await semanticSvc.ensureInitialized(false, workspace);
     const content = semanticSvc.getSymbolContent(
-      join(workspace, String(args?.filePath)),
-      String(args?.symbolName)
+      join(workspace, String(args.filePath ?? '')),
+      String(args.symbolName ?? '')
     );
     return { content: [{ type: 'text', text: content || '심볼을 찾을 수 없습니다.' }] };
   },
   'analyze-impact': async (args, semanticSvc, workspace) => {
     await semanticSvc.ensureInitialized(false, workspace);
     const impact = await semanticSvc.analyzeImpact(
-      join(workspace, String(args?.filePath)),
-      String(args?.symbolName)
+      join(workspace, String(args.filePath ?? '')),
+      String(args.symbolName ?? '')
     );
     return { content: [{ type: 'text', text: JSON.stringify(impact, null, 2) }] };
   },
   'find-references': async (args, semanticSvc, workspace) => {
     await semanticSvc.ensureInitialized(false, workspace);
-    const refs = semanticSvc.findReferences(String(args?.symbolName));
+    const refs = semanticSvc.findReferences(String(args.symbolName ?? ''));
     return { content: [{ type: 'text', text: JSON.stringify(refs, null, 2) }] };
   },
   'go-to-definition': async (args, semanticSvc, workspace) => {
     await semanticSvc.ensureInitialized(false, workspace);
-    const def = semanticSvc.goToDefinition(String(args?.symbolName));
+    const def = semanticSvc.goToDefinition(String(args.symbolName ?? ''));
     return { content: [{ type: 'text', text: JSON.stringify(def, null, 2) }] };
   },
   'find-dead-code': async (_, semanticSvc, workspace) => {
@@ -82,7 +75,7 @@ As an AI Agent, you are bound by these Standard Operating Procedures. This tool 
   },
   'verify-fix': async (args) => {
     const workflow = new AgentWorkflow();
-    const result = await workflow.verify(args?.testCommand || 'npm test');
+    const result = await workflow.verify(String(args.testCommand ?? 'npm test'));
     return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
   }
 };
