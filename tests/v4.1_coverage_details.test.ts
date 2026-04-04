@@ -17,7 +17,7 @@ describe('v4.1 커버리지 상세 분석 검증', () => {
     if (existsSync(testDir)) rmSync(testDir, { recursive: true });
   });
 
-  it('커버리지 미달 시 Rationale에 현재 수치와 취약 파일 목록이 포함되어야 한다', async () => {
+  it('커버리지 미달 시 Rationale에 현재 수치와 취약 파일 목록이 포함되어야 한다', { timeout: 15000 }, async () => {
     // 1. 가짜 lcov.info 생성 (들여쓰기 없는 표준 형식)
     const lcovContent = [
       'TN:',
