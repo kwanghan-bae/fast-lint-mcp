@@ -23,8 +23,8 @@ import { QualityReport, Violation, QualityProvider } from '../types/index.js';
 
 import { TsProgramManager } from '../utils/TsProgramManager.js';
 
-export // AnalysisService 클래스는 역할을 담당합니다.
-class AnalysisService {
+/** AnalysisService: 전체 분석 파이프라인 오케스트레이션 */
+export class AnalysisService {
   private git: SimpleGit;
   private depGraph: DependencyGraph;
   private coverageAnalyzer: CoverageAnalyzer;
