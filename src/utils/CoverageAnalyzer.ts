@@ -65,7 +65,9 @@ export class CoverageAnalyzer {
           });
         }
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn('[CoverageAnalyzer] 커버리지 파일 stat 실패:', (e as Error).message);
+    }
 
     this.applyGuardrails(currentCoverage, fileCoverageMap, rules, violations);
     return {

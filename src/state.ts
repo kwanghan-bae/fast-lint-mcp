@@ -38,6 +38,7 @@ export class StateManager {
         mkdirSync(this.globalStoragePath, { recursive: true });
       }
     } catch (e) {
+      console.warn('[StateManager] 글로벌 저장소 생성 실패:', (e as Error).message);
       // 폴백: 임시 디렉토리 내 유니크한 경로 사용
       this.globalStoragePath = join(tmpdir(), `fast-lint-mcp-${process.getuid?.() || 'default'}`);
       if (!existsSync(this.globalStoragePath)) {
@@ -58,6 +59,7 @@ export class StateManager {
       const branch = await git.revparse(['--abbrev-ref', 'HEAD']);
       return branch.trim();
     } catch (e) {
+      console.warn('[StateManager] 현재 브랜치 조회 실패, 기본값 사용:', (e as Error).message);
       return 'default';
     }
   }
@@ -69,7 +71,9 @@ export class StateManager {
     let branch = 'default';
     try {
       branch = await this.getCurrentBranch();
-    } catch (e) {}
+    } catch (e) {
+      console.warn('[StateManager] 현재 브랜치 조회 실패, 기본값 사용:', (e as Error).message);
+    }
 
     // v3.7: 경로와 브랜치를 결합하여 격리된 컨텍스트 생성 (MD5 해싱)
     const contextHash = createHash('md5').update(`${this.workspacePath}:${branch}`).digest('hex');
@@ -95,6 +99,7 @@ export class StateManager {
       const state = JSON.parse(content);
       return state.totalCoverage ?? null;
     } catch (e) {
+      console.warn('[StateManager] 이전 커버리지 로드 실패:', (e as Error).message);
       return null;
     }
   }
@@ -117,7 +122,9 @@ export class StateManager {
       writeFileSync(tempPath, JSON.stringify(state, null, 2), 'utf-8');
       const { renameSync } = require('fs');
       renameSync(tempPath, this.stateFilePath);
-    } catch (e) {}
+    } catch (e) {
+      console.warn('[StateManager] 커버리지 저장 실패:', (e as Error).message);
+    }
   }
 
   /**
@@ -147,6 +154,8 @@ export class StateManager {
           }
         }
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn('[StateManager] 오래된 데이터 정리 실패:', (e as Error).message);
+    }
   }
 }

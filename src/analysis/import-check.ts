@@ -123,7 +123,9 @@ async function loadAllDependencies(filePath: string, workspacePath: string): Pro
         const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
         if (pkg.dependencies) Object.keys(pkg.dependencies).forEach((d) => deps.add(d));
         if (pkg.devDependencies) Object.keys(pkg.devDependencies).forEach((d) => deps.add(d));
-      } catch (e) {}
+      } catch (e) {
+        console.warn(`[ImportCheck] package.json 파싱 실패 (${pkgPath}):`, (e as Error).message);
+      }
     }
   };
 

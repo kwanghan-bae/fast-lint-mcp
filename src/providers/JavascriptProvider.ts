@@ -50,7 +50,7 @@ export class JavascriptProvider extends BaseQualityProvider {
       this.mapNativeViolations(filePath, result.violations, violations);
       this.validateMetrics(filePath, result, options, violations);
     } catch (e) {
-      // 분석 실패 시 건너뜀
+      console.warn(`[JavascriptProvider] 네이티브 분석 실패 (${filePath}):`, (e as Error).message);
     }
 
     await this.checkAdditionalRules(filePath, violations);
@@ -153,7 +153,9 @@ export class JavascriptProvider extends BaseQualityProvider {
                 new_string: `${indent}/**\n${indent} * [작성 필요] ${symbolName}의 역할과 목적을 한글로 설명하세요.\n${indent} */\n${targetLine}`
               };
             }
-          } catch (e) {}
+          } catch (e) {
+            console.warn('[JavascriptProvider] fixSuggestion 생성 실패:', (e as Error).message);
+          }
         }
 
         return violation;
