@@ -19,12 +19,13 @@ import os from 'os';
 import { SYSTEM, VERSION } from '../constants.js';
 import { CoverageAnalyzer } from '../utils/CoverageAnalyzer.js';
 import { runBatchAnalysisNative } from '../../native/index.js';
-import { QualityReport, Violation, QualityProvider } from '../types/index.js';
+import { QualityReport, Violation, QualityProvider, ViolationType } from '../types/index.js';
+import type { QualityCheckOptions, AnalysisRules } from '../types/index.js';
 
 import { TsProgramManager } from '../utils/TsProgramManager.js';
 
-export // AnalysisService 클래스는 역할을 담당합니다.
-class AnalysisService {
+/** AnalysisService: 전체 분석 파이프라인 오케스트레이션 */
+export class AnalysisService {
   private git: SimpleGit;
   private depGraph: DependencyGraph;
   private coverageAnalyzer: CoverageAnalyzer;
@@ -45,7 +46,7 @@ class AnalysisService {
     ];
   }
 
-  async runAllChecks(options: any = {}): Promise<QualityReport> {
+  async runAllChecks(options: QualityCheckOptions = {}): Promise<QualityReport> {
     const envCheck = await this.validateEnvironment();
     if (!envCheck.pass) return envCheck.report!;
     const rules = this.resolveRules(options);
@@ -56,8 +57,8 @@ class AnalysisService {
     TsProgramManager.getInstance().init(this.workspacePath, allFiles);
 
     await this.depGraph.build(allFiles);
-    if (this.semantic && typeof (this.semantic as any).ensureInitialized === 'function') {
-      await (this.semantic as any).ensureInitialized(false, this.workspacePath);
+    if (this.semantic && 'ensureInitialized' in this.semantic) {
+      await this.semantic.ensureInitialized(false, this.workspacePath);
     }
     const targetFiles = await this.resolveTargetFiles(incrementalOption, allFiles);
     const lastUpdate = await this.getLatestMtime(targetFiles);
@@ -76,15 +77,15 @@ class AnalysisService {
     if (res.pass) return { pass: true };
     return { 
       pass: false, 
-      report: { 
-        pass: false, 
-        violations: [{ type: 'ENV' as any, message: res.suggestion || 'Error' }],
-        metadata: { analyzedFiles: 0, analysisMode: 'full' as any, timestamp: '', version: VERSION, filesAnalyzed: 0 }
-      } as QualityReport 
+      report: {
+        pass: false,
+        violations: [{ type: 'ENV' as ViolationType, message: res.suggestion || 'Error' }],
+        metadata: { analyzedFiles: 0, analysisMode: 'full', timestamp: '', version: VERSION, filesAnalyzed: 0 }
+      } as QualityReport
     };
   }
 
-  private resolveRules(opt: any) {
+  private resolveRules(opt: QualityCheckOptions): AnalysisRules {
     const r = { ...this.config.rules };
     if (opt.maxLines) r.maxLineCount = opt.maxLines;
     if (opt.maxComplexity) r.maxComplexity = opt.maxComplexity;
@@ -119,7 +120,7 @@ class AnalysisService {
     } catch (e) { return []; }
   }
 
-  private async performFileAnalysis(files: string[], opt: any) {
+  private async performFileAnalysis(files: string[], opt: QualityCheckOptions) {
     const batch = this.prepareBatch(files);
     const results = await pMap(files, async f => { await new Promise(r => setImmediate(r)); return this.analyzeFile(f, opt, batch); }, { concurrency: Math.max(1, os.cpus().length - 1) });
     const violations: Violation[] = [];
@@ -132,11 +133,11 @@ class AnalysisService {
     return new Map(runBatchAnalysisNative(abs).map(r => [normalize(r.file), r]));
   }
 
-  private async analyzeFile(f: string, opt: any, batch: Map<string, any>) {
+  private async analyzeFile(f: string, opt: QualityCheckOptions, batch: Map<string, unknown>) {
     const full = isAbsolute(f) ? f : join(this.workspacePath, f);
     const p = this.providers.find(p => p.extensions.includes(extname(full)));
     if (!p) return null;
-    return { fileViolations: await p.check(full, { ...opt, batchResult: batch.get(normalize(full)) }) };
+    return { fileViolations: await p.check(full, { ...opt, batchResult: batch.get(normalize(full)) } as Parameters<typeof p.check>[1]) };
   }
 
   private async performSelfHealing(files: string[]) {
@@ -148,9 +149,9 @@ class AnalysisService {
     return msgs;
   }
 
-  private async scanTechDebt(all: string[], rules: any, v: Violation[]) {
+  private async scanTechDebt(all: string[], rules: AnalysisRules, v: Violation[]) {
     const count = await countTechDebt(all);
-    if (count > rules.techDebtLimit) v.push({ type: 'TECH_DEBT' as any, value: count, limit: rules.techDebtLimit, message: `기술 부채 과다` });
+    if (count > rules.techDebtLimit) v.push({ type: 'TECH_DEBT', value: count, limit: rules.techDebtLimit, message: `기술 부채 과다` });
   }
 
   private async getLatestMtime(files: string[]) {

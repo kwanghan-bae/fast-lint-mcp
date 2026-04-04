@@ -2,16 +2,17 @@ import { readFileSync, existsSync, statSync } from 'fs';
 import glob from 'fast-glob';
 import { join, normalize, isAbsolute, dirname, relative } from 'path';
 import { Violation } from '../types/index.js';
+import type { QualityCheckOptions, AnalysisRules } from '../types/index.js';
 import { COVERAGE } from '../constants.js';
 import { parseLcovNative } from '../../native/index.js';
 
-export // CoverageAnalyzer 클래스는 역할을 담당합니다.
-class CoverageAnalyzer {
+/** CoverageAnalyzer: LCOV/커버리지 리포트 분석 */
+export class CoverageAnalyzer {
   constructor(private workspacePath: string) {}
 
   async analyze(
-    options: any,
-    rules: any,
+    options: QualityCheckOptions,
+    rules: AnalysisRules,
     lastSrcUpdate: number,
     allProjectFiles: string[],
     violations: Violation[]
@@ -25,7 +26,7 @@ class CoverageAnalyzer {
       });
       return {
         currentCoverage: 0,
-        coverageFreshness: 'missing' as any,
+        coverageFreshness: 'missing' as 'fresh' | 'stale' | 'missing',
         coverageLastUpdated: '',
         coverageInsight: '',
       };
@@ -33,7 +34,7 @@ class CoverageAnalyzer {
     if (!coveragePath)
       return {
         currentCoverage: 0,
-        coverageFreshness: 'missing' as any,
+        coverageFreshness: 'missing' as 'fresh' | 'stale' | 'missing',
         coverageLastUpdated: '',
         coverageInsight: '',
       };
@@ -44,7 +45,7 @@ class CoverageAnalyzer {
     );
     const currentCoverage = total > 0 ? (hit / total) * 100 : 0;
 
-    let coverageFreshness: any = 'missing';
+    let coverageFreshness: 'fresh' | 'stale' | 'missing' = 'missing';
     try {
       if (existsSync(coveragePath)) {
         const coverageStat = statSync(coveragePath);
@@ -64,7 +65,9 @@ class CoverageAnalyzer {
           });
         }
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn('[CoverageAnalyzer] 커버리지 파일 stat 실패:', (e as Error).message);
+    }
 
     this.applyGuardrails(currentCoverage, fileCoverageMap, rules, violations);
     return {
@@ -80,14 +83,14 @@ class CoverageAnalyzer {
    * 프로젝트 내에서 가장 적절한 커버리지 리포트 파일(lcov.info 등)의 경로를 탐색합니다.
    * 지정된 경로가 없으면 기본 위치들을 재귀적으로 검색합니다.
    */
-  private async findCoveragePath(options: any, rules: any): Promise<string | undefined> {
+  private async findCoveragePath(options: QualityCheckOptions, rules: AnalysisRules & { coveragePath?: string; coverageDirectory?: string }): Promise<string | undefined> {
     let path = options.coveragePath || rules.coveragePath;
     if (path) {
       const full = isAbsolute(path) ? path : join(this.workspacePath, path);
       if (existsSync(full)) return full;
     }
     const standardPaths = [
-      join(this.workspacePath, rules.coverageDirectory, 'lcov.info'),
+      ...(rules.coverageDirectory ? [join(this.workspacePath, rules.coverageDirectory, 'lcov.info')] : []),
       join(this.workspacePath, 'coverage', 'lcov.info'),
       join(this.workspacePath, 'coverage', 'coverage-summary.json'),
     ];
@@ -164,8 +167,8 @@ class CoverageAnalyzer {
    */
   private applyGuardrails(
     current: number,
-    map: Map<string, any>,
-    rules: any,
+    map: Map<string, { total: number; hit: number }>,
+    rules: AnalysisRules,
     violations: Violation[]
   ) {
     // 1. 전체 프로젝트 커버리지 기준 검증
@@ -178,8 +181,8 @@ class CoverageAnalyzer {
   /** 프로젝트 전체 커버리지가 기준치에 미달하는지 확인합니다. */
   private checkTotalCoverage(
     current: number,
-    map: Map<string, any>,
-    rules: any,
+    map: Map<string, { total: number; hit: number }>,
+    rules: AnalysisRules,
     violations: Violation[]
   ) {
     if (current >= rules.minCoverage) return;
@@ -213,7 +216,7 @@ class CoverageAnalyzer {
   }
 
   /** 개별 파일의 커버리지가 최소 유지 기준(50%)에 미달하는지 확인합니다. */
-  private checkIndividualFileCoverage(map: Map<string, any>, violations: Violation[]) {
+  private checkIndividualFileCoverage(map: Map<string, { total: number; hit: number }>, violations: Violation[]) {
     for (const [file, data] of map.entries()) {
       const pct = data.total > 0 ? (data.hit / data.total) * 100 : 0;
       const relFile = relative(this.workspacePath, file);
@@ -240,7 +243,7 @@ class CoverageAnalyzer {
    * 커버리지 분석 결과를 바탕으로 사용자에게 제공할 인사이트 메시지를 생성합니다.
    * 주요 취약 파일(Top 3) 목록을 포함합니다.
    */
-  private generateInsight(map: Map<string, any>): string {
+  private generateInsight(map: Map<string, { total: number; hit: number }>): string {
     const lowFiles = Array.from(map.entries())
       .map(([file, data]) => ({
         file: relative(this.workspacePath, file),

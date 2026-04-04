@@ -22,7 +22,7 @@ describe('AgentWorkflow (Self-Healing)', () => {
     const fixLogic = async () => 'const a = 1;';
 
     // 가짜 테스트 명령어 (항상 성공)
-    const result = await workflow.selfHeal(filePath, fixLogic, 'echo "Success"', 3);
+    const result = await workflow.selfHeal(filePath, fixLogic, 'node --version', 3);
 
     expect(result.success).toBe(true);
     expect(result.iterations).toBe(1);
@@ -34,8 +34,8 @@ describe('AgentWorkflow (Self-Healing)', () => {
 
     const fixLogic = async () => 'const a = 1;';
 
-    // 가짜 테스트 명령어 (항상 실패)
-    const result = await workflow.selfHeal(filePath, fixLogic, 'exit 1', 2);
+    // 가짜 테스트 명령어 (항상 실패 — 존재하지 않는 파일)
+    const result = await workflow.selfHeal(filePath, fixLogic, 'node __nonexistent_file__.js', 2);
 
     expect(result.success).toBe(false);
     expect(result.iterations).toBe(2);
@@ -44,10 +44,10 @@ describe('AgentWorkflow (Self-Healing)', () => {
   it('verify 메서드가 테스트 결과를 반환해야 한다', () => {
     const workflow = new AgentWorkflow(testDir);
 
-    const passResult = workflow.verify('echo "Pass"');
+    const passResult = workflow.verify('node --version');
     expect(passResult.success).toBe(true);
 
-    const failResult = workflow.verify('exit 1');
+    const failResult = workflow.verify('node __nonexistent_file__.js');
     expect(failResult.success).toBe(false);
     expect(failResult.error).toBeDefined();
   });

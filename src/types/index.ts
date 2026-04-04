@@ -30,8 +30,8 @@ export interface Violation {
   snippet?: string; // 위반이 발생한 코드 조각
   rationale?: string; // 도구가 이 위반을 판정한 구체적인 근거 (예: "심볼 타입: Function")
   message: string; // 위반 내용에 대한 상세 설명
-  value?: any; // 현재 측정값 (선택 사항)
-  limit?: any; // 허용되는 기준값 (선택 사항)
+  value?: number | string; // 현재 측정값 (선택 사항)
+  limit?: number | string; // 허용되는 기준값 (선택 사항)
   id?: string; // 규칙 식별자 (선택 사항)
   /** 
    * (v3.9.2 Agentic DX) 에이전트가 즉시 적용할 수 있는 수치 제안 
@@ -115,3 +115,43 @@ export interface QualityProvider {
    */
   fix?(files: string[], workspacePath: string): Promise<{ fixedCount: number; messages: string[] }>;
 }
+
+/** quality-check 도구 옵션 */
+export interface QualityCheckOptions {
+  maxLines?: number;
+  maxComplexity?: number;
+  minCoverage?: number;
+  techDebtLimit?: number;
+  targetPath?: string;
+  incremental?: boolean;
+  forceFullScan?: boolean;
+  forceRefresh?: boolean;
+  excludePattern?: string;
+  coveragePath?: string;
+  includeNative?: boolean;
+}
+
+/** 분석 규칙 설정 */
+export interface AnalysisRules {
+  maxLineCount: number;
+  maxComplexity: number;
+  minCoverage: number;
+  techDebtLimit: number;
+}
+
+/** MCP 도구 응답 포맷 */
+export interface ToolResponse {
+  content: Array<{ type: string; text: string }>;
+  isError?: boolean;
+}
+
+/** AnalyzerFactory 타입 */
+export type AnalyzerFactory = (workspace: string) => import('../service/AnalysisService.js').AnalysisService;
+
+/** ToolHandler 함수 시그니처 */
+export type ToolHandler = (
+  args: Record<string, unknown>,
+  semanticSvc: import('../service/SemanticService.js').SemanticService,
+  workspace: string,
+  getAnalyzer: AnalyzerFactory,
+) => Promise<ToolResponse>;

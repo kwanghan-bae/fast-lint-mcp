@@ -51,7 +51,9 @@ export class SymbolIndexer {
               this.exportedSymbols.push({ name: s.name, file: f });
             }
           }
-        } catch (e) {}
+        } catch (e) {
+          console.warn(`[SymbolIndexer] 파일 인덱싱 실패 (${f}):`, (e as Error).message);
+        }
       },
       { concurrency: cpu }
     );

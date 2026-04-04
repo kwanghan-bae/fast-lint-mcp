@@ -76,7 +76,9 @@ export async function checkPackageAudit(): Promise<Violation[]> {
           },
         ];
       }
-    } catch (inner) {}
+    } catch (inner) {
+      console.warn('[Security] npm audit 결과 파싱 실패:', (inner as Error).message);
+    }
   }
   return [];
 }

@@ -8,6 +8,30 @@ export interface FixResult {
   iterations: number;
 }
 
+const ALLOWED_PREFIXES = ['npm', 'npx', 'yarn', 'pnpm', 'jest', 'vitest', 'mocha', 'node'];
+const FORBIDDEN_CHARS = /[;|&`$(){}<>\n\r]/;
+
+/**
+ * testCommand 입력값을 검증하여 Command Injection을 방어합니다.
+ * - 빈 문자열이면 'npm test'를 반환합니다.
+ * - 허용되지 않은 명령어 접두사 또는 쉘 메타문자가 포함된 경우 오류를 던집니다.
+ */
+export function validateTestCommand(command: string): string {
+  const trimmed = command.trim();
+  if (!trimmed) return 'npm test';
+
+  if (FORBIDDEN_CHARS.test(trimmed)) {
+    throw new Error(`허용되지 않은 문자가 포함된 명령어입니다: ${trimmed}`);
+  }
+
+  const firstToken = trimmed.split(/\s+/)[0];
+  if (!ALLOWED_PREFIXES.includes(firstToken)) {
+    throw new Error(`허용되지 않은 명령어입니다: ${firstToken}`);
+  }
+
+  return trimmed;
+}
+
 /**
  * 자율형 자가 치유 워크플로우를 관장합니다.
  */
@@ -27,6 +51,14 @@ export class AgentWorkflow {
     testCommand: string = 'npm test',
     maxRetries: number = 3
   ): Promise<FixResult> {
+    let validatedCommand: string;
+    try {
+      validatedCommand = validateTestCommand(testCommand);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { success: false, error: message, iterations: 0 };
+    }
+
     let iterations = 0;
     let lastError: string | undefined;
 
@@ -41,7 +73,7 @@ export class AgentWorkflow {
 
       // 3. 테스트 실행 및 검증
       try {
-        execSync(testCommand, { cwd: this.workspacePath, stdio: 'pipe' });
+        execSync(validatedCommand, { cwd: this.workspacePath, stdio: 'pipe' });
         // 테스트 통과 시 성공 반환
         return { success: true, iterations };
       } catch (error: unknown) {
@@ -59,8 +91,16 @@ export class AgentWorkflow {
    * 단순 테스트 검증 도구
    */
   verify(testCommand: string = 'npm test'): { success: boolean; error?: string } {
+    let validatedCommand: string;
     try {
-      execSync(testCommand, { cwd: this.workspacePath, stdio: 'pipe' });
+      validatedCommand = validateTestCommand(testCommand);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { success: false, error: message };
+    }
+
+    try {
+      execSync(validatedCommand, { cwd: this.workspacePath, stdio: 'pipe' });
       return { success: true };
     } catch (error: unknown) {
       const err = error as { stderr?: Buffer; stdout?: Buffer; message?: string };
