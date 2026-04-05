@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'fs';
 import { extractSymbolsRustNative } from '../../native/index.js';
-import { Violation } from '../types/index.js';
+import { Violation, ViolationType } from '../types/index.js';
 import { BaseQualityProvider } from './BaseQualityProvider.js';
 import { READABILITY } from '../constants.js';
 import { checkArchitecture } from '../analysis/import-check.js';
@@ -102,7 +102,7 @@ export class RustProvider extends BaseQualityProvider {
       const archViolations = await checkArchitecture(filePath, architectureRules, process.cwd());
       violations.push(
         ...archViolations.map((av) => ({
-          type: 'ARCHITECTURE' as any,
+          type: 'ARCHITECTURE' as ViolationType,
           file: filePath,
           message: av.message,
         }))
