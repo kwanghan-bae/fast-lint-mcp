@@ -18,7 +18,7 @@ export class DependencyGraph {
   /** 각 파일이 임포트하고 있는 대상 목록 (File -> Imports) */
   private importMap: Map<string, string[]> = new Map();
   /** 각 파일을 임포트하고 있는 상위 파일 목록 (File -> Dependents) */
-  private dependentMap: Map<string, string[]> = new Map();
+  private dependentMap: Map<string, Set<string>> = new Map();
 
   /**
    * DependencyGraph 인스턴스를 생성합니다.
@@ -80,12 +80,9 @@ export class DependencyGraph {
       // 역의존성 맵 구축
       for (const imp of uniqueImports) {
         if (!this.dependentMap.has(imp)) {
-          this.dependentMap.set(imp, []);
+          this.dependentMap.set(imp, new Set());
         }
-        const deps = this.dependentMap.get(imp)!;
-        if (!deps.includes(file)) {
-          deps.push(file);
-        }
+        this.dependentMap.get(imp)!.add(file);  // O(1)
       }
     }
   }
@@ -95,7 +92,8 @@ export class DependencyGraph {
    * @param filePath 대상 파일 경로
    */
   getDependents(filePath: string): string[] {
-    return this.dependentMap.get(normalize(filePath)) || [];
+    const deps = this.dependentMap.get(normalize(filePath));
+    return deps ? Array.from(deps) : [];
   }
 
   /**

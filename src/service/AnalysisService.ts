@@ -122,7 +122,11 @@ export class AnalysisService {
 
   private async performFileAnalysis(files: string[], opt: QualityCheckOptions) {
     const batch = this.prepareBatch(files);
-    const results = await pMap(files, async f => { await new Promise(r => setImmediate(r)); return this.analyzeFile(f, opt, batch); }, { concurrency: Math.max(1, os.cpus().length - 1) });
+    let fileIndex = 0;
+    const results = await pMap(files, async f => {
+      if (++fileIndex % 50 === 0) await new Promise(r => setImmediate(r));
+      return this.analyzeFile(f, opt, batch);
+    }, { concurrency: Math.max(1, os.cpus().length - 1) });
     const violations: Violation[] = [];
     results.forEach(r => { if (r) violations.push(...r.fileViolations); });
     return violations;
