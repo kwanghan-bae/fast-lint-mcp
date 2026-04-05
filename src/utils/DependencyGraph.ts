@@ -18,7 +18,7 @@ export class DependencyGraph {
   /** 각 파일이 임포트하고 있는 대상 목록 (File -> Imports) */
   private importMap: Map<string, string[]> = new Map();
   /** 각 파일을 임포트하고 있는 상위 파일 목록 (File -> Dependents) */
-  private dependentMap: Map<string, Set<string>> = new Map();
+  private dependentMap: Map<string, string[]> = new Map();
 
   /**
    * DependencyGraph 인스턴스를 생성합니다.
@@ -54,20 +54,31 @@ export class DependencyGraph {
     const nativeResults = extractImportsNative(allFiles);
 
     // 4. 추출된 임포트 원본을 네이티브 리졸버로 해소하여 그래프를 완성합니다.
+    // 인메모리 캐시: (dir, source) → resolved 결과를 재사용하여 FFI 호출 횟수를 최소화합니다.
+    const resolveCache = new Map<string, string | null>();
+
     for (const res of nativeResults) {
       const file = normalize(res.file);
       const dir = dirname(file);
       const resolvedImports: string[] = [];
 
       for (const source of res.imports) {
-        // v0.0.1: Native Resolver 호출 (I/O 캐시 활용)
-        const resolved = resolveModulePathNative(
-          dir,
-          source,
-          this.workspacePath,
-          tsconfig?.baseUrl || null,
-          tsconfig?.paths || null
-        );
+        const cacheKey = `${dir}::${source}`;
+
+        let resolved: string | null;
+        if (resolveCache.has(cacheKey)) {
+          resolved = resolveCache.get(cacheKey)!;
+        } else {
+          // v0.0.1: Native Resolver 호출 (I/O 캐시 활용)
+          resolved = resolveModulePathNative(
+            dir,
+            source,
+            this.workspacePath,
+            tsconfig?.baseUrl || null,
+            tsconfig?.paths || null
+          );
+          resolveCache.set(cacheKey, resolved);
+        }
 
         if (resolved) {
           resolvedImports.push(normalize(resolved));
@@ -80,9 +91,12 @@ export class DependencyGraph {
       // 역의존성 맵 구축
       for (const imp of uniqueImports) {
         if (!this.dependentMap.has(imp)) {
-          this.dependentMap.set(imp, new Set());
+          this.dependentMap.set(imp, []);
         }
-        this.dependentMap.get(imp)!.add(file);  // O(1)
+        const deps = this.dependentMap.get(imp)!;
+        if (!deps.includes(file)) {
+          deps.push(file);
+        }
       }
     }
   }
@@ -92,8 +106,7 @@ export class DependencyGraph {
    * @param filePath 대상 파일 경로
    */
   getDependents(filePath: string): string[] {
-    const deps = this.dependentMap.get(normalize(filePath));
-    return deps ? Array.from(deps) : [];
+    return this.dependentMap.get(normalize(filePath)) || [];
   }
 
   /**
