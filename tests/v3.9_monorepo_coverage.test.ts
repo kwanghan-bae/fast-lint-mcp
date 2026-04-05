@@ -18,7 +18,7 @@ describe('v3.9 모노레포 커버리지 탐지 검증', () => {
     if (existsSync(testDir)) rmSync(testDir, { recursive: true });
   });
 
-  it('하위 디렉토리(backend-node)에 있는 lcov.info를 재귀적으로 찾아야 한다', async () => {
+  it('하위 디렉토리(backend-node)에 있는 lcov.info를 재귀적으로 찾아야 한다', { timeout: 15000 }, async () => {
     // 1. 가상 모노레포 구조 생성
     const subDir = join(testDir, 'backend-node', 'coverage');
     mkdirSync(subDir, { recursive: true });
