@@ -76,8 +76,8 @@ export class RustProvider extends BaseQualityProvider {
       this.addComplexityViolation(filePath, totalComplexity, maxComplexity, false, violations);
 
     } catch (e) {
-      console.error('RustProvider Error:', e);
-      // 파싱 실패 시 조용히 넘어감
+      console.warn(`[RustProvider] 네이티브 분석 실패 (${filePath}):`, (e as Error).message);
+      // Don't add violation — silent degradation is OK for native parse failures
     }
 
     // 아키텍처 의존성 체크 (다른 프로바이더와 동일하게 유지)

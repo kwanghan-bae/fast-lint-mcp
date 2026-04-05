@@ -153,11 +153,20 @@ export class AnalysisService {
     return Array.from(affected).filter(f => exts.includes(extname(f)));
   }
 
-  private async getChangedFiles() {
-    try {
-      const s = await this.git.status();
-      return [...s.modified, ...s.not_added, ...s.created, ...s.staged].map(f => normalize(f));
-    } catch (e) { return []; }
+  private async getChangedFiles(): Promise<string[]> {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const s = await this.git.status();
+        return [...s.modified, ...s.not_added, ...s.created, ...s.staged].map(f => normalize(f));
+      } catch (e) {
+        if (attempt === 2) {
+          console.warn('[AnalysisService] Git status 최종 실패, 전체 분석으로 대체:', (e as Error).message);
+          return [];
+        }
+        await new Promise(r => setTimeout(r, 100 * (attempt + 1)));
+      }
+    }
+    return [];
   }
 
   private async performFileAnalysis(files: string[], opt: QualityCheckOptions) {
