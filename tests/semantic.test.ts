@@ -23,7 +23,7 @@ describe('SemanticService (v3.7.5 Engine)', () => {
     if (existsSync(testProjectRoot)) rmSync(testProjectRoot, { recursive: true, force: true });
   });
 
-  it.skip('getSymbolMetrics는 파일 내 심볼과 복잡도를 추출해야 한다', async () => {
+  it('getSymbolMetrics는 파일 내 심볼과 복잡도를 추출해야 한다', async () => {
     const semantic = new SemanticService();
     // 테스트 대상 워크스페이스 명시적 초기화
     await semantic.ensureInitialized(true, testProjectRoot);

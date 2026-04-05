@@ -21,7 +21,7 @@ describe('Semantic Service Ultimate Test (v3.7.5 Syntax Matrix)', () => {
     if (existsSync(testProjectRoot)) rmSync(testProjectRoot, { recursive: true, force: true });
   });
 
-  it.skip('현대 TS/JS의 모든 내보내기 및 선언 방식을 탐지해야 한다', async () => {
+  it('현대 TS/JS의 모든 내보내기 및 선언 방식을 탐지해야 한다', async () => {
     const semantic = new SemanticService();
     const filePath = join(testProjectRoot, 'syntax.ts');
     const code = `
@@ -43,7 +43,7 @@ describe('Semantic Service Ultimate Test (v3.7.5 Syntax Matrix)', () => {
     expect(names).toContain('arrow');
   });
 
-  it.skip('초대형 파일에서도 성능과 안정성을 유지해야 한다', async () => {
+  it('초대형 파일에서도 성능과 안정성을 유지해야 한다', async () => {
     const semantic = new SemanticService();
     const filePath = join(testProjectRoot, 'Large.ts');
     const functions = Array.from(
