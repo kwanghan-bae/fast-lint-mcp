@@ -32,6 +32,7 @@ export class AnalysisService {
   private providers: QualityProvider[] = [];
   private reportService: ReportService;
   private workspacePath: string;
+  private perfMetrics: Record<string, number> = {};
 
   constructor(private stateManager: StateManager, private config: ConfigService, private semantic: SemanticService) {
     this.workspacePath = this.config.workspacePath || process.cwd();
@@ -47,27 +48,66 @@ export class AnalysisService {
   }
 
   async runAllChecks(options: QualityCheckOptions = {}): Promise<QualityReport> {
+    this.perfMetrics = {};
+    let t = performance.now();
+
     const envCheck = await this.validateEnvironment();
+    this.perfMetrics.envValidation = Math.round(performance.now() - t);
     if (!envCheck.pass) return envCheck.report!;
+
     const rules = this.resolveRules(options);
     const incrementalOption = options.forceFullScan ? false : (options.incremental ?? this.config.incremental);
+
+    t = performance.now();
     const allFiles = await this.scanProjectFiles();
+    this.perfMetrics.fileScan = Math.round(performance.now() - t);
 
     // v3.9.5: TypeScript 컴파일러 서비스 초기화
+    t = performance.now();
     TsProgramManager.getInstance().init(this.workspacePath, allFiles);
+    this.perfMetrics.tsProgramInit = Math.round(performance.now() - t);
 
+    t = performance.now();
     await this.depGraph.build(allFiles);
+    this.perfMetrics.depGraphBuild = Math.round(performance.now() - t);
+
+    t = performance.now();
     if (this.semantic && 'ensureInitialized' in this.semantic) {
       await this.semantic.ensureInitialized(false, this.workspacePath);
     }
+    this.perfMetrics.semanticInit = Math.round(performance.now() - t);
+
     const targetFiles = await this.resolveTargetFiles(incrementalOption, allFiles);
+
+    t = performance.now();
     const lastUpdate = await this.getLatestMtime(targetFiles);
+    this.perfMetrics.mtimeScan = Math.round(performance.now() - t);
+
+    t = performance.now();
     const healing = await this.performSelfHealing(targetFiles);
+    this.perfMetrics.selfHealing = Math.round(performance.now() - t);
+
+    t = performance.now();
     const violations = await this.performFileAnalysis(targetFiles, options);
+    this.perfMetrics.fileAnalysis = Math.round(performance.now() - t);
+
+    t = performance.now();
     violations.push(...checkStructuralIntegrity(this.depGraph));
     await this.scanTechDebt(allFiles, rules, violations);
+    this.perfMetrics.techDebtScan = Math.round(performance.now() - t);
+
+    t = performance.now();
     const coverage = await this.coverageAnalyzer.analyze(options, rules, lastUpdate, allFiles, violations);
+    this.perfMetrics.coverageAnalysis = Math.round(performance.now() - t);
+
+    t = performance.now();
     const report = await this.reportService.assemble(violations, coverage, healing, targetFiles, incrementalOption && targetFiles.length < allFiles.length);
+    this.perfMetrics.reportAssembly = Math.round(performance.now() - t);
+
+    if (report.metadata) {
+      report.metadata.performanceMs = this.perfMetrics;
+    }
+
     this.cleanupCaches();
     return report;
   }
