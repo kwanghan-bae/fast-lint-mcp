@@ -1,6 +1,6 @@
 {
   "name": "fast-lint-mcp",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "AI-native Quality Gate MCP Server",
   "main": "dist/index.js",
   "bin": {

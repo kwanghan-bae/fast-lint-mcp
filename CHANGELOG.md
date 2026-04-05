@@ -1,5 +1,36 @@
 # 변경 이력 (Changelog)
 
+## [0.1.0] - 2026-04-05
+
+### 품질 개선
+- **타입 안전성 100%**: `any` 타입 40건 → 0건 완전 제거, Native FFI 타입 전면 적용
+- **에러 처리 강화**: empty catch 블록 11건 → 0건, 전체 경고 로깅 추가
+- **보안**: Command Injection 방어 (execSync 입력 검증)
+- **Export 문법 오류**: `export // comment` 패턴 2건 수정
+
+### 성능 최적화
+- **DependencyGraph**: `includes()` O(n) → `Set.add()` O(1) 변경
+- **DependencyGraph**: 모듈 리졸브 캐시 추가 (중복 FFI 호출 제거)
+- **AnalysisService**: setImmediate 배치 yield (매 파일 → 50파일마다)
+
+### 테스트
+- 테스트 수: 181 → **275** (+94)
+- 스킵 테스트: 6 → **0** (전체 복구)
+- 실패 테스트: **0**
+- 신규 테스트 파일 9개 추가 (handlers, ReportService, TsProgramManager, CLI, 보안, BaseQualityProvider, constants 등)
+- 폐기된 native_hallucination 테스트 2파일 삭제
+
+### 아키텍처
+- `checkStructuralIntegrity` → `StructuralIntegrity.ts` 분리
+- `generateComplexityAdvice` → `ComplexityAdvisor.ts` 분리
+- `toolHandlers` → `agent/handlers.ts` 분리 (전략 패턴)
+
+### 인프라
+- GitHub Actions CI/CD (Node 18/20/22 매트릭스 + Rust 빌드)
+- npm publish 워크플로우 (v* 태그 트리거)
+
+---
+
 ## [2.1.2] - 2026-02-26 (목요일)
 
 ### 추가 ✨
