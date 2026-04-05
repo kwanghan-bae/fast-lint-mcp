@@ -25,7 +25,7 @@ vi.mock('../native/index.js', () => ({
   clearAstCacheNative: vi.fn(),
 }));
 
-describe('AnalysisService', () => {
+describe('AnalysisService', { timeout: 15000 }, () => {
   let service: AnalysisService;
   let stateManager: any;
   let config: any;

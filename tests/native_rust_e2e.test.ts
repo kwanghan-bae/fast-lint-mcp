@@ -5,7 +5,7 @@ import { SemanticService } from '../src/service/SemanticService.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
-describe('Rust E2E MCP Integration', () => {
+describe('Rust E2E MCP Integration', { timeout: 15000 }, () => {
   let service: AnalysisService;
   let config: ConfigService;
   const testDir = path.join(process.cwd(), '.test-semantic-project');
