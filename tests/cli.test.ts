@@ -5,6 +5,7 @@ import { join } from 'path';
 const ROOT = join(__dirname, '..');
 const CLI = join(ROOT, 'src/cli.ts');
 
+// runCLI 함수는 내부 로직을 처리합니다.
 function runCLI(args: string): { stdout: string; stderr: string; exitCode: number } {
   try {
     const stdout = execSync(`npx tsx ${CLI} ${args}`, {
