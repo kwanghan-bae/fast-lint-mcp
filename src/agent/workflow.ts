@@ -1,6 +1,7 @@
 import { execSync } from 'child_process';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
+import { Logger } from '../utils/Logger.js';
 
 export interface FixResult {
   success: boolean;
@@ -80,7 +81,7 @@ export class AgentWorkflow {
         // 테스트 실패 시 에러 로그 캡처 및 재시도
         const err = error as { stderr?: Buffer; stdout?: Buffer; message?: string };
         lastError = err.stderr?.toString() || err.stdout?.toString() || err.message;
-        console.error(`[Iteration ${iterations}] Test failed:`, lastError);
+        Logger.error('AgentWorkflow', `[Iteration ${iterations}] Test failed`, lastError);
       }
     }
 

@@ -2,6 +2,7 @@ import { readFileSync, existsSync } from 'fs';
 import { Lang, parse, SgNode } from '@ast-grep/napi';
 import { CustomRule } from '../config.js';
 import { AstCacheManager } from '../utils/AstCacheManager.js';
+import { Logger } from '../utils/Logger.js';
 
 /**
  * 개별 파일의 분석 결과를 담는 인터페이스입니다.
@@ -151,7 +152,7 @@ export async function analyzeFile(
       customViolations,
     };
   } catch (error) {
-    console.error(`Error analyzing file ${filePath}:`, error);
+    Logger.error('SG', `파일 분석 실패 (${filePath})`, (error as Error).message);
     throw error;
   }
 }

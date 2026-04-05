@@ -1,6 +1,7 @@
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { z } from 'zod';
+import { Logger } from './utils/Logger.js';
 
 /**
  * 사용자 정의 검사 규칙을 정의하는 스키마입니다.
@@ -113,7 +114,7 @@ export class ConfigService {
             return JSON.parse(content);
           }
         } catch (e) {
-          console.warn(`Warning: Failed to parse ${path}`);
+          Logger.warn('ConfigService', `설정 파일 파싱 실패 (${path})`);
         }
       }
     }

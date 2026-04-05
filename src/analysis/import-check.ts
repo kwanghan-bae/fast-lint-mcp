@@ -9,6 +9,7 @@ import {
 } from '../../native/index.js';
 import { ArchitectureRule, Violation } from '../types/index.js';
 import { builtinModules } from 'module';
+import { Logger } from '../utils/Logger.js';
 
 /** 프로젝트 파일 캐시 */
 const projectFilesCache = new Map<string, string[]>();
@@ -125,7 +126,7 @@ async function loadAllDependencies(filePath: string, workspacePath: string): Pro
         if (pkg.dependencies) Object.keys(pkg.dependencies).forEach((d) => deps.add(d));
         if (pkg.devDependencies) Object.keys(pkg.devDependencies).forEach((d) => deps.add(d));
       } catch (e) {
-        console.warn(`[ImportCheck] package.json 파싱 실패 (${pkgPath}):`, (e as Error).message);
+        Logger.warn('ImportCheck', `package.json 파싱 실패 (${pkgPath})`, (e as Error).message);
       }
     }
   };

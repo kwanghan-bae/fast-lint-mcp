@@ -4,6 +4,7 @@ import { Violation, ViolationType } from '../types/index.js';
 import { BaseQualityProvider } from './BaseQualityProvider.js';
 import { READABILITY } from '../constants.js';
 import { checkArchitecture } from '../analysis/import-check.js';
+import { Logger } from '../utils/Logger.js';
 
 /**
  * Rust 프로바이더
@@ -76,7 +77,7 @@ export class RustProvider extends BaseQualityProvider {
       this.addComplexityViolation(filePath, totalComplexity, maxComplexity, false, violations);
 
     } catch (e) {
-      console.warn(`[RustProvider] 네이티브 분석 실패 (${filePath}):`, (e as Error).message);
+      Logger.warn('RustProvider', `네이티브 분석 실패 (${filePath})`, (e as Error).message);
       // Don't add violation — silent degradation is OK for native parse failures
     }
 

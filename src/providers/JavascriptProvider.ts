@@ -9,6 +9,7 @@ import { checkArchitecture, extractImportsFromFile } from '../analysis/import-ch
 import { AstCacheManager } from '../utils/AstCacheManager.js';
 import { runSelfHealing } from '../checkers/fixer.js';
 import { generateComplexityAdvice } from './ComplexityAdvisor.js';
+import { Logger } from '../utils/Logger.js';
 
 /**
  * JavaScript 및 TypeScript 언어에 특화된 품질 분석을 수행하는 프로바이더 클래스입니다.
@@ -35,7 +36,7 @@ export class JavascriptProvider extends BaseQualityProvider {
       this.mapNativeViolations(filePath, result.violations, violations);
       this.validateMetrics(filePath, result, options, violations);
     } catch (e) {
-      console.warn(`[JavascriptProvider] 네이티브 분석 실패 (${filePath}):`, (e as Error).message);
+      Logger.warn('JavascriptProvider', `네이티브 분석 실패 (${filePath})`, (e as Error).message);
     }
 
     await this.checkAdditionalRules(filePath, violations);
@@ -144,7 +145,7 @@ export class JavascriptProvider extends BaseQualityProvider {
               };
             }
           } catch (e) {
-            console.warn('[JavascriptProvider] fixSuggestion 생성 실패:', (e as Error).message);
+            Logger.warn('JavascriptProvider', 'fixSuggestion 생성 실패', (e as Error).message);
           }
         }
 

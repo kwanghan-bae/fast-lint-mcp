@@ -4,6 +4,7 @@ import os from 'os';
 import { findReferencesNative, scanFiles } from '../../native/index.js';
 import { SYSTEM } from '../constants.js';
 import { AstCacheManager } from './AstCacheManager.js';
+import { Logger } from './Logger.js';
 
 /**
  * 프로젝트 전체 심볼의 정의 및 참조 관계를 인덱싱합니다.
@@ -52,7 +53,7 @@ export class SymbolIndexer {
             }
           }
         } catch (e) {
-          console.warn(`[SymbolIndexer] 파일 인덱싱 실패 (${f}):`, (e as Error).message);
+          Logger.warn('SymbolIndexer', `파일 인덱싱 실패 (${f})`, (e as Error).message);
         }
       },
       { concurrency: cpu }

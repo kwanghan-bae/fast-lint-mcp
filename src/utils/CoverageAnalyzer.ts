@@ -5,6 +5,7 @@ import { Violation } from '../types/index.js';
 import type { QualityCheckOptions, AnalysisRules } from '../types/index.js';
 import { COVERAGE } from '../constants.js';
 import { parseLcovNative, FileCoverageResult } from '../../native/index.js';
+import { Logger } from './Logger.js';
 
 /** CoverageAnalyzer: LCOV/커버리지 리포트 분석 */
 export class CoverageAnalyzer {
@@ -66,7 +67,7 @@ export class CoverageAnalyzer {
         }
       }
     } catch (e) {
-      console.warn('[CoverageAnalyzer] 커버리지 파일 stat 실패:', (e as Error).message);
+      Logger.warn('CoverageAnalyzer', '커버리지 파일 stat 실패', (e as Error).message);
     }
 
     this.applyGuardrails(currentCoverage, fileCoverageMap, rules, violations);

@@ -1,6 +1,7 @@
 import { execSync } from 'child_process';
 import { readFileSync, existsSync } from 'fs';
 import { Violation } from '../types/index.js';
+import { Logger } from '../utils/Logger.js';
 
 const SECRET_PATTERNS = [
   {
@@ -78,7 +79,7 @@ export async function checkPackageAudit(): Promise<Violation[]> {
         ];
       }
     } catch (inner) {
-      console.warn('[Security] npm audit 결과 파싱 실패:', (inner as Error).message);
+      Logger.warn('Security', 'npm audit 결과 파싱 실패', (inner as Error).message);
     }
   }
   return [];
