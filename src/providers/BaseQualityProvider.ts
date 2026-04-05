@@ -1,4 +1,5 @@
 import { Violation, QualityProvider } from '../types/index.js';
+import { BatchResult } from '../../native/index.js';
 import { ConfigService } from '../config.js';
 import { SemanticService } from '../service/SemanticService.js';
 
@@ -50,7 +51,7 @@ export abstract class BaseQualityProvider implements QualityProvider {
       securityThreshold?: number;
       maxLines?: number;
       maxComplexity?: number;
-      batchResult?: any;
+      batchResult?: BatchResult;
     }
   ): Promise<Violation[]>;
 

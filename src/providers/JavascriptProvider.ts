@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'fs';
-import { runUltimateAnalysisNative, ReviewOptions } from '../../native/index.js';
+import { runUltimateAnalysisNative, ReviewOptions, UltimateAnalysisResult, Violation as NativeViolation } from '../../native/index.js';
 import { Violation } from '../types/index.js';
 import { BaseQualityProvider } from './BaseQualityProvider.js';
 import { READABILITY } from '../constants.js';
@@ -66,11 +66,16 @@ export class JavascriptProvider extends BaseQualityProvider {
   }
 
   /** 파일의 라인 수와 복잡도 메트릭을 검증합니다. */
-  private validateMetrics(filePath: string, result: any, options: any, violations: Violation[]) {
-    const isDataFile = result.line_count > 50 && result.complexity / result.line_count < 0.1;
+  private validateMetrics(
+    filePath: string,
+    result: UltimateAnalysisResult,
+    options: { maxLines?: number; maxComplexity?: number; securityThreshold?: number; batchResult?: unknown } | undefined,
+    violations: Violation[]
+  ) {
+    const isDataFile = result.lineCount > 50 && result.complexity / result.lineCount < 0.1;
     const { maxLines, maxComplexity } = this.getEffectiveLimits(isDataFile, options);
 
-    this.validateSize(filePath, result.line_count, maxLines, isDataFile, violations);
+    this.validateSize(filePath, result.lineCount, maxLines, isDataFile, violations);
     this.validateComplexity(filePath, result.complexity, maxComplexity, isDataFile, violations);
   }
 
@@ -107,13 +112,13 @@ export class JavascriptProvider extends BaseQualityProvider {
   }
 
   /** Native 분석 결과를 프로젝트 표준 Violation 형식으로 변환합니다. */
-  private mapNativeViolations(filePath: string, nativeViolations: any[], violations: Violation[]) {
+  private mapNativeViolations(filePath: string, nativeViolations: NativeViolation[], violations: Violation[]) {
     let lines: string[] | null = null;
 
     violations.push(
       ...nativeViolations.map((v) => {
         const violation: Violation = {
-          type: v.type as any,
+          type: v.type as Violation['type'],
           file: filePath,
           line: v.line || 1,
           rationale: v.rationale || undefined,
@@ -200,7 +205,7 @@ export class JavascriptProvider extends BaseQualityProvider {
       const archViolations = await checkArchitecture(filePath, architectureRules, process.cwd());
       violations.push(
         ...archViolations.map((av) => ({
-          type: 'ARCHITECTURE' as any,
+          type: 'ARCHITECTURE' as Violation['type'],
           file: filePath,
           message: av.message,
         }))

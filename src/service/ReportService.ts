@@ -1,9 +1,10 @@
 import { existsSync } from 'fs';
 import { join, isAbsolute } from 'path';
-import { 
-  QualityReport, 
-  Violation, 
-  SymbolMetric 
+import {
+  QualityReport,
+  Violation,
+  SymbolMetric,
+  CoverageResult,
 } from '../types/index.js';
 import { SemanticService } from './SemanticService.js';
 import { VERSION } from '../constants.js';
@@ -25,7 +26,7 @@ export class ReportService {
    */
   async assemble(
     violations: Violation[],
-    cov: any,
+    cov: CoverageResult,
     healingMessages: string[],
     files: string[],
     isIncremental: boolean

@@ -52,7 +52,7 @@ describe('JavascriptProvider', () => {
     // 기본 모킹
     vi.mocked(native.runUltimateAnalysisNative).mockReturnValue({
       file: 'test.ts',
-      line_count: 50,
+      lineCount: 50,
       complexity: 5,
       violations: [],
       symbols: [],
@@ -62,7 +62,7 @@ describe('JavascriptProvider', () => {
   it('파일 사이즈가 임계값을 초과하면 SIZE 위반을 반환해야 한다', async () => {
     vi.mocked(native.runUltimateAnalysisNative).mockReturnValue({
       file: 'test.ts',
-      line_count: 150,
+      lineCount: 150,
       complexity: 20, // Not a data file (20/150 > 0.1)
       violations: [],
       symbols: [],
@@ -74,7 +74,7 @@ describe('JavascriptProvider', () => {
   it('복잡도가 임계값을 초과하면 COMPLEXITY 위반을 반환해야 한다', async () => {
     vi.mocked(native.runUltimateAnalysisNative).mockReturnValue({
       file: 'test.ts',
-      line_count: 50,
+      lineCount: 50,
       complexity: 15,
       violations: [],
       symbols: [],
@@ -86,7 +86,7 @@ describe('JavascriptProvider', () => {
   it('환각이 탐지되면 HALLUCINATION 위반을 포함해야 한다', async () => {
     vi.mocked(native.runUltimateAnalysisNative).mockReturnValue({
       file: 'test.ts',
-      line_count: 50,
+      lineCount: 50,
       complexity: 5,
       violations: [
         { type: 'HALLUCINATION', message: 'error', line: 1, rationale: 'test' }
