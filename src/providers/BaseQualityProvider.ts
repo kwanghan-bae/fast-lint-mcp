@@ -29,6 +29,48 @@ export abstract class BaseQualityProvider implements QualityProvider {
   ) {}
 
   /**
+   * 파일 크기 위반 사항을 검사하고 violations 배열에 추가합니다.
+   */
+  protected addSizeViolation(
+    filePath: string,
+    lineCount: number,
+    maxLines: number,
+    isDataFile: boolean,
+    violations: Violation[]
+  ): void {
+    if (!isDataFile && lineCount > maxLines) {
+      violations.push({
+        type: 'SIZE',
+        file: filePath,
+        value: lineCount,
+        limit: maxLines,
+        message: `파일이 ${lineCount}줄로 기준(${maxLines})을 초과합니다.`,
+      });
+    }
+  }
+
+  /**
+   * 코드 복잡도 위반 사항을 검사하고 violations 배열에 추가합니다.
+   */
+  protected addComplexityViolation(
+    filePath: string,
+    complexity: number,
+    maxComplexity: number,
+    isDataFile: boolean,
+    violations: Violation[]
+  ): void {
+    if (!isDataFile && complexity > maxComplexity) {
+      violations.push({
+        type: 'COMPLEXITY',
+        file: filePath,
+        value: complexity,
+        limit: maxComplexity,
+        message: `복잡도(${complexity})가 기준(${maxComplexity})을 초과합니다.`,
+      });
+    }
+  }
+
+  /**
    * 데이터 파일 여부 및 런타임 옵션에 따라 실질적인 임계값을 계산합니다. (v3.8)
    */
   protected getEffectiveLimits(

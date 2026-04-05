@@ -40,15 +40,7 @@ export class RustProvider extends BaseQualityProvider {
       let totalLines = content.split('\n').length;
       
       // 파일 크기 위반 체크
-      if (totalLines > maxLines) {
-        violations.push({
-          type: 'SIZE',
-          file: filePath,
-          value: totalLines,
-          limit: maxLines,
-          message: `단일 로직 파일이 너무 큽니다 (${totalLines}줄).`,
-        });
-      }
+      this.addSizeViolation(filePath, totalLines, maxLines, false, violations);
 
       // 2. 개별 심볼 위반 분석
       for (const sym of symbols) {
@@ -81,15 +73,7 @@ export class RustProvider extends BaseQualityProvider {
       }
 
       // 파일 전체 복잡도 검증
-      if (totalComplexity > maxComplexity) {
-        violations.push({
-          type: 'COMPLEXITY',
-          file: filePath,
-          value: totalComplexity,
-          limit: maxComplexity,
-          message: `전체 복잡도(${totalComplexity})가 기준을 초과했습니다. \n\n* Senior Advice: 복잡도가 높은 로직을 작은 함수나 모듈로 캡슐화하세요.`,
-        });
-      }
+      this.addComplexityViolation(filePath, totalComplexity, maxComplexity, false, violations);
 
     } catch (e) {
       console.error('RustProvider Error:', e);
