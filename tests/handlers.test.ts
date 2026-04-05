@@ -14,6 +14,7 @@ import { execSync } from 'child_process';
 const WORKSPACE = '/tmp/test-workspace';
 
 // ── Mock SemanticService ──────────────────────────────────────────────────────
+// createMockSemanticService 함수는 내부 로직을 처리합니다.
 function createMockSemanticService() {
   return {
     ensureInitialized: vi.fn().mockResolvedValue(undefined),
@@ -32,6 +33,7 @@ function createMockSemanticService() {
 }
 
 // ── Mock AnalysisService ──────────────────────────────────────────────────────
+// createMockAnalysisService 함수는 내부 로직을 처리합니다.
 function createMockAnalysisService() {
   return {
     runAllChecks: vi.fn().mockResolvedValue({
@@ -48,6 +50,7 @@ function createMockAnalysisService() {
 }
 
 // ── Helper: invoke a handler with defaults ────────────────────────────────────
+// invokeHandler 함수는 내부 로직을 처리합니다.
 function invokeHandler(
   name: string,
   args: Record<string, unknown>,

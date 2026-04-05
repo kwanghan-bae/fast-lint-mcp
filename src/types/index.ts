@@ -56,6 +56,7 @@ export interface QualityReport {
     coveragePercentage?: number; // 전체 커버리지 백분율 (0-100)
     analysisMode: 'full' | 'incremental'; // 분석 모드
     filesAnalyzed: number; // 이번 분석에서 스캔/갱신된 파일 수
+    performanceMs?: Record<string, number>; // 각 분석 단계별 소요 시간 (ms)
   };
 }
 

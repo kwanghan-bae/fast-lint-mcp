@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'fs';
 import { SgNode, Lang, parse as sgParse } from '@ast-grep/napi';
-import { Violation } from '../types/index.js';
+import { Violation, ViolationType } from '../types/index.js';
 import { READABILITY } from '../constants.js';
 import {
   runSemanticReviewNative,
@@ -64,7 +64,7 @@ export async function runSemanticReview(
     try {
       const nativeViolations = runSemanticReviewNative(filePath, isTestFile, options);
       return nativeViolations.map((v) => ({
-        type: v.type as any,
+        type: v.type as ViolationType,
         file: v.file || filePath,
         line: v.line || 1,
         rationale: v.rationale || undefined,

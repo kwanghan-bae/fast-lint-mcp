@@ -26,27 +26,8 @@ export class KotlinProvider extends BaseQualityProvider {
     const isDataFile = metrics.isDataFile;
     const { maxLines, maxComplexity } = this.getEffectiveLimits(isDataFile, options);
 
-    if (!isDataFile && metrics.lineCount > maxLines) {
-      violations.push({
-        type: 'SIZE',
-        file: filePath,
-        value: metrics.lineCount,
-        limit: maxLines,
-        rationale: `Kotlin 파일 크기 임계값: ${maxLines}줄`,
-        message: `Kotlin 파일이 너무 큽니다 (${metrics.lineCount}줄). 클래스나 인터페이스를 논리적으로 분리하세요.`,
-      });
-    }
-
-    if (!isDataFile && metrics.complexity > maxComplexity) {
-      violations.push({
-        type: 'COMPLEXITY',
-        file: filePath,
-        value: metrics.complexity,
-        limit: maxComplexity,
-        rationale: `Kotlin 함수 복잡도 임계값: ${maxComplexity}`,
-        message: `Kotlin 함수의 복잡도(${metrics.complexity})가 너무 높습니다. 가독성을 위해 리팩토링이 필요합니다.`,
-      });
-    }
+    this.addSizeViolation(filePath, metrics.lineCount, maxLines, isDataFile, violations);
+    this.addComplexityViolation(filePath, metrics.complexity, maxComplexity, isDataFile, violations);
 
     // 2. 정성적 리뷰 (Kotlin AST 구조 지원)
     const reviewViolations = await runSemanticReview(filePath, isDataFile);

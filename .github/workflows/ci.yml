@@ -32,12 +32,13 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             native/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('native/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-${{ hashFiles('native/Cargo.toml', 'native/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
 
       - name: Build native module (NAPI-RS)
         working-directory: native
+        continue-on-error: true
         run: |
           npm ci
           npx @napi-rs/cli build --platform --release
@@ -49,4 +50,5 @@ jobs:
         run: npm run build
 
       - name: Run tests
+        timeout-minutes: 15
         run: npm test

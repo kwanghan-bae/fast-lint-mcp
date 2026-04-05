@@ -1,8 +1,6 @@
-# Fast-Lint-MCP 🚀 v0.0.1 (The Ultimate AI Architect)
+# Fast-Lint-MCP v0.1.0
 
-**"AI가 만든 기술 부채를 뿌리 뽑고, 대규모 멀티모듈 아키텍처를 수호하는 지능형 품질 엔진"**
-
-Fast-Lint-MCP는 AI 에이전트(Claude, Gemini 등)가 작성한 코드의 품질을 실시간으로 감시하고, 정해진 아키텍처 기준을 통과하지 못할 경우 리팩토링을 강제하는 **Model Context Protocol (MCP)** 서버입니다. v0.0.1은 **Real-Time Turbo 엔진**과 **다국어(Polyglot) 지원**을 통해 엔터프라이즈급 프로젝트의 품질을 10초 이내에 정복합니다.
+Fast-Lint-MCP는 AI 에이전트가 작성한 코드의 품질을 실시간으로 검증하는 **Model Context Protocol (MCP)** 서버입니다.
 
 ---
 
@@ -69,7 +67,7 @@ npx tsx src/index.ts --check --path /목표/프로젝트/경로
 
 ---
 
-## 🤖 AI 에이전트 작업 규약 (Agent Protocol v0.0.1)
+## 🤖 AI 에이전트 작업 규약 (Agent Protocol v0.1.0)
 
 1.  **[한글 주석 우선]**: 모든 주요 클래스, 함수, 멤버 변수 위에는 반드시 한글 주석을 작성하십시오. (테스트 파일 제외)
 2.  **[최소 읽기]**: `read_file` 대신 `get-symbol-metrics`와 `get-symbol-content`를 사용하여 필요한 부분만 읽으십시오.

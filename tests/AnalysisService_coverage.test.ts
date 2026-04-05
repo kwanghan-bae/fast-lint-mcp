@@ -77,6 +77,13 @@ describe('AnalysisService Extra (Coverage & Error)', () => {
     const staleTime = (now - 2000000) / 1000; // 2000초 전
     fs.utimesSync(summaryPath, staleTime, staleTime);
 
+    // glob이 testDir 내의 실제 파일을 반환하도록 설정
+    // getLatestMtime이 현재 시간(now)을 반환하게 하여 timeDiff > GRACE_PERIOD 조건 충족
+    const srcFilePath = join(testDir, 'src', 'test.ts');
+    fs.mkdirSync(join(testDir, 'src'), { recursive: true });
+    fs.writeFileSync(srcFilePath, '// test');
+    vi.mocked(glob).mockResolvedValue([srcFilePath] as any);
+
     const report = await service.runAllChecks({ coveragePath: summaryPath });
     expect(report.violations.some((v) => v.message.includes('만료'))).toBe(true);
   }, 30000);  // 30초 타임아웃
