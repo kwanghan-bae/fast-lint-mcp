@@ -4,7 +4,7 @@ import { join, normalize, isAbsolute, dirname, relative } from 'path';
 import { Violation } from '../types/index.js';
 import type { QualityCheckOptions, AnalysisRules } from '../types/index.js';
 import { COVERAGE } from '../constants.js';
-import { parseLcovNative } from '../../native/index.js';
+import { parseLcovNative, FileCoverageResult } from '../../native/index.js';
 
 /** CoverageAnalyzer: LCOV/커버리지 리포트 분석 */
 export class CoverageAnalyzer {
@@ -152,7 +152,7 @@ export class CoverageAnalyzer {
     const fileCoverageMap = new Map<string, { total: number; hit: number }>();
 
     if (result) {
-      result.files.forEach((f: any) => {
+      result.files.forEach((f: FileCoverageResult) => {
         fileCoverageMap.set(f.file, { total: f.total, hit: f.hit });
       });
       return { total: result.total, hit: result.hit, fileCoverageMap, lastUpdated };

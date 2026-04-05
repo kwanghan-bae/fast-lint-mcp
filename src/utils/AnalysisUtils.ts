@@ -1,4 +1,4 @@
-import { Violation, QualityReport } from '../types/index.js';
+import { Violation, QualityReport, SymbolMetric } from '../types/index.js';
 import chalk from 'chalk';
 import { DependencyGraph } from './DependencyGraph.js';
 import Table from 'cli-table3';
@@ -105,14 +105,14 @@ function formatSelfCorrectionGuide(): string {
 }
 
 /** 복잡도가 높은 심볼들에 대한 상세 분석(Deep Dive) 섹션을 생성합니다. */
-function formatDeepDive(deepDive: { [file: string]: any[] }): string {
+function formatDeepDive(deepDive: { [file: string]: SymbolMetric[] }): string {
   let section = `\n### 🔍 Deep Dive: Problematic Symbols (Auto-Analyzed)\n`;
   section += `> 위반 사항이 발견된 파일 내에서 복잡도나 크기가 임계치를 초과한 심볼들입니다.\n\n`;
   section += `| 파일(File) | 심볼명(Symbol) | 라인수(Lines) | 복잡도(Complexity) | 범위(Range) |\n`;
   section += `| :--- | :--- | :--- | :--- | :--- |\n`;
 
   for (const [file, symbols] of Object.entries(deepDive)) {
-    symbols.forEach((s: any) => {
+    symbols.forEach((s: SymbolMetric) => {
       const fileName = file.split('/').pop();
       section += `| \`${fileName}\` | **${s.name}** | ${s.lineCount} | \`${s.complexity}\` | L${s.startLine}-L${s.endLine} |\n`;
     });

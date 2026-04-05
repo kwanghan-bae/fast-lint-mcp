@@ -145,6 +145,17 @@ export interface ToolResponse {
   isError?: boolean;
 }
 
+/**
+ * 커버리지 분석 결과를 담는 인터페이스입니다.
+ */
+export interface CoverageResult {
+  currentCoverage: number;
+  coverageFreshness: 'fresh' | 'stale' | 'missing';
+  coverageLastUpdated?: string;
+  coverageInsight?: string;
+  coveragePath?: string;
+}
+
 /** AnalyzerFactory 타입 */
 export type AnalyzerFactory = (workspace: string) => import('../service/AnalysisService.js').AnalysisService;
 

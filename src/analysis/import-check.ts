@@ -5,6 +5,7 @@ import {
   checkFakeLogicNative,
   checkArchitectureNative,
   extractSymbolsNative,
+  SymbolResult,
 } from '../../native/index.js';
 import { ArchitectureRule, Violation } from '../types/index.js';
 import { builtinModules } from 'module';
@@ -176,7 +177,7 @@ export async function checkFakeLogic(
 }
 
 // shouldCheckFakeLogic 함수는 내부 로직을 처리합니다.
-function shouldCheckFakeLogic(s: any): boolean {
+function shouldCheckFakeLogic(s: SymbolResult): boolean {
   if (s.kind !== 'function' && s.kind !== 'method') return false;
   if (s.name.startsWith('get') || s.name.startsWith('is') || s.name === 'render') return false;
   return true;

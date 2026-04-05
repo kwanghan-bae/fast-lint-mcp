@@ -94,7 +94,7 @@ export class ConfigService {
   /**
    * 설정 파일을 탐색하여 객체로 로드합니다.
    */
-  private loadConfig(workspacePath: string): any {
+  private loadConfig(workspacePath: string): Record<string, unknown> {
     const configPaths = [
       join(workspacePath, '.fast-lintrc.json'),
       join(workspacePath, '.fast-lintrc'),

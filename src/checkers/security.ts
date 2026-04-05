@@ -53,9 +53,10 @@ export async function checkSecrets(filePath: string): Promise<Violation[]> {
 export async function checkPackageAudit(): Promise<Violation[]> {
   try {
     execSync('npm audit --json', { stdio: 'pipe' });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const execError = error as { stdout?: Buffer; stderr?: Buffer; message?: string };
     try {
-      const stdout = error.stdout ? error.stdout.toString() : '';
+      const stdout = execError.stdout ? execError.stdout.toString() : '';
       if (!stdout) return [];
 
       const audit = JSON.parse(stdout);
