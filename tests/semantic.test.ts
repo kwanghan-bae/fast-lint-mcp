@@ -57,7 +57,7 @@ describe('SemanticService (v3.7.5 Engine)', () => {
     const code = `function unusedFunction() { return 'I am dead'; }`;
     writeFileSync(filePath, code);
 
-    const content = semantic.getSymbolContent(filePath, 'unusedFunction');
+    const content = await semantic.getSymbolContent(filePath, 'unusedFunction');
     expect(content).toContain("return 'I am dead'");
   });
 });

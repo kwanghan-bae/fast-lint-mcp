@@ -25,7 +25,7 @@ vi.mock('../src/service/SemanticService.js', () => {
       return {
         ensureInitialized: vi.fn().mockResolvedValue(undefined),
         getSymbolMetrics: vi.fn().mockReturnValue({}),
-        getSymbolContent: vi.fn().mockReturnValue('content'),
+        getSymbolContent: vi.fn().mockResolvedValue('content'),
         analyzeImpact: vi.fn().mockResolvedValue({}),
         findReferences: vi.fn().mockReturnValue([]),
         goToDefinition: vi.fn().mockReturnValue({}),

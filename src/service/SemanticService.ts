@@ -1,4 +1,4 @@
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, promises as fsPromises } from 'fs';
 import { resolve, dirname } from 'path';
 import { SymbolIndexer } from '../utils/SymbolIndexer.js';
 import { DependencyGraph } from '../utils/DependencyGraph.js';
@@ -52,14 +52,14 @@ export class SemanticService {
   }
 
   /** 특정 심볼의 본문 내용을 가져옵니다. */
-  getSymbolContent(filePath: string, symbolName: string): string | null {
+  async getSymbolContent(filePath: string, symbolName: string): Promise<string | null> {
     const absPath = resolve(filePath);
     const metrics = this.getSymbolMetrics(absPath, true);
     const target = metrics.find((m) => m.name === symbolName);
     if (!target) return null;
 
     try {
-      const content = readFileSync(absPath, 'utf-8');
+      const content = await fsPromises.readFile(absPath, 'utf-8');
       const allLines = content.split(/\r?\n/);
       // v0.0.1: 네이티브에서 추출한 정확한 라인 범위로 본문 슬라이싱
       return allLines.slice(target.startLine - 1, target.endLine).join('\n');
