@@ -69,7 +69,7 @@ describe('SemanticService (Ultimate Coverage & Precision)', () => {
     ].join('\n');
     writeFileSync(filePath, code);
 
-    const content = service.getSymbolContent(filePath, 'User.getName');
+    const content = await service.getSymbolContent(filePath, 'User.getName');
     expect(content).toContain('return "name"');
     expect(content).not.toContain('function test');
   });
