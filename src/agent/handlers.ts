@@ -44,7 +44,7 @@ As an AI Agent, you are bound by these Standard Operating Procedures. This tool 
   },
   'get-symbol-content': async (args, semanticSvc, workspace) => {
     await semanticSvc.ensureInitialized(false, workspace);
-    const content = semanticSvc.getSymbolContent(
+    const content = await semanticSvc.getSymbolContent(
       join(workspace, String(args.filePath ?? '')),
       String(args.symbolName ?? '')
     );

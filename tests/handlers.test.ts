@@ -19,7 +19,7 @@ function createMockSemanticService() {
   return {
     ensureInitialized: vi.fn().mockResolvedValue(undefined),
     getSymbolMetrics: vi.fn().mockReturnValue([]),
-    getSymbolContent: vi.fn().mockReturnValue('function foo() {}'),
+    getSymbolContent: vi.fn().mockResolvedValue('function foo() {}'),
     analyzeImpact: vi.fn().mockResolvedValue({
       symbolName: 'foo',
       affectedFiles: [],
@@ -160,7 +160,7 @@ describe('toolHandlers', () => {
     });
 
     it('returns fallback text when symbol not found', async () => {
-      semanticSvc.getSymbolContent.mockReturnValue(null);
+      semanticSvc.getSymbolContent.mockResolvedValue(null);
       const { result } = invokeHandler('get-symbol-content', { filePath: 'src/x.ts', symbolName: 'missing' }, semanticSvc, analysisSvc);
       const response = await result;
 
@@ -168,7 +168,7 @@ describe('toolHandlers', () => {
     });
 
     it('returns symbol content when found', async () => {
-      semanticSvc.getSymbolContent.mockReturnValue('export function hello() { return 1; }');
+      semanticSvc.getSymbolContent.mockResolvedValue('export function hello() { return 1; }');
       const { result } = invokeHandler('get-symbol-content', { filePath: 'src/x.ts', symbolName: 'hello' }, semanticSvc, analysisSvc);
       const response = await result;
 
