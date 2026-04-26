@@ -1,4 +1,4 @@
-import { readFileSync, existsSync, promises as fsPromises } from 'fs';
+import { existsSync, promises as fsPromises } from 'fs';
 import { resolve, dirname } from 'path';
 import { SymbolIndexer } from '../utils/SymbolIndexer.js';
 import { DependencyGraph } from '../utils/DependencyGraph.js';
