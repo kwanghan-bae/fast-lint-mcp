@@ -1,5 +1,4 @@
-import { readFileSync, existsSync } from 'fs';
-import { Lang, parse, SgNode } from '@ast-grep/napi';
+import { SgNode } from '@ast-grep/napi';
 import { CustomRule } from '../config.js';
 import { AstCacheManager } from '../utils/AstCacheManager.js';
 import { Logger } from '../utils/Logger.js';
