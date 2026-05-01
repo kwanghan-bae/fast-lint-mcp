@@ -77,16 +77,15 @@ export async function analyzeFile(
     let dataTextLength = 0;
 
     // 리터럴 노드들의 실제 텍스트 길이를 합산 (중복 방지를 위해 최상위 노드 위주 탐색 시도)
-    for (const pattern of DATA_PATTERNS) {
-      try {
-        const matches = root.findAll(pattern);
-        matches.forEach((m) => {
-          // 중첩된 노드가 있을 수 있으므로 단순 합산 후 전체 길이와 비교하는 Heuristic 적용
-          dataTextLength += m.text().length;
-        });
-      } catch (e) {
-        /* ignore */
+    try {
+      // ⚡ Bolt: Use a single combined query to extract all data patterns at once
+      const matches = root.findAll({ rule: { any: DATA_PATTERNS.map((p) => ({ pattern: p })) } });
+      for (let i = 0; i < matches.length; i++) {
+        // 중첩된 노드가 있을 수 있으므로 단순 합산 후 전체 길이와 비교하는 Heuristic 적용
+        dataTextLength += matches[i].text().length;
       }
+    } catch (e) {
+      /* ignore */
     }
 
     // 리터럴이 텍스트의 80% 이상을 차지하거나, 명시적 태그가 있는 경우 데이터 파일로 간주
@@ -94,10 +93,13 @@ export async function analyzeFile(
     const isDataFile = isTaggedData || (literalRatio > 0.8 && lineCount > 50);
 
     // 2. 전체 복잡도 측정
-    let complexity = 0;
-    for (const pattern of COMPLEXITY_PATTERNS) {
-      complexity += root.findAll(pattern).length;
-    }
+    // ⚡ Bolt: Extract all complexity nodes once to avoid O(N^2) repeated subtree traversals
+    const complexityRule = { rule: { any: COMPLEXITY_PATTERNS.map((p) => ({ pattern: p })) } };
+    const complexityNodes = root.findAll(complexityRule);
+    const complexity = complexityNodes.length;
+
+    // Cache positional ranges of complexity nodes for fast intersection checks
+    const complexityRanges = complexityNodes.map((n) => n.range());
 
     // 3. 심볼별 복잡도 추출 및 TOP 3 선정 (Refactoring Blueprint)
     const symbols: {
@@ -115,14 +117,25 @@ export async function analyzeFile(
     ];
 
     for (const kind of symbolKinds) {
-      root.findAll({ rule: { kind } }).forEach((node) => {
-        let name = node.find({ rule: { kind: 'identifier' } })?.text() || 'anonymous';
-        // 복잡도 계산: 해당 노드 하위의 제어문 개수
-        let symbolComplexity = 0;
-        for (const pattern of COMPLEXITY_PATTERNS) {
-          symbolComplexity += node.findAll(pattern).length;
-        }
+      const nodes = root.findAll({ rule: { kind } });
+      for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
+        const name = node.find({ rule: { kind: 'identifier' } })?.text() || 'anonymous';
         const range = node.range();
+
+        // ⚡ Bolt: Fast range intersection instead of slow recursive DOM search
+        let symbolComplexity = 0;
+        for (let j = 0; j < complexityRanges.length; j++) {
+          const cRange = complexityRanges[j];
+          if (
+            cRange.start.line >= range.start.line &&
+            cRange.end.line <= range.end.line &&
+            cRange.start.column >= range.start.column
+          ) {
+            symbolComplexity++;
+          }
+        }
+
         symbols.push({
           name,
           complexity: symbolComplexity,
@@ -130,7 +143,7 @@ export async function analyzeFile(
           line: range.start.line + 1,
           endLine: range.end.line + 1,
         });
-      });
+      }
     }
     const topComplexSymbols = symbols.sort((a, b) => b.complexity - a.complexity).slice(0, 3);
 
