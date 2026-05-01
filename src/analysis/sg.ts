@@ -34,7 +34,7 @@ const COMPLEXITY_PATTERNS = [
 ];
 
 const COMPLEXITY_RULE = {
-  any: COMPLEXITY_PATTERNS.map((p) => ({ pattern: p })),
+  any: COMPLEXITY_PATTERNS.map((p) => ({ pattern: p }))
 };
 
 /**
@@ -49,7 +49,7 @@ const DATA_PATTERNS = [
 ];
 
 const DATA_RULE = {
-  any: DATA_PATTERNS.map((p) => ({ pattern: p })),
+  any: DATA_PATTERNS.map((p) => ({ pattern: p }))
 };
 
 /**
