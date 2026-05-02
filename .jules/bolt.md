@@ -1,3 +1,0 @@
-## 2024-05-01 - [ast-grep rule combined any]
-**Learning:** Sequential `findAll` calls for multiple string patterns over the AST with `@ast-grep/napi` results in massive $O(P \times N)$ performance overhead because each `findAll` call must traverse the entire AST. Additionally, using string patterns (e.g. `if ($A) { $$$ }`) is up to 10x slower than matching by AST `kind` (e.g., `{ kind: 'if_statement' }`). Combining patterns into a single `{ rule: { any: [...] } }` dramatically reduces FFI crossings and tree traversals.
-**Action:** Always combine ast-grep patterns using `any` logic instead of sequentially looping over patterns, and prefer `kind` matching over string matching whenever possible.
