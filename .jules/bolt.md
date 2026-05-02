@@ -1,0 +1,3 @@
+## 2024-05-18 - @ast-grep/napi Performance Optimization
+**Learning:** Querying ASTs with string patterns inside a loop creates O(n^2) overhead with @ast-grep/napi, as strings are repeatedly parsed or evaluated in expensive ways. When trying to detect patterns like `[$...]` or `{$...}` for Arrays or Objects, using simple `findAll({ rule: { kind } })` matchers (e.g., kind: 'array', 'object', 'number', 'string') is not only significantly faster but more accurate than attempting string template matching for these generic structures.
+**Action:** Replace `COMPLEXITY_RULE` and `DATA_RULE` string patterns with their corresponding AST kind arrays.
