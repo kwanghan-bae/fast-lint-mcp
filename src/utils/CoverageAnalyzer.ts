@@ -88,7 +88,7 @@ export class CoverageAnalyzer {
     options: QualityCheckOptions,
     rules: AnalysisRules & { coveragePath?: string; coverageDirectory?: string }
   ): Promise<string | undefined> {
-    let path = options.coveragePath || rules.coveragePath;
+    const path = options.coveragePath || rules.coveragePath;
     if (path) {
       const full = isAbsolute(path) ? path : join(this.workspacePath, path);
       if (existsSync(full)) return full;

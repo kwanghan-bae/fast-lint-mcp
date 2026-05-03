@@ -40,7 +40,7 @@ class FixableTestProvider extends BaseQualityProvider {
     files: string[],
     workspacePath: string
   ): Promise<{ fixedCount: number; messages: string[] }> {
-    return { fixedCount: files.length, messages: files.map(f => `Fixed: ${f}`) };
+    return { fixedCount: files.length, messages: files.map((f) => `Fixed: ${f}`) };
   }
 }
 

@@ -88,9 +88,7 @@ describe('JavascriptProvider', () => {
       file: 'test.ts',
       lineCount: 50,
       complexity: 5,
-      violations: [
-        { type: 'HALLUCINATION', message: 'error', line: 1, rationale: 'test' }
-      ],
+      violations: [{ type: 'HALLUCINATION', message: 'error', line: 1, rationale: 'test' }],
       symbols: [],
     });
     const violations = await provider.check('test.ts');

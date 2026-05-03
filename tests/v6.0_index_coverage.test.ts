@@ -7,7 +7,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 // Mock services
 vi.mock('../src/service/AnalysisService.js', () => {
   return {
-    AnalysisService: vi.fn().mockImplementation(function() {
+    AnalysisService: vi.fn().mockImplementation(function () {
       return {
         runAllChecks: vi.fn().mockResolvedValue({
           pass: true,
@@ -21,7 +21,7 @@ vi.mock('../src/service/AnalysisService.js', () => {
 
 vi.mock('../src/service/SemanticService.js', () => {
   return {
-    SemanticService: vi.fn().mockImplementation(function() {
+    SemanticService: vi.fn().mockImplementation(function () {
       return {
         ensureInitialized: vi.fn().mockResolvedValue(undefined),
         getSymbolMetrics: vi.fn().mockReturnValue({}),
@@ -37,7 +37,7 @@ vi.mock('../src/service/SemanticService.js', () => {
 
 vi.mock('../src/agent/workflow.js', () => {
   return {
-    AgentWorkflow: vi.fn().mockImplementation(function() {
+    AgentWorkflow: vi.fn().mockImplementation(function () {
       return {
         verify: vi.fn().mockResolvedValue({ success: true }),
       };
@@ -46,26 +46,26 @@ vi.mock('../src/agent/workflow.js', () => {
 });
 
 // Mock MCP SDK
-let requestHandlers = new Map();
+const requestHandlers = new Map();
 
 vi.mock('@modelcontextprotocol/sdk/server/index.js', () => {
   return {
-    Server: vi.fn().mockImplementation(function() {
+    Server: vi.fn().mockImplementation(function () {
       return {
         connect: vi.fn().mockResolvedValue(undefined),
         setRequestHandler: vi.fn().mockImplementation((schema, handler) => {
           requestHandlers.set(schema, handler);
         }),
       };
-    })
+    }),
   };
 });
 
 vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => {
   return {
-    StdioServerTransport: vi.fn().mockImplementation(function() {
+    StdioServerTransport: vi.fn().mockImplementation(function () {
       return {};
-    })
+    }),
   };
 });
 
@@ -93,8 +93,8 @@ describe('index.ts coverage', () => {
     const result = await handler({
       params: {
         name: 'quality-check',
-        arguments: { targetPath: process.cwd() }
-      }
+        arguments: { targetPath: process.cwd() },
+      },
     });
     expect(result.content[0].text).toContain('✅');
   });
@@ -105,8 +105,8 @@ describe('index.ts coverage', () => {
     const result = await handler({
       params: {
         name: 'guide',
-        arguments: {}
-      }
+        arguments: {},
+      },
     });
     expect(result.content[0].text).toContain('FAST-LINT-MCP');
   });
@@ -117,8 +117,8 @@ describe('index.ts coverage', () => {
     const result = await handler({
       params: {
         name: 'get-symbol-metrics',
-        arguments: { filePath: 'test.ts' }
-      }
+        arguments: { filePath: 'test.ts' },
+      },
     });
     expect(result.content[0].text).toBeDefined();
   });
@@ -129,8 +129,8 @@ describe('index.ts coverage', () => {
     const result = await handler({
       params: {
         name: 'get-symbol-content',
-        arguments: { filePath: 'test.ts', symbolName: 'test' }
-      }
+        arguments: { filePath: 'test.ts', symbolName: 'test' },
+      },
     });
     expect(result.content[0].text).toBe('content');
   });
@@ -141,8 +141,8 @@ describe('index.ts coverage', () => {
     const result = await handler({
       params: {
         name: 'analyze-impact',
-        arguments: { filePath: 'test.ts', symbolName: 'test' }
-      }
+        arguments: { filePath: 'test.ts', symbolName: 'test' },
+      },
     });
     expect(result.content[0].text).toBeDefined();
   });
@@ -153,8 +153,8 @@ describe('index.ts coverage', () => {
     const result = await handler({
       params: {
         name: 'find-references',
-        arguments: { symbolName: 'test' }
-      }
+        arguments: { symbolName: 'test' },
+      },
     });
     expect(result.content[0].text).toBeDefined();
   });
@@ -165,8 +165,8 @@ describe('index.ts coverage', () => {
     const result = await handler({
       params: {
         name: 'go-to-definition',
-        arguments: { symbolName: 'test' }
-      }
+        arguments: { symbolName: 'test' },
+      },
     });
     expect(result.content[0].text).toBeDefined();
   });
@@ -177,8 +177,8 @@ describe('index.ts coverage', () => {
     const result = await handler({
       params: {
         name: 'find-dead-code',
-        arguments: {}
-      }
+        arguments: {},
+      },
     });
     expect(result.content[0].text).toBeDefined();
   });
@@ -189,8 +189,8 @@ describe('index.ts coverage', () => {
     const result = await handler({
       params: {
         name: 'verify-fix',
-        arguments: { testCommand: 'npm test' }
-      }
+        arguments: { testCommand: 'npm test' },
+      },
     });
     expect(result.content[0].text).toBeDefined();
   });
@@ -201,8 +201,8 @@ describe('index.ts coverage', () => {
     const result = await handler({
       params: {
         name: 'unknown-tool',
-        arguments: {}
-      }
+        arguments: {},
+      },
     });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('알 수 없는 도구');

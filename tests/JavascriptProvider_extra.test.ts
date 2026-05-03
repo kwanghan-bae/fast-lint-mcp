@@ -61,7 +61,9 @@ describe('JavascriptProvider Advice Coverage', () => {
     const mockRoot = {
       find: vi.fn().mockImplementation(({ rule }) => {
         const isUI = rule.any?.some((r: any) => r.pattern === 'use$A($$$)');
-        const isLogic = rule.any?.some((r: any) => r.pattern === 'fetch($$$)' || r.pattern === 'Math.$A($$$)');
+        const isLogic = rule.any?.some(
+          (r: any) => r.pattern === 'fetch($$$)' || r.pattern === 'Math.$A($$$)'
+        );
         if (isUI || isLogic) return {};
         return null;
       }),
