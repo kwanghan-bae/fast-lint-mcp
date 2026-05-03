@@ -17,6 +17,9 @@ const LOGIC_AST_PATTERNS = [
   'fetch($$$)',
 ];
 
+const UI_AST_RULE = { any: UI_AST_PATTERNS.map((p) => ({ pattern: p })) };
+const LOGIC_AST_RULE = { any: LOGIC_AST_PATTERNS.map((p) => ({ pattern: p })) };
+
 /** AST 패턴 분석을 통해 복잡도 해결을 위한 구체적인 가이드를 생성합니다. */
 export function generateComplexityAdvice(filePath: string): string {
   const cache = AstCacheManager.getInstance();
@@ -27,7 +30,9 @@ export function generateComplexityAdvice(filePath: string): string {
 
   // v3.8.6: Actionable Advice 강화
   const totalComplexity = symbols.reduce((acc, s) => acc + s.complexity, 0);
-  const giantSymbol = symbols.find(s => s.complexity > 10 && s.complexity > totalComplexity * 0.5);
+  const giantSymbol = symbols.find(
+    (s) => s.complexity > 10 && s.complexity > totalComplexity * 0.5
+  );
 
   if (giantSymbol) {
     let advice = `[거대 함수 발견] '${giantSymbol.name}' 함수의 복잡도가 너무 높습니다. `;
@@ -63,8 +68,8 @@ export function generateComplexityAdvice(filePath: string): string {
     return `[함수 과다 존재] 파일 내에 너무 많은 함수(${symbols.length}개)가 정의되어 있어 관리 복잡도가 높습니다. 서로 연관된 기능들을 새로운 클래스나 모듈로 분리(Extract Class/Module)하는 것을 권장합니다.`;
   }
 
-  const hasUIPatterns = UI_AST_PATTERNS.some((p) => root.findAll(p).length > 0);
-  const hasLogicPatterns = LOGIC_AST_PATTERNS.some((p) => root.findAll(p).length > 0);
+  const hasUIPatterns = root.find({ rule: UI_AST_RULE }) !== null;
+  const hasLogicPatterns = root.find({ rule: LOGIC_AST_RULE }) !== null;
 
   if (hasUIPatterns && !hasLogicPatterns) {
     return '이 컴포넌트에는 UI 렌더링과 복잡한 상태 관리가 혼재되어 있습니다. Business Logic을 Custom Hook으로 추출하거나, Presentational Component로 UI를 분리하세요.';

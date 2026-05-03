@@ -59,11 +59,13 @@ describe('JavascriptProvider Advice Coverage', () => {
     });
 
     const mockRoot = {
-      findAll: vi.fn().mockImplementation((p) => {
-        if (p === 'use$A($$$)') return [{}]; // UI
-        if (p === 'fetch($$$)') return [{}]; // Logic
-        return [];
+      find: vi.fn().mockImplementation(({ rule }) => {
+        const isUI = rule.any?.some((r: any) => r.pattern === 'use$A($$$)');
+        const isLogic = rule.any?.some((r: any) => r.pattern === 'fetch($$$)' || r.pattern === 'Math.$A($$$)');
+        if (isUI || isLogic) return {};
+        return null;
       }),
+      findAll: vi.fn().mockReturnValue([]),
     };
     vi.mocked(AstCacheManager.getInstance().getRootNode).mockReturnValue(mockRoot as any);
 
@@ -82,10 +84,12 @@ describe('JavascriptProvider Advice Coverage', () => {
     });
 
     const mockRoot = {
-      findAll: vi.fn().mockImplementation((p) => {
-        if (p === 'Math.$A($$$)') return [{}]; // Logic
-        return [];
+      find: vi.fn().mockImplementation(({ rule }) => {
+        const isLogic = rule.any?.some((r: any) => r.pattern === 'Math.$A($$$)');
+        if (isLogic) return {};
+        return null;
       }),
+      findAll: vi.fn().mockReturnValue([]),
     };
     vi.mocked(AstCacheManager.getInstance().getRootNode).mockReturnValue(mockRoot as any);
 

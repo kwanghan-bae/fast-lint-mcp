@@ -27,7 +27,13 @@ export class KotlinProvider extends BaseQualityProvider {
     const { maxLines, maxComplexity } = this.getEffectiveLimits(isDataFile, options);
 
     this.addSizeViolation(filePath, metrics.lineCount, maxLines, isDataFile, violations);
-    this.addComplexityViolation(filePath, metrics.complexity, maxComplexity, isDataFile, violations);
+    this.addComplexityViolation(
+      filePath,
+      metrics.complexity,
+      maxComplexity,
+      isDataFile,
+      violations
+    );
 
     // 2. 정성적 리뷰 (Kotlin AST 구조 지원)
     const reviewViolations = await runSemanticReview(filePath, isDataFile);

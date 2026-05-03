@@ -2,10 +2,7 @@ import { existsSync, readFileSync } from 'fs';
 import { SgNode, Lang, parse as sgParse } from '@ast-grep/napi';
 import { Violation, ViolationType } from '../types/index.js';
 import { READABILITY } from '../constants.js';
-import {
-  runSemanticReviewNative,
-  ReviewOptions,
-} from '../../native/index.js';
+import { runSemanticReviewNative, ReviewOptions } from '../../native/index.js';
 import { AstCacheManager } from '../utils/AstCacheManager.js';
 
 import { checkHallucination } from './import-check.js';
@@ -30,7 +27,7 @@ export async function verifyAPIContracts(
   }
 
   // Fallback for other languages (using ast-grep)
-  return []; 
+  return [];
 }
 
 /**

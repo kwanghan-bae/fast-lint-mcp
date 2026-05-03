@@ -31,7 +31,7 @@ let server: Server;
 /** MCP 서버 인스턴스 설정 및 초기화 */
 function initializeServer() {
   if (server) return server;
-  
+
   server = createServer();
 
   // 1. 도구 목록 조회 핸들러
@@ -43,7 +43,10 @@ function initializeServer() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   server.setRequestHandler(CallToolRequestSchema, async (request): Promise<any> => {
     try {
-      return await handleToolCall(request.params.name, (request.params.arguments ?? {}) as Record<string, unknown>);
+      return await handleToolCall(
+        request.params.name,
+        (request.params.arguments ?? {}) as Record<string, unknown>
+      );
     } catch (error) {
       return {
         content: [
@@ -56,7 +59,7 @@ function initializeServer() {
       };
     }
   });
-  
+
   return server;
 }
 
@@ -113,24 +116,65 @@ function getToolDefinitions() {
         },
       },
     },
-    { name: 'guide', description: 'Provides the SOP for agents.', inputSchema: { type: 'object', properties: {} } },
+    {
+      name: 'guide',
+      description: 'Provides the SOP for agents.',
+      inputSchema: { type: 'object', properties: {} },
+    },
     {
       name: 'get-symbol-metrics',
       description: 'Analyzes complexity and line counts.',
-      inputSchema: { type: 'object', properties: { filePath: { type: 'string' } }, required: ['filePath'] },
+      inputSchema: {
+        type: 'object',
+        properties: { filePath: { type: 'string' } },
+        required: ['filePath'],
+      },
     },
-    { name: 'get-symbol-content', description: 'Reads symbol source code.', inputSchema: commonSchema },
-    { name: 'analyze-impact', description: 'Tracks affected files and tests.', inputSchema: commonSchema },
-    { name: 'find-references', description: 'Finds all references.', inputSchema: { type: 'object', properties: { symbolName: { type: 'string' } }, required: ['symbolName'] } },
-    { name: 'go-to-definition', description: 'Locates exact definition.', inputSchema: { type: 'object', properties: { symbolName: { type: 'string' } }, required: ['symbolName'] } },
-    { name: 'find-dead-code', description: 'Identifies unused exports.', inputSchema: { type: 'object', properties: {} } },
-    { name: 'verify-fix', description: 'Verifies if code passes tests.', inputSchema: { type: 'object', properties: { testCommand: { type: 'string' } } } },
+    {
+      name: 'get-symbol-content',
+      description: 'Reads symbol source code.',
+      inputSchema: commonSchema,
+    },
+    {
+      name: 'analyze-impact',
+      description: 'Tracks affected files and tests.',
+      inputSchema: commonSchema,
+    },
+    {
+      name: 'find-references',
+      description: 'Finds all references.',
+      inputSchema: {
+        type: 'object',
+        properties: { symbolName: { type: 'string' } },
+        required: ['symbolName'],
+      },
+    },
+    {
+      name: 'go-to-definition',
+      description: 'Locates exact definition.',
+      inputSchema: {
+        type: 'object',
+        properties: { symbolName: { type: 'string' } },
+        required: ['symbolName'],
+      },
+    },
+    {
+      name: 'find-dead-code',
+      description: 'Identifies unused exports.',
+      inputSchema: { type: 'object', properties: {} },
+    },
+    {
+      name: 'verify-fix',
+      description: 'Verifies if code passes tests.',
+      inputSchema: { type: 'object', properties: { testCommand: { type: 'string' } } },
+    },
   ];
 }
 
 /** 에이전트의 도구 호출을 처리하는 핵심 로직입니다. */
 async function handleToolCall(name: string, args: Record<string, unknown>) {
-  const workspace = String(args?.targetPath ?? '') || process.env.FAST_LINT_WORKSPACE || process.cwd();
+  const workspace =
+    String(args?.targetPath ?? '') || process.env.FAST_LINT_WORKSPACE || process.cwd();
   // 동적으로 설정한 workspace 경로로 프로세스의 작업 디렉토리를 변경합니다.
   process.chdir(workspace);
   const semanticSvc = getSemantic();
