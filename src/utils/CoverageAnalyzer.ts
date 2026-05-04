@@ -53,11 +53,11 @@ export class CoverageAnalyzer {
         // v3.8.5: forceRefresh 옵션이 있으면 강제로 fresh 취급
         // v3.9.0: 15분(900,000ms) 이내의 차이는 Grace Period로 인정하여 stale 경고 무시
         const timeDiff = lastSrcUpdate - coverageStat.mtimeMs;
-        const GRACE_PERIOD_MS = 15 * 60 * 1000; 
-        
+        const GRACE_PERIOD_MS = 15 * 60 * 1000;
+
         const isStale = !options.forceRefresh && timeDiff > GRACE_PERIOD_MS;
         coverageFreshness = isStale ? 'stale' : 'fresh';
-        
+
         if (isStale && rules.minCoverage > 0) {
           violations.push({
             type: 'COVERAGE',
@@ -84,14 +84,19 @@ export class CoverageAnalyzer {
    * 프로젝트 내에서 가장 적절한 커버리지 리포트 파일(lcov.info 등)의 경로를 탐색합니다.
    * 지정된 경로가 없으면 기본 위치들을 재귀적으로 검색합니다.
    */
-  private async findCoveragePath(options: QualityCheckOptions, rules: AnalysisRules & { coveragePath?: string; coverageDirectory?: string }): Promise<string | undefined> {
+  private async findCoveragePath(
+    options: QualityCheckOptions,
+    rules: AnalysisRules & { coveragePath?: string; coverageDirectory?: string }
+  ): Promise<string | undefined> {
     let path = options.coveragePath || rules.coveragePath;
     if (path) {
       const full = isAbsolute(path) ? path : join(this.workspacePath, path);
       if (existsSync(full)) return full;
     }
     const standardPaths = [
-      ...(rules.coverageDirectory ? [join(this.workspacePath, rules.coverageDirectory, 'lcov.info')] : []),
+      ...(rules.coverageDirectory
+        ? [join(this.workspacePath, rules.coverageDirectory, 'lcov.info')]
+        : []),
       join(this.workspacePath, 'coverage', 'lcov.info'),
       join(this.workspacePath, 'coverage', 'coverage-summary.json'),
     ];
@@ -195,10 +200,7 @@ export class CoverageAnalyzer {
       }))
       .filter(
         (f) =>
-          f.file &&
-          f.file !== '.' &&
-          !f.file.includes('node_modules') &&
-          !f.file.includes('tests/')
+          f.file && f.file !== '.' && !f.file.includes('node_modules') && !f.file.includes('tests/')
       )
       .sort((a, b) => a.pct - b.pct)
       .slice(0, 5);
@@ -217,7 +219,10 @@ export class CoverageAnalyzer {
   }
 
   /** 개별 파일의 커버리지가 최소 유지 기준(50%)에 미달하는지 확인합니다. */
-  private checkIndividualFileCoverage(map: Map<string, { total: number; hit: number }>, violations: Violation[]) {
+  private checkIndividualFileCoverage(
+    map: Map<string, { total: number; hit: number }>,
+    violations: Violation[]
+  ) {
     for (const [file, data] of map.entries()) {
       const pct = data.total > 0 ? (data.hit / data.total) * 100 : 0;
       const relFile = relative(this.workspacePath, file);

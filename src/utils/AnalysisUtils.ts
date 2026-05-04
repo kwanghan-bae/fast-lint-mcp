@@ -79,11 +79,15 @@ function formatViolationsTable(violations: Violation[]): string {
 
     // v3.9.2: 에이전트를 위한 Auto-Fix 제안 수집
     if (v.fixSuggestion) {
-      fixSuggestionsText += `\n**[Auto-Fix Suggestion for ${v.file}:${v.line}]**\n\`\`\`json\n${JSON.stringify({
-        file_path: v.file,
-        old_string: v.fixSuggestion.old_string,
-        new_string: v.fixSuggestion.new_string
-      }, null, 2)}\n\`\`\`\n`;
+      fixSuggestionsText += `\n**[Auto-Fix Suggestion for ${v.file}:${v.line}]**\n\`\`\`json\n${JSON.stringify(
+        {
+          file_path: v.file,
+          old_string: v.fixSuggestion.old_string,
+          new_string: v.fixSuggestion.new_string,
+        },
+        null,
+        2
+      )}\n\`\`\`\n`;
     }
   });
 

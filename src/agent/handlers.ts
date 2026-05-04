@@ -5,7 +5,7 @@ import type { ToolHandler, ToolResponse } from '../types/index.js';
 
 /** 도구별 실행 로직을 관리하는 전략 객체 */
 export const toolHandlers: Record<string, ToolHandler> = {
-  'guide': async () => {
+  guide: async () => {
     const guideText = `
 # 🚨 FAST-LINT-MCP ZERO-CONFIG MANDATES (AGENT SOP v6.0) 🚨
 
@@ -77,5 +77,5 @@ As an AI Agent, you are bound by these Standard Operating Procedures. This tool 
     const workflow = new AgentWorkflow();
     const result = await workflow.verify(String(args.testCommand ?? 'npm test'));
     return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-  }
+  },
 };

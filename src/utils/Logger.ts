@@ -20,8 +20,12 @@ function formatMessage(level: LogLevel, module: string, message: string, detail?
 }
 
 export const Logger = {
-  setLevel(level: LogLevel) { currentLevel = level; },
-  getLevel(): LogLevel { return currentLevel; },
+  setLevel(level: LogLevel) {
+    currentLevel = level;
+  },
+  getLevel(): LogLevel {
+    return currentLevel;
+  },
 
   debug(module: string, message: string, detail?: string) {
     if (shouldLog('debug')) console.error(formatMessage('debug', module, message, detail));

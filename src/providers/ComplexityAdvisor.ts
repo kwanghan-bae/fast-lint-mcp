@@ -27,7 +27,9 @@ export function generateComplexityAdvice(filePath: string): string {
 
   // v3.8.6: Actionable Advice 강화
   const totalComplexity = symbols.reduce((acc, s) => acc + s.complexity, 0);
-  const giantSymbol = symbols.find(s => s.complexity > 10 && s.complexity > totalComplexity * 0.5);
+  const giantSymbol = symbols.find(
+    (s) => s.complexity > 10 && s.complexity > totalComplexity * 0.5
+  );
 
   if (giantSymbol) {
     let advice = `[거대 함수 발견] '${giantSymbol.name}' 함수의 복잡도가 너무 높습니다. `;

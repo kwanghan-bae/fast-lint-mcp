@@ -34,7 +34,11 @@ export class AnalysisService {
   private workspacePath: string;
   private perfMetrics: Record<string, number> = {};
 
-  constructor(private stateManager: StateManager, private config: ConfigService, private semantic: SemanticService) {
+  constructor(
+    private stateManager: StateManager,
+    private config: ConfigService,
+    private semantic: SemanticService
+  ) {
     this.workspacePath = this.config.workspacePath || process.cwd();
     this.git = simpleGit(this.workspacePath);
     this.depGraph = new DependencyGraph(this.workspacePath);
@@ -56,7 +60,9 @@ export class AnalysisService {
     if (!envCheck.pass) return envCheck.report!;
 
     const rules = this.resolveRules(options);
-    const incrementalOption = options.forceFullScan ? false : (options.incremental ?? this.config.incremental);
+    const incrementalOption = options.forceFullScan
+      ? false
+      : (options.incremental ?? this.config.incremental);
 
     t = performance.now();
     const allFiles = await this.scanProjectFiles();
@@ -92,16 +98,29 @@ export class AnalysisService {
     this.perfMetrics.fileAnalysis = Math.round(performance.now() - t);
 
     t = performance.now();
-    violations.push(...checkStructuralIntegrity(this.depGraph));
+    const structuralViolations = await checkStructuralIntegrity(this.depGraph);
+    violations.push(...structuralViolations);
     await this.scanTechDebt(allFiles, rules, violations);
     this.perfMetrics.techDebtScan = Math.round(performance.now() - t);
 
     t = performance.now();
-    const coverage = await this.coverageAnalyzer.analyze(options, rules, lastUpdate, allFiles, violations);
+    const coverage = await this.coverageAnalyzer.analyze(
+      options,
+      rules,
+      lastUpdate,
+      allFiles,
+      violations
+    );
     this.perfMetrics.coverageAnalysis = Math.round(performance.now() - t);
 
     t = performance.now();
-    const report = await this.reportService.assemble(violations, coverage, healing, targetFiles, incrementalOption && targetFiles.length < allFiles.length);
+    const report = await this.reportService.assemble(
+      violations,
+      coverage,
+      healing,
+      targetFiles,
+      incrementalOption && targetFiles.length < allFiles.length
+    );
     this.perfMetrics.reportAssembly = Math.round(performance.now() - t);
 
     if (report.metadata) {
@@ -115,13 +134,19 @@ export class AnalysisService {
   private async validateEnvironment() {
     const res = await checkEnv();
     if (res.pass) return { pass: true };
-    return { 
-      pass: false, 
+    return {
+      pass: false,
       report: {
         pass: false,
         violations: [{ type: 'ENV' as ViolationType, message: res.suggestion || 'Error' }],
-        metadata: { analyzedFiles: 0, analysisMode: 'full', timestamp: '', version: VERSION, filesAnalyzed: 0 }
-      } as QualityReport
+        metadata: {
+          analyzedFiles: 0,
+          analysisMode: 'full',
+          timestamp: '',
+          version: VERSION,
+          filesAnalyzed: 0,
+        },
+      } as QualityReport,
     };
   }
 
@@ -133,37 +158,45 @@ export class AnalysisService {
   }
 
   private async scanProjectFiles() {
-    return await getProjectFiles(this.workspacePath, [...SYSTEM.DEFAULT_IGNORE_PATTERNS, ...(this.config.exclude || [])]);
+    return await getProjectFiles(this.workspacePath, [
+      ...SYSTEM.DEFAULT_IGNORE_PATTERNS,
+      ...(this.config.exclude || []),
+    ]);
   }
 
   private async resolveTargetFiles(inc: boolean, all: string[]) {
-    const exts = this.providers.flatMap(p => p.extensions);
-    const base = all.filter(f => exts.includes(extname(f)));
+    const exts = this.providers.flatMap((p) => p.extensions);
+    const base = all.filter((f) => exts.includes(extname(f)));
     if (!inc) return base;
     const changed = await this.getChangedFiles();
     if (changed.length === 0) return base;
     const affected = new Set<string>();
-    changed.forEach(f => {
+    changed.forEach((f) => {
       const full = isAbsolute(f) ? f : join(this.workspacePath, f);
       if (full.startsWith(this.workspacePath)) {
         affected.add(relative(this.workspacePath, full));
-        this.depGraph.getDependents(full).forEach(d => { if (d.startsWith(this.workspacePath)) affected.add(relative(this.workspacePath, d)); });
+        this.depGraph.getDependents(full).forEach((d) => {
+          if (d.startsWith(this.workspacePath)) affected.add(relative(this.workspacePath, d));
+        });
       }
     });
-    return Array.from(affected).filter(f => exts.includes(extname(f)));
+    return Array.from(affected).filter((f) => exts.includes(extname(f)));
   }
 
   private async getChangedFiles(): Promise<string[]> {
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const s = await this.git.status();
-        return [...s.modified, ...s.not_added, ...s.created, ...s.staged].map(f => normalize(f));
+        return [...s.modified, ...s.not_added, ...s.created, ...s.staged].map((f) => normalize(f));
       } catch (e) {
         if (attempt === 2) {
-          console.warn('[AnalysisService] Git status 최종 실패, 전체 분석으로 대체:', (e as Error).message);
+          console.warn(
+            '[AnalysisService] Git status 최종 실패, 전체 분석으로 대체:',
+            (e as Error).message
+          );
           return [];
         }
-        await new Promise(r => setTimeout(r, 100 * (attempt + 1)));
+        await new Promise((r) => setTimeout(r, 100 * (attempt + 1)));
       }
     }
     return [];
@@ -172,46 +205,81 @@ export class AnalysisService {
   private async performFileAnalysis(files: string[], opt: QualityCheckOptions) {
     const batch = this.prepareBatch(files);
     let fileIndex = 0;
-    const results = await pMap(files, async f => {
-      if (++fileIndex % 50 === 0) await new Promise(r => setImmediate(r));
-      return this.analyzeFile(f, opt, batch);
-    }, { concurrency: Math.max(1, os.cpus().length - 1) });
+    const results = await pMap(
+      files,
+      async (f) => {
+        if (++fileIndex % 50 === 0) await new Promise((r) => setImmediate(r));
+        return this.analyzeFile(f, opt, batch);
+      },
+      { concurrency: Math.max(1, os.cpus().length - 1) }
+    );
     const violations: Violation[] = [];
-    results.forEach(r => { if (r) violations.push(...r.fileViolations); });
+    results.forEach((r) => {
+      if (r) violations.push(...r.fileViolations);
+    });
     return violations;
   }
 
   private prepareBatch(files: string[]) {
-    const abs = files.map(f => (isAbsolute(f) ? f : join(this.workspacePath, f)));
-    return new Map(runBatchAnalysisNative(abs).map(r => [normalize(r.file), r]));
+    const abs = files.map((f) => (isAbsolute(f) ? f : join(this.workspacePath, f)));
+    return new Map(runBatchAnalysisNative(abs).map((r) => [normalize(r.file), r]));
   }
 
   private async analyzeFile(f: string, opt: QualityCheckOptions, batch: Map<string, unknown>) {
     const full = isAbsolute(f) ? f : join(this.workspacePath, f);
-    const p = this.providers.find(p => p.extensions.includes(extname(full)));
+    const p = this.providers.find((p) => p.extensions.includes(extname(full)));
     if (!p) return null;
-    return { fileViolations: await p.check(full, { ...opt, batchResult: batch.get(normalize(full)) } as Parameters<typeof p.check>[1]) };
+    return {
+      fileViolations: await p.check(full, {
+        ...opt,
+        batchResult: batch.get(normalize(full)),
+      } as Parameters<typeof p.check>[1]),
+    };
   }
 
   private async performSelfHealing(files: string[]) {
     const msgs: string[] = [];
     for (const p of this.providers) {
-      const targets = files.filter(f => p.extensions.includes(extname(f))).map(f => (isAbsolute(f) ? f : join(this.workspacePath, f)));
-      if (targets.length > 0 && p.fix) { const res = await p.fix(targets, this.workspacePath); msgs.push(...res.messages); }
+      const targets = files
+        .filter((f) => p.extensions.includes(extname(f)))
+        .map((f) => (isAbsolute(f) ? f : join(this.workspacePath, f)));
+      if (targets.length > 0 && p.fix) {
+        const res = await p.fix(targets, this.workspacePath);
+        msgs.push(...res.messages);
+      }
     }
     return msgs;
   }
 
   private async scanTechDebt(all: string[], rules: AnalysisRules, v: Violation[]) {
     const count = await countTechDebt(all);
-    if (count > rules.techDebtLimit) v.push({ type: 'TECH_DEBT', value: count, limit: rules.techDebtLimit, message: `기술 부채 과다` });
+    if (count > rules.techDebtLimit)
+      v.push({
+        type: 'TECH_DEBT',
+        value: count,
+        limit: rules.techDebtLimit,
+        message: `기술 부채 과다`,
+      });
   }
 
   private async getLatestMtime(files: string[]) {
     if (files.length === 0) return 0;
-    const times = await pMap(files, async f => { try { return statSync(isAbsolute(f) ? f : join(this.workspacePath, f)).mtimeMs; } catch (e) { return 0; } }, { concurrency: 4 });
+    const times = await pMap(
+      files,
+      async (f) => {
+        try {
+          return statSync(isAbsolute(f) ? f : join(this.workspacePath, f)).mtimeMs;
+        } catch (e) {
+          return 0;
+        }
+      },
+      { concurrency: 4 }
+    );
     return Math.max(...times);
   }
 
-  private cleanupCaches() { clearProjectFilesCache(); clearPathCache(); }
+  private cleanupCaches() {
+    clearProjectFilesCache();
+    clearPathCache();
+  }
 }
