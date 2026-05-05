@@ -36,10 +36,10 @@ export class RustProvider extends BaseQualityProvider {
     try {
       // 1. Rust Native 엔진을 통해 심볼 및 복잡도 분석 추출
       const symbols = extractSymbolsRustNative(filePath, content);
-      
+
       let totalComplexity = 0;
-      let totalLines = content.split('\n').length;
-      
+      const totalLines = content.split('\n').length;
+
       // 파일 크기 위반 체크
       this.addSizeViolation(filePath, totalLines, maxLines, false, violations);
 
@@ -57,7 +57,7 @@ export class RustProvider extends BaseQualityProvider {
               message: `[READABILITY] '${sym.name}' 함수가 너무 깁니다 (${sym.lines}줄). ${READABILITY.MAX_FUNCTION_LINES}줄 이하로 분리하세요.`,
             });
           }
-          
+
           if (sym.parameterCount > READABILITY.MAX_PARAMETER_COUNT) {
             violations.push({
               type: 'READABILITY',
@@ -66,16 +66,15 @@ export class RustProvider extends BaseQualityProvider {
               message: `[READABILITY] '${sym.name}' 함수의 파라미터가 너무 많습니다 (${sym.parameterCount}개). ${READABILITY.MAX_PARAMETER_COUNT}개 이하로 줄이세요.`,
             });
           }
-          
+
           if (sym.complexity > 5) {
-             // 개별 복잡도 체크도 추가적으로 리포팅 가능하나, 기본은 파일 전체 복잡도를 기준으로 합니다.
+            // 개별 복잡도 체크도 추가적으로 리포팅 가능하나, 기본은 파일 전체 복잡도를 기준으로 합니다.
           }
         }
       }
 
       // 파일 전체 복잡도 검증
       this.addComplexityViolation(filePath, totalComplexity, maxComplexity, false, violations);
-
     } catch (e) {
       Logger.warn('RustProvider', `네이티브 분석 실패 (${filePath})`, (e as Error).message);
       // Don't add violation — silent degradation is OK for native parse failures

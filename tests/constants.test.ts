@@ -42,9 +42,7 @@ describe('constants.ts', () => {
     });
 
     it('DEFAULT_IGNORE_PATTERNS should include node_modules', () => {
-      const hasNodeModules = SYSTEM.DEFAULT_IGNORE_PATTERNS.some(p =>
-        p.includes('node_modules')
-      );
+      const hasNodeModules = SYSTEM.DEFAULT_IGNORE_PATTERNS.some((p) => p.includes('node_modules'));
       expect(hasNodeModules).toBe(true);
     });
 
@@ -56,12 +54,12 @@ describe('constants.ts', () => {
 
     it('DEFAULT_IGNORE_PATTERNS should include common build directories', () => {
       const patterns = SYSTEM.DEFAULT_IGNORE_PATTERNS;
-      expect(patterns.some(p => p.includes('dist'))).toBe(true);
-      expect(patterns.some(p => p.includes('build'))).toBe(true);
+      expect(patterns.some((p) => p.includes('dist'))).toBe(true);
+      expect(patterns.some((p) => p.includes('build'))).toBe(true);
     });
 
     it('DEFAULT_IGNORE_PATTERNS should include .git', () => {
-      expect(SYSTEM.DEFAULT_IGNORE_PATTERNS.some(p => p.includes('.git'))).toBe(true);
+      expect(SYSTEM.DEFAULT_IGNORE_PATTERNS.some((p) => p.includes('.git'))).toBe(true);
     });
   });
 

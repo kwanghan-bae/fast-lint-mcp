@@ -25,7 +25,7 @@ export class TsProgramManager {
    */
   public init(workspacePath: string, allFiles: string[]) {
     const configPath = ts.findConfigFile(workspacePath, ts.sys.fileExists, 'tsconfig.json');
-    
+
     if (configPath) {
       const configFile = ts.readConfigFile(configPath, ts.sys.readFile);
       const parsedConfig = ts.parseJsonConfigFileContent(
@@ -69,10 +69,11 @@ export class TsProgramManager {
       if (diag.code === 2304 || diag.code === 2552) {
         if (diag.start !== undefined) {
           const { line } = sourceFile.getLineAndCharacterOfPosition(diag.start);
-          const name = typeof diag.messageText === 'string' 
-            ? diag.messageText.match(/'(.*?)'/)?.[1] || 'unknown'
-            : 'unknown';
-          
+          const name =
+            typeof diag.messageText === 'string'
+              ? diag.messageText.match(/'(.*?)'/)?.[1] || 'unknown'
+              : 'unknown';
+
           hallucinations.push({ name, line: line + 1 });
         }
       }
@@ -86,6 +87,11 @@ export class TsProgramManager {
    */
   public refresh(allFiles: string[]) {
     this.rootFiles = allFiles;
-    this.program = ts.createProgram(this.rootFiles, this.compilerOptions, undefined, this.program || undefined);
+    this.program = ts.createProgram(
+      this.rootFiles,
+      this.compilerOptions,
+      undefined,
+      this.program || undefined
+    );
   }
 }

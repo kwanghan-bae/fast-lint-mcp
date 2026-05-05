@@ -1,5 +1,10 @@
 import { existsSync, readFileSync } from 'fs';
-import { runUltimateAnalysisNative, ReviewOptions, UltimateAnalysisResult, Violation as NativeViolation } from '../../native/index.js';
+import {
+  runUltimateAnalysisNative,
+  ReviewOptions,
+  UltimateAnalysisResult,
+  Violation as NativeViolation,
+} from '../../native/index.js';
 import { Violation } from '../types/index.js';
 import { BaseQualityProvider } from './BaseQualityProvider.js';
 import { READABILITY } from '../constants.js';
@@ -57,20 +62,21 @@ export class JavascriptProvider extends BaseQualityProvider {
       ? this.semantic.getAllExportedSymbols().map((s) => s.name)
       : [];
 
-    return runUltimateAnalysisNative(
-      filePath,
-      isTestFile,
-      reviewOptions,
-      externalExports,
-      imports
-    );
+    return runUltimateAnalysisNative(filePath, isTestFile, reviewOptions, externalExports, imports);
   }
 
   /** 파일의 라인 수와 복잡도 메트릭을 검증합니다. */
   private validateMetrics(
     filePath: string,
     result: UltimateAnalysisResult,
-    options: { maxLines?: number; maxComplexity?: number; securityThreshold?: number; batchResult?: unknown } | undefined,
+    options:
+      | {
+          maxLines?: number;
+          maxComplexity?: number;
+          securityThreshold?: number;
+          batchResult?: unknown;
+        }
+      | undefined,
     violations: Violation[]
   ) {
     const isDataFile = result.lineCount > 50 && result.complexity / result.lineCount < 0.1;
@@ -113,7 +119,11 @@ export class JavascriptProvider extends BaseQualityProvider {
   }
 
   /** Native 분석 결과를 프로젝트 표준 Violation 형식으로 변환합니다. */
-  private mapNativeViolations(filePath: string, nativeViolations: NativeViolation[], violations: Violation[]) {
+  private mapNativeViolations(
+    filePath: string,
+    nativeViolations: NativeViolation[],
+    violations: Violation[]
+  ) {
     let lines: string[] | null = null;
 
     violations.push(
@@ -134,14 +144,14 @@ export class JavascriptProvider extends BaseQualityProvider {
             if (targetLine) {
               const indentMatch = targetLine.match(/^(\s*)/);
               const indent = indentMatch ? indentMatch[1] : '';
-              
+
               // 추출된 심볼명 찾기
               const symbolMatch = violation.message.match(/\[(.*?)\]에 한글 주석이/);
               const symbolName = symbolMatch ? symbolMatch[1] : '해당 심볼';
 
               violation.fixSuggestion = {
                 old_string: targetLine,
-                new_string: `${indent}/**\n${indent} * [작성 필요] ${symbolName}의 역할과 목적을 한글로 설명하세요.\n${indent} */\n${targetLine}`
+                new_string: `${indent}/**\n${indent} * [작성 필요] ${symbolName}의 역할과 목적을 한글로 설명하세요.\n${indent} */\n${targetLine}`,
               };
             }
           } catch (e) {

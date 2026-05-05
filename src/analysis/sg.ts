@@ -38,7 +38,7 @@ const COMPLEXITY_KINDS = [
 ];
 
 const COMPLEXITY_RULE = {
-  any: COMPLEXITY_KINDS.map((kind) => ({ kind }))
+  any: COMPLEXITY_KINDS.map((kind) => ({ kind })),
 };
 
 /**
@@ -54,7 +54,7 @@ const DATA_KINDS = [
 ];
 
 const DATA_RULE = {
-  any: DATA_KINDS.map((kind) => ({ kind }))
+  any: DATA_KINDS.map((kind) => ({ kind })),
 };
 
 /**
@@ -105,7 +105,7 @@ export async function analyzeFile(
     const isDataFile = isTaggedData || (literalRatio > 0.8 && lineCount > 50);
 
     // 2. 전체 복잡도 측정
-    let complexity = root.findAll({ rule: COMPLEXITY_RULE }).length;
+    const complexity = root.findAll({ rule: COMPLEXITY_RULE }).length;
 
     // 3. 심볼별 복잡도 추출 및 TOP 3 선정 (Refactoring Blueprint)
     const symbols: {
@@ -124,9 +124,9 @@ export async function analyzeFile(
 
     for (const kind of symbolKinds) {
       root.findAll({ rule: { kind } }).forEach((node) => {
-        let name = node.find({ rule: { kind: 'identifier' } })?.text() || 'anonymous';
+        const name = node.find({ rule: { kind: 'identifier' } })?.text() || 'anonymous';
         // 복잡도 계산: 해당 노드 하위의 제어문 개수
-        let symbolComplexity = node.findAll({ rule: COMPLEXITY_RULE }).length;
+        const symbolComplexity = node.findAll({ rule: COMPLEXITY_RULE }).length;
         const range = node.range();
         symbols.push({
           name,

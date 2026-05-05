@@ -33,7 +33,7 @@ export class StateManager {
     // v3.8: 홈 디렉토리를 우선 사용하되, 권한 문제 등이 있을 경우 임시 디렉토리로 폴백
     const baseDir = homedir() || tmpdir();
     this.globalStoragePath = join(baseDir, '.fast-lint-mcp');
-    
+
     try {
       if (!existsSync(this.globalStoragePath)) {
         mkdirSync(this.globalStoragePath, { recursive: true });

@@ -14,7 +14,14 @@ import { Logger } from '../utils/Logger.js';
 /** 프로젝트 파일 캐시 */
 const projectFilesCache = new Map<string, string[]>();
 
-const DEFAULT_IGNORE = ['node_modules/**', 'dist/**', 'build/**', 'coverage/**', '.git/**', '.next/**'];
+const DEFAULT_IGNORE = [
+  'node_modules/**',
+  'dist/**',
+  'build/**',
+  'coverage/**',
+  '.git/**',
+  '.next/**',
+];
 
 /**
  * 프로젝트 내의 모든 소스 파일 목록을 가져옵니다.
@@ -57,17 +64,17 @@ export async function checkArchitecture(
  */
 export function extractImportsFromFile(content: string): string[] {
   const imports: string[] = [];
-  
+
   // v3.8.0: 가장 강력하고 유연한 임포트 추출 로직
   const rawImportRegex = /import\s+(?:type\s+)?([\s\S]*?)\s+from\s+['"].*?['"]/g;
   let match;
   while ((match = rawImportRegex.exec(content)) !== null) {
     const rawMatch = match[1].trim();
-    
+
     if (rawMatch.includes('{')) {
       const innerMatch = rawMatch.match(/\{([\s\S]*?)\}/);
       if (innerMatch) {
-        innerMatch[1].split(',').forEach(s => {
+        innerMatch[1].split(',').forEach((s) => {
           const trimmed = s.trim();
           if (!trimmed) return;
           const parts = trimmed.split(/\s+as\s+/);
@@ -77,12 +84,10 @@ export function extractImportsFromFile(content: string): string[] {
       }
       const beforeBrace = rawMatch.split('{')[0].trim().replace(/,$/, '').trim();
       if (beforeBrace && !beforeBrace.includes('* as ')) imports.push(beforeBrace);
-    } 
-    else if (rawMatch.includes('* as ')) {
+    } else if (rawMatch.includes('* as ')) {
       const name = rawMatch.split('* as ')[1].trim().split(/\s+/)[0];
       if (name) imports.push(name);
-    } 
-    else {
+    } else {
       const name = rawMatch.split(/\s+/)[0];
       if (name) imports.push(name);
     }
