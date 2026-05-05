@@ -95,7 +95,7 @@ describe('v3.8 최종 고도화 스위트 (지능형 센서 및 아키텍처 검
     dg['importMap'].set(fileA, [fileB]);
     dg['importMap'].set(fileB, [fileA]);
 
-    const violations = checkStructuralIntegrity(dg);
+    const violations = await checkStructuralIntegrity(dg);
 
     // TECH_DEBT로 강등되었는지 확인
     const cycleViolation = violations.find((v) => v.message.includes('순환 참조가 발견되었으나'));
@@ -111,7 +111,7 @@ describe('v3.8 최종 고도화 스위트 (지능형 센서 및 아키텍처 검
     // Service -> Controller 역방향 참조 발생
     dg['importMap'].set(serviceFile, [controllerFile]);
 
-    const violations = checkStructuralIntegrity(dg);
+    const violations = await checkStructuralIntegrity(dg);
 
     const layerViolation = violations.find(
       (v) => v.rationale === 'Layer 위반: Service -> Controller'

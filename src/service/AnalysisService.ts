@@ -98,7 +98,8 @@ export class AnalysisService {
     this.perfMetrics.fileAnalysis = Math.round(performance.now() - t);
 
     t = performance.now();
-    violations.push(...checkStructuralIntegrity(this.depGraph));
+    const structuralViolations = await checkStructuralIntegrity(this.depGraph);
+    violations.push(...structuralViolations);
     await this.scanTechDebt(allFiles, rules, violations);
     this.perfMetrics.techDebtScan = Math.round(performance.now() - t);
 
