@@ -1,3 +1,0 @@
-## 2026-05-03 - AST-Grep Multi-Pattern Existence Checks
-**Learning:** Using `.some(p => root.findAll(p).length > 0)` for checking if any of multiple patterns exist in an AST is an O(n^2) anti-pattern. It forces a complete traversal of the entire AST for every single pattern in the array, allocating an array of all matches each time.
-**Action:** When checking for the existence of multiple patterns, combine them into a single AST-Grep rule (`{ any: patterns.map(p => ({ pattern: p })) }`) and use `root.find({ rule }) !== null`. This runs in O(n) as it traverses the tree exactly once and short-circuits on the first match, resulting in a ~3x performance boost in node lookups.
