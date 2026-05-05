@@ -118,7 +118,11 @@ describe('Error Path Tests', () => {
       vi.mocked(importCheck.getProjectFiles).mockResolvedValue(['src/index.ts']);
 
       const config = makeConfig({ incremental: true });
-      const service = new AnalysisService(makeStateManager() as any, config as any, makeSemantic() as any);
+      const service = new AnalysisService(
+        makeStateManager() as any,
+        config as any,
+        makeSemantic() as any
+      );
 
       // Git 실패가 있어도 throw하지 않고 결과를 반환해야 한다
       await expect(service.runAllChecks()).resolves.toBeDefined();
@@ -183,7 +187,9 @@ describe('Error Path Tests', () => {
   describe('Task 3: DependencyGraph.build() with empty file list', () => {
     it('빈 파일 목록으로 build()를 호출해도 throw하지 않아야 한다', async () => {
       // DependencyGraph 모킹을 해제하고 실제 클래스로 테스트
-      vi.mocked(DependencyGraph).prototype.build = vi.fn().mockImplementation(async function (files?: string[]) {
+      vi.mocked(DependencyGraph).prototype.build = vi.fn().mockImplementation(async function (
+        files?: string[]
+      ) {
         // 실제 build 동작을 시뮬레이션: 빈 배열은 정상 처리
         if (!files || files.length === 0) return;
       });

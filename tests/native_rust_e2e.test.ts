@@ -15,7 +15,7 @@ describe('Rust E2E MCP Integration', { timeout: 15000 }, () => {
     if (!fs.existsSync(testDir)) {
       fs.mkdirSync(testDir, { recursive: true });
     }
-    
+
     // Allow large limits to only test the specific extraction features
     config = {
       rules: {
@@ -23,9 +23,9 @@ describe('Rust E2E MCP Integration', { timeout: 15000 }, () => {
         maxComplexity: 150,
         coverageDirectory: 'coverage',
       },
-      architectureRules: []
+      architectureRules: [],
     } as any;
-    
+
     // Create actual Rust file
     const rustCode = `
 // 한글 주석
@@ -51,13 +51,13 @@ impl User {
 }
 `;
     fs.writeFileSync(exampleFilePath, rustCode);
-    
+
     const stateManagerMock = {
       getLastCoverage: vi.fn().mockResolvedValue(null),
       saveCoverage: vi.fn(),
       getCacheDir: vi.fn().mockReturnValue(testDir),
     } as any;
-    
+
     const semantic = new SemanticService();
     // Use testDir as workspace
     (semantic as any).workspacePath = testDir;
@@ -75,12 +75,12 @@ impl User {
     // We only pass the file directly to avoid git mock issues in global project
     // Usually qualityCheck is for changed files, but we can call it on the specific file if we use a mock
     vi.spyOn(service as any, 'getChangedFiles').mockResolvedValue([exampleFilePath]);
-    
+
     const report = await service.runAllChecks();
-    
+
     expect(report.metadata?.filesAnalyzed).toBeGreaterThan(0);
     // There shouldn't be violations for complexity since max is 150
-    const fileViolations = report.violations.filter(v => v.file === exampleFilePath);
+    const fileViolations = report.violations.filter((v) => v.file === exampleFilePath);
     expect(fileViolations.length).toBe(0); // Assuming no other rules broken
   });
 
@@ -94,7 +94,7 @@ impl User {
     const { extractSymbolsRustNative } = await import('../../native/index.js');
     const content = fs.readFileSync(exampleFilePath, 'utf-8');
     const symbols = extractSymbolsRustNative(exampleFilePath, content);
-    
+
     const fnSym = symbols.find((s: any) => s.name === 'run_ultimate_analysis');
     expect(fnSym).toBeDefined();
     expect(fnSym.complexity).toBe(3); // base 1 + if 1 + match 1
@@ -109,15 +109,15 @@ impl User {
   it('TC 4.3: Hallucination 억제 - Should not panic on missing symbols or invalid syntax', async () => {
     const invalidFilePath = path.join(testDir, 'invalid.rs');
     fs.writeFileSync(invalidFilePath, `pub fn invalid() -> { let x = ; }`); // syntax error
-    
+
     const { extractSymbolsRustNative } = await import('../../native/index.js');
     const content = fs.readFileSync(invalidFilePath, 'utf-8');
-    
+
     // Should gracefully return empty array and not panic
     const symbols = extractSymbolsRustNative(invalidFilePath, content);
     expect(Array.isArray(symbols)).toBe(true);
     expect(symbols.length).toBe(0);
-    
+
     fs.unlinkSync(invalidFilePath);
   });
 });

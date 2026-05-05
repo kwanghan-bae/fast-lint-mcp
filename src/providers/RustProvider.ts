@@ -38,7 +38,7 @@ export class RustProvider extends BaseQualityProvider {
       const symbols = extractSymbolsRustNative(filePath, content);
 
       let totalComplexity = 0;
-      let totalLines = content.split('\n').length;
+      const totalLines = content.split('\n').length;
 
       // 파일 크기 위반 체크
       this.addSizeViolation(filePath, totalLines, maxLines, false, violations);

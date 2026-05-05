@@ -12,7 +12,10 @@ const makeCov = (currentCoverage = 80, extra: Record<string, unknown> = {}) => (
 
 describe('ReportService', () => {
   let ReportService: any;
-  let stateManager: { getLastCoverage: ReturnType<typeof vi.fn>; saveCoverage: ReturnType<typeof vi.fn> };
+  let stateManager: {
+    getLastCoverage: ReturnType<typeof vi.fn>;
+    saveCoverage: ReturnType<typeof vi.fn>;
+  };
   let semantic: { getSymbolMetrics: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
@@ -47,7 +50,13 @@ describe('ReportService', () => {
   it('중복 위반을 제거해야 한다', async () => {
     const svc = new ReportService(semantic, stateManager, '/test');
     const dup = { type: 'SIZE', file: 'a.ts', line: 1, message: '크기 초과' };
-    const report = await svc.assemble([dup, { ...dup }, { ...dup }], makeCov(90), [], ['a.ts'], false);
+    const report = await svc.assemble(
+      [dup, { ...dup }, { ...dup }],
+      makeCov(90),
+      [],
+      ['a.ts'],
+      false
+    );
     expect(report.violations.filter((v: any) => v.type === 'SIZE')).toHaveLength(1);
   });
 

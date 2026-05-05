@@ -10,8 +10,9 @@ export function checkTestValidity(filePath: string): { isValid: boolean; message
 
   // 1. 주요 Assertion 패턴 탐색 (Jest, Vitest, Mocha, Chai 등)
   const assertionPatterns = ['expect($$$)', 'assert($$$)', 'assert.$A($$$)', 'should.$A($$$)'];
+  const assertionRule = { any: assertionPatterns.map((p) => ({ pattern: p })) };
 
-  const hasAssertion = assertionPatterns.some((p) => root.findAll(p).length > 0);
+  const hasAssertion = root.find({ rule: assertionRule }) !== null;
 
   if (!hasAssertion) {
     return {

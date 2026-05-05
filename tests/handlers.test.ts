@@ -79,7 +79,12 @@ describe('toolHandlers', () => {
   describe('guide', () => {
     it('returns a ToolResponse with SOP text', async () => {
       const mockGetAnalyzer = vi.fn();
-      const response = await toolHandlers['guide']({}, semanticSvc as any, WORKSPACE, mockGetAnalyzer as any);
+      const response = await toolHandlers['guide'](
+        {},
+        semanticSvc as any,
+        WORKSPACE,
+        mockGetAnalyzer as any
+      );
 
       expect(response).toHaveProperty('content');
       expect(Array.isArray(response.content)).toBe(true);
@@ -90,7 +95,12 @@ describe('toolHandlers', () => {
 
     it('SOP text includes all four mandates', async () => {
       const mockGetAnalyzer = vi.fn();
-      const response = await toolHandlers['guide']({}, semanticSvc as any, WORKSPACE, mockGetAnalyzer as any);
+      const response = await toolHandlers['guide'](
+        {},
+        semanticSvc as any,
+        WORKSPACE,
+        mockGetAnalyzer as any
+      );
       const text = response.content[0].text;
 
       expect(text).toContain('MANDATE 1');
@@ -104,7 +114,12 @@ describe('toolHandlers', () => {
   describe('quality-check', () => {
     it('calls getAnalyzer with the workspace and runAllChecks with args', async () => {
       const args = { maxLines: 300 };
-      const { result, mockGetAnalyzer } = invokeHandler('quality-check', args, semanticSvc, analysisSvc);
+      const { result, mockGetAnalyzer } = invokeHandler(
+        'quality-check',
+        args,
+        semanticSvc,
+        analysisSvc
+      );
       await result;
 
       expect(mockGetAnalyzer).toHaveBeenCalledWith(WORKSPACE);
@@ -128,15 +143,20 @@ describe('toolHandlers', () => {
       const response = await result;
 
       expect(semanticSvc.ensureInitialized).toHaveBeenCalledWith(false, WORKSPACE);
-      expect(semanticSvc.getSymbolMetrics).toHaveBeenCalledWith(
-        expect.stringContaining('foo.ts')
-      );
+      expect(semanticSvc.getSymbolMetrics).toHaveBeenCalledWith(expect.stringContaining('foo.ts'));
       expect(response.content[0].type).toBe('text');
     });
 
     it('returns JSON-stringified metrics', async () => {
-      semanticSvc.getSymbolMetrics.mockReturnValue([{ name: 'bar', kind: 'function', lineCount: 5, complexity: 1, startLine: 1, endLine: 5 }]);
-      const { result } = invokeHandler('get-symbol-metrics', { filePath: 'src/bar.ts' }, semanticSvc, analysisSvc);
+      semanticSvc.getSymbolMetrics.mockReturnValue([
+        { name: 'bar', kind: 'function', lineCount: 5, complexity: 1, startLine: 1, endLine: 5 },
+      ]);
+      const { result } = invokeHandler(
+        'get-symbol-metrics',
+        { filePath: 'src/bar.ts' },
+        semanticSvc,
+        analysisSvc
+      );
       const response = await result;
 
       const parsed = JSON.parse(response.content[0].text);
@@ -161,7 +181,12 @@ describe('toolHandlers', () => {
 
     it('returns fallback text when symbol not found', async () => {
       semanticSvc.getSymbolContent.mockResolvedValue(null);
-      const { result } = invokeHandler('get-symbol-content', { filePath: 'src/x.ts', symbolName: 'missing' }, semanticSvc, analysisSvc);
+      const { result } = invokeHandler(
+        'get-symbol-content',
+        { filePath: 'src/x.ts', symbolName: 'missing' },
+        semanticSvc,
+        analysisSvc
+      );
       const response = await result;
 
       expect(response.content[0].text).toContain('찾을 수 없습니다');
@@ -169,7 +194,12 @@ describe('toolHandlers', () => {
 
     it('returns symbol content when found', async () => {
       semanticSvc.getSymbolContent.mockResolvedValue('export function hello() { return 1; }');
-      const { result } = invokeHandler('get-symbol-content', { filePath: 'src/x.ts', symbolName: 'hello' }, semanticSvc, analysisSvc);
+      const { result } = invokeHandler(
+        'get-symbol-content',
+        { filePath: 'src/x.ts', symbolName: 'hello' },
+        semanticSvc,
+        analysisSvc
+      );
       const response = await result;
 
       expect(response.content[0].text).toContain('hello');
@@ -191,9 +221,19 @@ describe('toolHandlers', () => {
     });
 
     it('returns JSON-stringified impact analysis', async () => {
-      const mockImpact = { symbolName: 'doWork', affectedFiles: ['a.ts'], referencingFiles: [], affectedTests: [] };
+      const mockImpact = {
+        symbolName: 'doWork',
+        affectedFiles: ['a.ts'],
+        referencingFiles: [],
+        affectedTests: [],
+      };
       semanticSvc.analyzeImpact.mockResolvedValue(mockImpact);
-      const { result } = invokeHandler('analyze-impact', { filePath: 'src/foo.ts', symbolName: 'doWork' }, semanticSvc, analysisSvc);
+      const { result } = invokeHandler(
+        'analyze-impact',
+        { filePath: 'src/foo.ts', symbolName: 'doWork' },
+        semanticSvc,
+        analysisSvc
+      );
       const response = await result;
 
       const parsed = JSON.parse(response.content[0].text);
@@ -215,7 +255,12 @@ describe('toolHandlers', () => {
 
     it('returns JSON-stringified references array', async () => {
       semanticSvc.findReferences.mockReturnValue([{ file: 'a.ts', line: 10 }]);
-      const { result } = invokeHandler('find-references', { symbolName: 'sym' }, semanticSvc, analysisSvc);
+      const { result } = invokeHandler(
+        'find-references',
+        { symbolName: 'sym' },
+        semanticSvc,
+        analysisSvc
+      );
       const response = await result;
 
       const parsed = JSON.parse(response.content[0].text);
@@ -237,7 +282,12 @@ describe('toolHandlers', () => {
 
     it('returns JSON-stringified definition location', async () => {
       semanticSvc.goToDefinition.mockReturnValue({ file: 'src/MyClass.ts', line: 1 });
-      const { result } = invokeHandler('go-to-definition', { symbolName: 'MyClass' }, semanticSvc, analysisSvc);
+      const { result } = invokeHandler(
+        'go-to-definition',
+        { symbolName: 'MyClass' },
+        semanticSvc,
+        analysisSvc
+      );
       const response = await result;
 
       const parsed = JSON.parse(response.content[0].text);
@@ -257,7 +307,9 @@ describe('toolHandlers', () => {
     });
 
     it('returns JSON-stringified dead code list', async () => {
-      semanticSvc.findDeadCode.mockResolvedValue([{ name: 'unusedFunc', file: 'src/old.ts', line: 5 }]);
+      semanticSvc.findDeadCode.mockResolvedValue([
+        { name: 'unusedFunc', file: 'src/old.ts', line: 5 },
+      ]);
       const { result } = invokeHandler('find-dead-code', {}, semanticSvc, analysisSvc);
       const response = await result;
 
@@ -273,7 +325,12 @@ describe('toolHandlers', () => {
       const mockedExecSync = vi.mocked(execSync);
       mockedExecSync.mockReturnValue(Buffer.from(''));
 
-      const { result } = invokeHandler('verify-fix', { testCommand: 'npm test' }, semanticSvc, analysisSvc);
+      const { result } = invokeHandler(
+        'verify-fix',
+        { testCommand: 'npm test' },
+        semanticSvc,
+        analysisSvc
+      );
       const response = await result;
 
       expect(mockedExecSync).toHaveBeenCalled();
@@ -301,7 +358,12 @@ describe('toolHandlers', () => {
         throw err;
       });
 
-      const { result } = invokeHandler('verify-fix', { testCommand: 'npm test' }, semanticSvc, analysisSvc);
+      const { result } = invokeHandler(
+        'verify-fix',
+        { testCommand: 'npm test' },
+        semanticSvc,
+        analysisSvc
+      );
       const response = await result;
 
       const parsed = JSON.parse(response.content[0].text);
