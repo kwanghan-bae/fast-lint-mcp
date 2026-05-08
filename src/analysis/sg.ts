@@ -45,13 +45,7 @@ const COMPLEXITY_RULE = {
  * 데이터 파일 판별을 위한 패턴 목록 (v2.2 Stable)
  * ⚡ Bolt: Optimized string patterns out in favor of direct AST kind matching
  */
-const DATA_KINDS = [
-  'array',
-  'object',
-  'string',
-  'number',
-  'regex',
-];
+const DATA_KINDS = ['array', 'object', 'string', 'number', 'regex'];
 
 const DATA_RULE = {
   any: DATA_KINDS.map((kind) => ({ kind })),
@@ -122,27 +116,30 @@ export async function analyzeFile(
       'arrow_function',
     ];
 
-    for (const kind of symbolKinds) {
-      root.findAll({ rule: { kind } }).forEach((node) => {
-        const name = node.find({ rule: { kind: 'identifier' } })?.text() || 'anonymous';
-        // 복잡도 계산: 해당 노드 하위의 제어문 개수
-        const symbolComplexity = node.findAll({ rule: COMPLEXITY_RULE }).length;
-        const range = node.range();
-        symbols.push({
-          name,
-          complexity: symbolComplexity,
-          kind: kind.replace('_declaration', '').replace('_definition', ''),
-          line: range.start.line + 1,
-          endLine: range.end.line + 1,
-        });
+    // ⚡ Bolt: Combined sequential findAll loops into a single pass for better performance
+    const symbolRule = { any: symbolKinds.map((kind) => ({ kind })) };
+    root.findAll({ rule: symbolRule }).forEach((node) => {
+      const kind = node.kind();
+      const name = node.find({ rule: { kind: 'identifier' } })?.text() || 'anonymous';
+      // 복잡도 계산: 해당 노드 하위의 제어문 개수
+      const symbolComplexity = node.findAll({ rule: COMPLEXITY_RULE }).length;
+      const range = node.range();
+      symbols.push({
+        name,
+        complexity: symbolComplexity,
+        kind: kind.replace('_declaration', '').replace('_definition', ''),
+        line: range.start.line + 1,
+        endLine: range.end.line + 1,
       });
-    }
+    });
+
     const topComplexSymbols = symbols.sort((a, b) => b.complexity - a.complexity).slice(0, 3);
 
     // 4. 사용자 정의 규칙 검사
     const customViolations: { id: string; message: string }[] = [];
     for (const rule of customRules) {
-      if (root.findAll(rule.pattern).length > 0) {
+      // ⚡ Bolt: Used find() !== null instead of findAll().length > 0 to short-circuit on first match
+      if (root.find(rule.pattern) !== null) {
         customViolations.push({ id: rule.id, message: rule.message });
       }
     }
