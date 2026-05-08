@@ -119,7 +119,7 @@ export async function analyzeFile(
     // ⚡ Bolt: Combined sequential findAll loops into a single pass for better performance
     const symbolRule = { any: symbolKinds.map((kind) => ({ kind })) };
     root.findAll({ rule: symbolRule }).forEach((node) => {
-      const kind = node.kind();
+      const kind = node.kind() as string;
       const name = node.find({ rule: { kind: 'identifier' } })?.text() || 'anonymous';
       // 복잡도 계산: 해당 노드 하위의 제어문 개수
       const symbolComplexity = node.findAll({ rule: COMPLEXITY_RULE }).length;
