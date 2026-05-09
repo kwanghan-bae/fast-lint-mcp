@@ -45,13 +45,7 @@ const COMPLEXITY_RULE = {
  * 데이터 파일 판별을 위한 패턴 목록 (v2.2 Stable)
  * ⚡ Bolt: Optimized string patterns out in favor of direct AST kind matching
  */
-const DATA_KINDS = [
-  'array',
-  'object',
-  'string',
-  'number',
-  'regex',
-];
+const DATA_KINDS = ['array', 'object', 'string', 'number', 'regex'];
 
 const DATA_RULE = {
   any: DATA_KINDS.map((kind) => ({ kind })),
@@ -142,7 +136,9 @@ export async function analyzeFile(
     // 4. 사용자 정의 규칙 검사
     const customViolations: { id: string; message: string }[] = [];
     for (const rule of customRules) {
-      if (root.findAll(rule.pattern).length > 0) {
+      // ⚡ Bolt: Using find() !== null instead of findAll().length > 0 to short-circuit
+      // AST traversal on first match, avoiding O(N) array allocation overhead.
+      if (root.find(rule.pattern) !== null) {
         customViolations.push({ id: rule.id, message: rule.message });
       }
     }

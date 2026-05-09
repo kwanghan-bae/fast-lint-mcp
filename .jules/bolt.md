@@ -1,0 +1,3 @@
+## 2025-02-27 - [@ast-grep/napi array allocation overhead and AST short-circuiting]
+**Learning:** Checking for node existence with `@ast-grep/napi` using `root.findAll(pattern).length > 0` causes significant performance overhead. It forces a complete traversal of the AST and allocates memory for an array containing all matches, resulting in O(N) overhead even if we only care if a single instance exists.
+**Action:** Always use `root.find(pattern) !== null` for existence checks. This properly short-circuits the traversal immediately upon finding the first match and prevents unnecessary array allocations.
