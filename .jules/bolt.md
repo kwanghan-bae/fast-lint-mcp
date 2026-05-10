@@ -5,3 +5,7 @@
 ## 2025-02-12 - [Combine AST Traversals]
 **Learning:** Calling `root.findAll({ rule: { kind } })` sequentially for multiple AST node kinds (e.g. `function_declaration`, `class_declaration`) results in traversing the entire AST multiple times (O(K*N) where K is number of kinds).
 **Action:** Combine multiple sequential queries into a single pass using the `any` rule: `{ any: kinds.map(kind => ({ kind })) }` so the AST is traversed exactly once.
+
+## 2025-02-12 - [Async File I/O in MCP Server]
+**Learning:** In Node.js server environments (like MCP servers), using synchronous file I/O operations (e.g., `readFileSync`) inside `async` request handlers blocks the main event loop. This severely degrades scalability and throughput when multiple concurrent requests are processed.
+**Action:** Always prefer asynchronous I/O operations (e.g., `await readFile` from `fs/promises`) inside `async` contexts to ensure the main thread remains non-blocking.
