@@ -83,15 +83,18 @@ export async function analyzeFile(
     const isTaggedData = text.includes('@data') || text.includes('@config');
     let dataTextLength = 0;
 
-    // 리터럴 노드들의 실제 텍스트 길이를 합산 (중복 방지를 위해 최상위 노드 위주 탐색 시도)
-    try {
-      const matches = root.findAll({ rule: DATA_RULE });
-      matches.forEach((m) => {
-        // 중첩된 노드가 있을 수 있으므로 단순 합산 후 전체 길이와 비교하는 Heuristic 적용
-        dataTextLength += m.text().length;
-      });
-    } catch (e) {
-      /* ignore */
+    // ⚡ Bolt: Short-circuit expensive AST literal lookup if we already have an explicit tag
+    if (!isTaggedData) {
+      // 리터럴 노드들의 실제 텍스트 길이를 합산 (중복 방지를 위해 최상위 노드 위주 탐색 시도)
+      try {
+        const matches = root.findAll({ rule: DATA_RULE });
+        matches.forEach((m) => {
+          // 중첩된 노드가 있을 수 있으므로 단순 합산 후 전체 길이와 비교하는 Heuristic 적용
+          dataTextLength += m.text().length;
+        });
+      } catch (e) {
+        /* ignore */
+      }
     }
 
     // 리터럴이 텍스트의 80% 이상을 차지하거나, 명시적 태그가 있는 경우 데이터 파일로 간주
