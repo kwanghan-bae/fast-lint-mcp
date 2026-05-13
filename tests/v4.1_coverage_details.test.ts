@@ -5,6 +5,11 @@ import { ConfigService } from '../src/config.js';
 import { SemanticService } from '../src/service/SemanticService.js';
 import { writeFileSync, mkdirSync, rmSync, existsSync } from 'fs';
 import { join } from 'path';
+import { vi } from 'vitest';
+
+vi.mock('../src/checkers/env.js', () => ({
+  checkEnv: vi.fn().mockResolvedValue({ pass: true }),
+}));
 
 describe('v4.1 커버리지 상세 분석 검증', () => {
   const testDir = join(process.cwd(), 'temp_v41_verify');

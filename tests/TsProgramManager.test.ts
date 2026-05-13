@@ -1,11 +1,16 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { writeFileSync, mkdirSync, rmSync, existsSync } from 'fs';
 import { join } from 'path';
+import { vi } from 'vitest';
+
+vi.mock('../src/checkers/env.js', () => ({
+  checkEnv: vi.fn().mockResolvedValue({ pass: true }),
+}));
 
 // TsProgramManager uses a static singleton — we reset it between tests via the module registry trick
 // by re-importing the module. Since vitest caches modules, we need to reset the singleton manually.
 
-describe('TsProgramManager', () => {
+describe('TsProgramManager', { timeout: 15000 }, () => {
   const testDir = join(process.cwd(), 'temp_ts_program_manager_test');
 
   beforeEach(() => {

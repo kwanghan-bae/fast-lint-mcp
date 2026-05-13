@@ -14,6 +14,10 @@ vi.mock('../src/analysis/import-check.js');
 vi.mock('../src/utils/DependencyGraph.js');
 vi.mock('simple-git');
 vi.mock('fs');
+vi.mock('../src/checkers/env.js', () => ({
+  checkEnv: vi.fn().mockResolvedValue({ pass: true }),
+}));
+
 vi.mock('../native/index.js', () => ({
   runUltimateAnalysisNative: vi.fn(),
   runMutationTestNative: vi.fn(),

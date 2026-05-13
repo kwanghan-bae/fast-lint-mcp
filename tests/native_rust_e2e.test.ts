@@ -5,6 +5,10 @@ import { SemanticService } from '../src/service/SemanticService.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
+vi.mock('../src/checkers/env.js', () => ({
+  checkEnv: vi.fn().mockResolvedValue({ pass: true }),
+}));
+
 describe('Rust E2E MCP Integration', { timeout: 15000 }, () => {
   let service: AnalysisService;
   let config: ConfigService;
