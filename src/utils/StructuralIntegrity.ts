@@ -19,20 +19,21 @@ export async function checkStructuralIntegrity(dg?: DependencyGraph): Promise<Vi
     cycles.map(async (cycle) => {
       // 순환 경로 상에 존재하는 파일들의 내용을 읽어 forwardRef 사용 여부 확인
       let hasForwardRef = false;
-      await Promise.all(
-        cycle.map(async (file) => {
-          if (!hasForwardRef && existsSync(file)) {
-            try {
-              const content = await readFile(file, 'utf-8');
-              if (content.includes('forwardRef')) {
-                hasForwardRef = true;
-              }
-            } catch (e) {
-              // 무시
+      // ⚡ Bolt Optimization: Use for...of to short-circuit properly instead of Promise.all
+      // Promise.all starts all file reads concurrently, wasting resources if the first file has forwardRef
+      for (const file of cycle) {
+        if (existsSync(file)) {
+          try {
+            const content = await readFile(file, 'utf-8');
+            if (content.includes('forwardRef')) {
+              hasForwardRef = true;
+              break; // Short-circuit on first match to avoid reading remaining files
             }
+          } catch (e) {
+            // 무시
           }
-        })
-      );
+        }
+      }
 
       if (hasForwardRef) {
         violations.push({
