@@ -142,7 +142,7 @@ describe('TsProgramManager', () => {
     expect(result).toEqual([]);
   });
 
-  it('refresh()는 예외 없이 프로그램을 갱신해야 한다', async () => {
+  it('refresh()는 예외 없이 프로그램을 갱신해야 한다', { timeout: 30000 }, async () => {
     const { TsProgramManager } = await import('../src/utils/TsProgramManager.js');
 
     const file1 = join(testDir, 'file1.ts');

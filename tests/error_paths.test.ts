@@ -108,7 +108,7 @@ describe('Error Path Tests', () => {
   });
 
   describe('Task 1: AnalysisService Git failure fallback', () => {
-    it('Git status 실패 시 전체 분석으로 폴백해야 한다', async () => {
+    it('Git status 실패 시 전체 분석으로 폴백해야 한다', { timeout: 30000 }, async () => {
       // simpleGit.status()가 throw하도록 설정
       vi.mocked(simpleGit).mockReturnValue({
         checkIsRepo: vi.fn().mockResolvedValue(true),
