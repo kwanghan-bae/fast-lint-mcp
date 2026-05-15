@@ -1,3 +1,4 @@
+vi.mock('../src/checkers/env.js', () => ({ checkEnv: vi.fn().mockResolvedValue({ pass: true }) }));
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AnalysisService } from '../src/service/AnalysisService.js';
 import * as fs from 'fs';
@@ -85,6 +86,6 @@ describe('AnalysisService Extra (Coverage & Error)', () => {
     vi.mocked(glob).mockResolvedValue([srcFilePath] as any);
 
     const report = await service.runAllChecks({ coveragePath: summaryPath });
-    expect(report.violations.some((v) => v.message.includes('만료'))).toBeDefined(); // Relaxed for CI
+    expect(report.violations.some((v) => v.message.includes('만료'))).toBe(true);
   }, 30000); // 30초 타임아웃
 });

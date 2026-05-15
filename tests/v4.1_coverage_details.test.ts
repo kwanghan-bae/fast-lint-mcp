@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, vi, it, expect, beforeEach, afterEach } from 'vitest';
 import { AnalysisService } from '../src/service/AnalysisService.js';
 import { StateManager } from '../src/state.js';
 import { ConfigService } from '../src/config.js';
@@ -57,13 +57,15 @@ describe('v4.1 커버리지 상세 분석 검증', () => {
 
       // 2. 검증
       const violation = report.violations.find((v) => v.type === 'COVERAGE');
-      // expect(violation).toBeDefined(); // Relaxed for CI
+      expect(violation).toBeDefined();
       // 현재 60%가 rationale에 있어야 함
-      if(violation) expect(violation?.rationale).toContain('60.0%');
+      expect(violation?.rationale).toContain('60.0%');
       // 기준 85%가 rationale에 있어야 함
-      if(violation) expect(violation?.rationale).toContain('85%');
+      expect(violation?.rationale).toContain('85%');
       // 취약 파일인 bad.ts(20.0%)가 포함되어야 함
-      if(violation) expect(violation?.rationale).toContain('bad.ts(20.0%)');
+      expect(violation?.rationale).toContain('bad.ts(20.0%)');
     }
   );
 });
+
+vi.mock('../src/checkers/env.js', () => ({ checkEnv: vi.fn().mockResolvedValue({ pass: true }) }));

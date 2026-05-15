@@ -94,7 +94,7 @@ describe('AnalysisService', { timeout: 15000 }, () => {
 
   it('모든 검사를 수행하고 리포트를 생성해야 한다', async () => {
     const report = await service.runAllChecks();
-    expect(report.pass).toBeDefined(); // Relaxed for CI
+    expect(report.pass).toBe(true);
     expect(report.violations).toHaveLength(0);
   });
 
@@ -111,7 +111,7 @@ describe('AnalysisService', { timeout: 15000 }, () => {
     vi.mocked(DependencyGraph).prototype.getDependents.mockReturnValue(['src/index.ts']);
 
     const report = await service.runAllChecks();
-    expect(['incremental', 'full']).toContain(report.metadata?.analysisMode); // Relaxed for CI
+    expect(report.metadata?.analysisMode).toBe('incremental');
   });
 
   it('자가 치유 결과가 리포트에 포함되어야 한다', async () => {
