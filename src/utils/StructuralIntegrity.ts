@@ -15,40 +15,37 @@ export async function checkStructuralIntegrity(dg?: DependencyGraph): Promise<Vi
 
   // 1. 모듈 간 순환 참조(Circular Dependency) 탐지 및 forwardRef 예외 처리
   const cycles = dg.detectCycles() || [];
-  await Promise.all(
-    cycles.map(async (cycle) => {
-      // 순환 경로 상에 존재하는 파일들의 내용을 읽어 forwardRef 사용 여부 확인
-      let hasForwardRef = false;
-      await Promise.all(
-        cycle.map(async (file) => {
-          if (!hasForwardRef && existsSync(file)) {
-            try {
-              const content = await readFile(file, 'utf-8');
-              if (content.includes('forwardRef')) {
-                hasForwardRef = true;
-              }
-            } catch (e) {
-              // 무시
-            }
+  for (const cycle of cycles) {
+    // 순환 경로 상에 존재하는 파일들의 내용을 읽어 forwardRef 사용 여부 확인
+    let hasForwardRef = false;
+    for (const file of cycle) {
+      if (existsSync(file)) {
+        try {
+          const content = await readFile(file, 'utf-8');
+          if (content.includes('forwardRef')) {
+            hasForwardRef = true;
+            break; // Short-circuit: stop reading remaining files in cycle
           }
-        })
-      );
-
-      if (hasForwardRef) {
-        violations.push({
-          type: 'TECH_DEBT',
-          rationale: '순환 참조 회피 패턴(forwardRef) 인지',
-          message: `[기술 부채] 순환 참조가 발견되었으나 forwardRef로 회피되었습니다. 구조적 리팩토링이 권장됩니다: ${cycle.map((c) => c.split('/').pop()).join(' -> ')}`,
-        });
-      } else {
-        violations.push({
-          type: 'ARCHITECTURE',
-          rationale: '단방향 의존성 위반 (순환 참조)',
-          message: `[순환 참조] 치명적인 구조적 결함이 발견되었습니다: ${cycle.map((c) => c.split('/').pop()).join(' -> ')}`,
-        });
+        } catch (e) {
+          // 무시
+        }
       }
-    })
-  );
+    }
+
+    if (hasForwardRef) {
+      violations.push({
+        type: 'TECH_DEBT',
+        rationale: '순환 참조 회피 패턴(forwardRef) 인지',
+        message: `[기술 부채] 순환 참조가 발견되었으나 forwardRef로 회피되었습니다. 구조적 리팩토링이 권장됩니다: ${cycle.map((c) => c.split('/').pop()).join(' -> ')}`,
+      });
+    } else {
+      violations.push({
+        type: 'ARCHITECTURE',
+        rationale: '단방향 의존성 위반 (순환 참조)',
+        message: `[순환 참조] 치명적인 구조적 결함이 발견되었습니다: ${cycle.map((c) => c.split('/').pop()).join(' -> ')}`,
+      });
+    }
+  }
 
   // 2. 단방향 레이어 아키텍처 흐름 검사 (Controller -> Service -> Repository)
   // v3.8.1: 파일 명명 규칙을 기반으로 역방향 참조를 탐지합니다.
