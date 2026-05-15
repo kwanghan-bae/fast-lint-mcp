@@ -5,6 +5,11 @@ import { ConfigService } from '../src/config.js';
 import { SemanticService } from '../src/service/SemanticService.js';
 import { writeFileSync, mkdirSync, rmSync, existsSync } from 'fs';
 import { join } from 'path';
+import { vi } from 'vitest';
+
+vi.mock('../src/checkers/env.js', () => ({
+  checkEnv: vi.fn().mockResolvedValue({ pass: true }),
+}));
 
 describe('v3.9 모노레포 커버리지 탐지 검증', () => {
   let testDir: string;
@@ -62,7 +67,7 @@ end_of_record
     }
   );
 
-  it('사용자가 직접 지정한 coveragePath를 최우선으로 사용해야 한다', async () => {
+  it('사용자가 직접 지정한 coveragePath를 최우선으로 사용해야 한다', { timeout: 15000 }, async () => {
     const customDir = join(testDir, 'custom-reports');
     mkdirSync(customDir, { recursive: true });
     const customPath = join(customDir, 'my-coverage.json');

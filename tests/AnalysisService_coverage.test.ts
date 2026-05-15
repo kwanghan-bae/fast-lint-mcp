@@ -5,6 +5,9 @@ import { join } from 'path';
 import { DependencyGraph } from '../src/utils/DependencyGraph.js';
 import glob from 'fast-glob';
 
+vi.mock('../src/checkers/env.js', () => ({
+  checkEnv: vi.fn().mockResolvedValue({ pass: true }),
+}));
 vi.mock('fast-glob');
 vi.mock('simple-git', () => ({
   simpleGit: () => ({
