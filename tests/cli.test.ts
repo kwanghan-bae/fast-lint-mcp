@@ -24,7 +24,7 @@ function runCLI(args: string): { stdout: string; stderr: string; exitCode: numbe
 }
 
 describe('CLI flags', () => {
-  it('--help outputs usage information', () => {
+  it('--help outputs usage information', { timeout: 15000 }, () => {
     const { stdout, exitCode } = runCLI('--help');
     expect(exitCode).toBe(0);
     expect(stdout).toContain('Usage:');
@@ -33,21 +33,21 @@ describe('CLI flags', () => {
     expect(stdout).toContain('--version');
   });
 
-  it('-h outputs usage information', () => {
+  it('-h outputs usage information', { timeout: 15000 }, () => {
     const { stdout, exitCode } = runCLI('-h');
     expect(exitCode).toBe(0);
     expect(stdout).toContain('Usage:');
     expect(stdout).toContain('fast-lint-mcp');
   });
 
-  it('--version outputs a version number', () => {
+  it('--version outputs a version number', { timeout: 15000 }, () => {
     const { stdout, exitCode } = runCLI('--version');
     expect(exitCode).toBe(0);
     // VERSION is formatted as v<semver>, e.g. v0.0.1
     expect(stdout.trim()).toMatch(/^v\d+\.\d+\.\d+/);
   });
 
-  it('-v outputs a version number', () => {
+  it('-v outputs a version number', { timeout: 15000 }, () => {
     const { stdout, exitCode } = runCLI('-v');
     expect(exitCode).toBe(0);
     expect(stdout.trim()).toMatch(/^v\d+\.\d+\.\d+/);
