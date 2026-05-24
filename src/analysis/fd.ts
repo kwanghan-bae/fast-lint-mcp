@@ -1,11 +1,7 @@
-import { readFileSync, existsSync, readFile } from 'fs';
-import { Lang, parse, SgNode } from '@ast-grep/napi';
-import { dirname, join, normalize, isAbsolute } from 'path';
-import { promisify } from 'util';
+import { existsSync } from 'fs';
+import { dirname, normalize } from 'path';
 import { resolveModulePath } from '../utils/PathResolver.js';
-
-/** 프로미스 기반 파일 읽기 헬퍼 */
-const readFileAsync = promisify(readFile);
+import { AstCacheManager } from '../utils/AstCacheManager.js';
 
 /**
  * 프로젝트 내의 미사용 파일(Orphan Files)을 탐지하기 위한 의존성 맵을 생성합니다.
@@ -17,10 +13,17 @@ export async function getDependencyMap(
   const dependencyMap = new Map<string, string[]>();
   if (!allFiles || allFiles.length === 0) return dependencyMap;
 
-  for (const filePath of allFiles) {
+  // ⚡ Bolt: Using Promise.all for parallel extraction instead of sequential for...of
+  const promises = allFiles.map(async (filePath) => {
     const imports = await extractImportsFromFile(filePath, allFiles);
+    return { filePath, imports };
+  });
+
+  const results = await Promise.all(promises);
+  for (const { filePath, imports } of results) {
     dependencyMap.set(filePath, imports);
   }
+
   return dependencyMap;
 }
 
@@ -30,27 +33,23 @@ export async function getDependencyMap(
 async function extractImportsFromFile(filePath: string, allFiles: string[]): Promise<string[]> {
   try {
     if (!existsSync(filePath)) return [];
-    const content = await readFileAsync(filePath, 'utf-8');
-    const lang =
-      filePath.endsWith('.ts') || filePath.endsWith('.tsx') ? Lang.TypeScript : Lang.JavaScript;
-    const root = parse(lang, content).root();
+    // ⚡ Bolt: Using AstCacheManager instead of manual readFile and parse to avoid O(N) I/O and parsing overhead
+    const root = AstCacheManager.getInstance().getRootNode(filePath);
+    if (!root) return [];
+
     const imports: string[] = [];
     const dir = dirname(filePath);
 
-    const importRule = {
-      any: [
-        { pattern: "import $A from '$B'" },
-        { pattern: 'import $A from "$B"' },
-        { pattern: "import { $$$ } from '$B'" },
-        { pattern: 'import { $$$ } from "$B"' },
-        { pattern: "import '$B'" },
-        { pattern: 'import "$B"' },
-      ],
-    };
+    // ⚡ Bolt: Using direct AST node kind matching instead of multiple string patterns for much faster execution
+    const importRule = { kind: 'import_statement' };
 
     root.findAll({ rule: importRule }).forEach((m) => {
-      const source = m.getMatch('B')?.text();
-      if (source) {
+      const sourceNode = m.find({ rule: { kind: 'string' } });
+      const sourceText = sourceNode?.text();
+
+      if (sourceText) {
+        // Strip quotes
+        const source = sourceText.slice(1, -1);
         const resolved = resolveModulePath(dir, source, allFiles);
         if (resolved) imports.push(resolved);
       }
