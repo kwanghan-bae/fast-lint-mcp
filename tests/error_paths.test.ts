@@ -50,7 +50,7 @@ vi.mock('../src/checkers/security.js', () => ({
 }));
 
 vi.mock('../src/checkers/env.js', () => ({
-  checkEnv: vi.fn().mockResolvedValue({ pass: true }),
+  checkEnv: vi.fn().mockResolvedValue({ pass: true, missing: [] }),
 }));
 
 vi.mock('../src/analysis/rg.js', () => ({

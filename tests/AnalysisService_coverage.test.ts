@@ -6,7 +6,7 @@ import { DependencyGraph } from '../src/utils/DependencyGraph.js';
 import glob from 'fast-glob';
 
 vi.mock('../src/checkers/env.js', () => ({
-  checkEnv: vi.fn().mockResolvedValue({ pass: true }),
+  checkEnv: vi.fn().mockResolvedValue({ pass: true, missing: [] }),
 }));
 vi.mock('fast-glob');
 vi.mock('simple-git', () => ({
@@ -58,7 +58,7 @@ describe('AnalysisService Extra (Coverage & Error)', () => {
 
   afterEach(() => {
     if (fs.existsSync(testDir)) fs.rmSync(testDir, { recursive: true, force: true });
-    vi.restoreAllMocks();
+    vi.clearAllMocks();
   });
 
   it('lcov.info 형식을 올바르게 파싱해야 한다', async () => {

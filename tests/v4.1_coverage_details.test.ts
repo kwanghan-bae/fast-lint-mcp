@@ -8,7 +8,7 @@ import { join } from 'path';
 import { vi } from 'vitest';
 
 vi.mock('../src/checkers/env.js', () => ({
-  checkEnv: vi.fn().mockResolvedValue({ pass: true }),
+  checkEnv: vi.fn().mockResolvedValue({ pass: true, missing: [] }),
 }));
 
 describe('v4.1 커버리지 상세 분석 검증', () => {
