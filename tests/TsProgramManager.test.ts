@@ -4,7 +4,7 @@ import { join } from 'path';
 import { vi } from 'vitest';
 
 vi.mock('../src/checkers/env.js', () => ({
-  checkEnv: vi.fn().mockResolvedValue({ pass: true }),
+  checkEnv: vi.fn().mockResolvedValue({ pass: true, missing: [] }),
 }));
 
 // TsProgramManager uses a static singleton — we reset it between tests via the module registry trick
