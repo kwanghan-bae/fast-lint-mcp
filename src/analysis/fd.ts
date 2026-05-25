@@ -3,6 +3,7 @@ import { Lang, parse, SgNode } from '@ast-grep/napi';
 import { dirname, join, normalize, isAbsolute } from 'path';
 import { promisify } from 'util';
 import { resolveModulePath } from '../utils/PathResolver.js';
+import { AstCacheManager } from '../utils/AstCacheManager.js';
 
 /** 프로미스 기반 파일 읽기 헬퍼 */
 const readFileAsync = promisify(readFile);
@@ -17,9 +18,16 @@ export async function getDependencyMap(
   const dependencyMap = new Map<string, string[]>();
   if (!allFiles || allFiles.length === 0) return dependencyMap;
 
-  for (const filePath of allFiles) {
-    const imports = await extractImportsFromFile(filePath, allFiles);
-    dependencyMap.set(filePath, imports);
+  // Process files in batches to prevent EMFILE errors from unbounded Promise.all
+  const BATCH_SIZE = 50;
+  for (let i = 0; i < allFiles.length; i += BATCH_SIZE) {
+    const batch = allFiles.slice(i, i + BATCH_SIZE);
+    await Promise.all(
+      batch.map(async (filePath) => {
+        const imports = await extractImportsFromFile(filePath, allFiles);
+        dependencyMap.set(filePath, imports);
+      })
+    );
   }
   return dependencyMap;
 }
@@ -30,31 +38,37 @@ export async function getDependencyMap(
 async function extractImportsFromFile(filePath: string, allFiles: string[]): Promise<string[]> {
   try {
     if (!existsSync(filePath)) return [];
-    const content = await readFileAsync(filePath, 'utf-8');
-    const lang =
-      filePath.endsWith('.ts') || filePath.endsWith('.tsx') ? Lang.TypeScript : Lang.JavaScript;
-    const root = parse(lang, content).root();
+
+    let root = null;
+
+    // ⚡ Bolt: Check AstCacheManager first to avoid redundant disk I/O and parsing
+    // Use force=false to check if it's already cached from previous operations
+    const cacheManager = AstCacheManager.getInstance();
+    root = cacheManager.getRootNode(filePath, false);
+
+    // If not in cache, read asynchronously to avoid blocking event loop
+    if (!root) {
+      const content = await readFileAsync(filePath, 'utf-8');
+      const lang =
+        filePath.endsWith('.ts') || filePath.endsWith('.tsx') ? Lang.TypeScript : Lang.JavaScript;
+      root = parse(lang, content).root();
+    }
+
     const imports: string[] = [];
     const dir = dirname(filePath);
 
-    const importRule = {
-      any: [
-        { pattern: "import $A from '$B'" },
-        { pattern: 'import $A from "$B"' },
-        { pattern: "import { $$$ } from '$B'" },
-        { pattern: 'import { $$$ } from "$B"' },
-        { pattern: "import '$B'" },
-        { pattern: 'import "$B"' },
-      ],
-    };
-
-    root.findAll({ rule: importRule }).forEach((m) => {
-      const source = m.getMatch('B')?.text();
+    // ⚡ Bolt: Used node kinds instead of string patterns for significant performance improvement
+    const matches = root.findAll({ rule: { kind: 'import_statement' } });
+    for (const m of matches) {
+      // Use exact field matching to correctly grab the module specifier (source)
+      const sourceNode = m.field('source')?.find({ rule: { kind: 'string_fragment' } });
+      const source = sourceNode?.text();
       if (source) {
         const resolved = resolveModulePath(dir, source, allFiles);
         if (resolved) imports.push(resolved);
       }
-    });
+    }
+
     return [...new Set(imports)];
   } catch (e) {
     return [];
