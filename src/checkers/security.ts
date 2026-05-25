@@ -1,5 +1,6 @@
 import { execSync } from 'child_process';
-import { readFileSync, existsSync } from 'fs';
+import { existsSync } from 'fs';
+import { readFile } from 'fs/promises';
 import { Violation } from '../types/index.js';
 import { Logger } from '../utils/Logger.js';
 
@@ -25,9 +26,14 @@ const SECRET_PATTERNS = [
  * 파일 내 하드코딩된 비밀 정보를 탐지합니다.
  */
 export async function checkSecrets(filePath: string): Promise<Violation[]> {
-  if (!existsSync(filePath)) return [];
+  let content: string;
+  try {
+    // ⚡ Bolt: Prefer async file I/O to avoid blocking the main thread
+    content = await readFile(filePath, 'utf-8');
+  } catch (error) {
+    return [];
+  }
 
-  const content = readFileSync(filePath, 'utf-8');
   const lines = content.split('\n');
   const violations: Violation[] = [];
 
