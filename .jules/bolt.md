@@ -5,3 +5,7 @@
 ## 2025-02-12 - [Combine AST Traversals]
 **Learning:** Calling `root.findAll({ rule: { kind } })` sequentially for multiple AST node kinds (e.g. `function_declaration`, `class_declaration`) results in traversing the entire AST multiple times (O(K*N) where K is number of kinds).
 **Action:** Combine multiple sequential queries into a single pass using the `any` rule: `{ any: kinds.map(kind => ({ kind })) }` so the AST is traversed exactly once.
+
+## 2024-06-25 - Avoid spaces in ast-grep pattern matches for JSX
+**Learning:** We wanted to use direct AST node kinds (`{ kind: 'jsx_element' }`) for performance instead of a string pattern for JSX elements in shared rules. However, evaluating `jsx_element` on a plain TypeScript (`Lang.TypeScript`) AST fails with an error because that node kind doesn't exist in TS (only TSX/JSX).
+**Action:** Instead of node kinds, we kept the string pattern but removed the space after the angle bracket (`<$A $$$ />` instead of `< $A $$$ />`). Removing spaces in string patterns drastically reduces parsing overhead for `@ast-grep/napi`, yielding nearly the same 10x performance boost without breaking plain TS compatibility.

@@ -2,12 +2,19 @@ import { readFileSync } from 'fs';
 import { AstCacheManager } from '../utils/AstCacheManager.js';
 
 // AST 패턴 정의 (v3.0 Semantic)
-const UI_AST_PATTERNS = [
-  'use$A($$$)', // Hooks
-  '< $A $$$ />', // JSX
-  'createElement($$$)',
-  'render($$$)',
-];
+// ⚡ Bolt: Replaced string pattern `< $A $$$ />` with `<$A $$$ />` (no space after <)
+// Space in string pattern causes parsing overhead. Removed it for better performance.
+// Note: We cannot use `{ kind: 'jsx_element' }` here because this rule is shared
+// across Lang.TypeScript and Lang.Tsx. If evaluated on a plain TypeScript AST,
+// 'jsx_element' kind is invalid and will throw an error.
+const UI_AST_RULE = {
+  any: [
+    { pattern: '<$A $$$ />' },
+    { pattern: 'use$A($$$)' },
+    { pattern: 'createElement($$$)' },
+    { pattern: 'render($$$)' },
+  ],
+};
 
 const LOGIC_AST_PATTERNS = [
   'Math.$A($$$)',
@@ -17,7 +24,6 @@ const LOGIC_AST_PATTERNS = [
   'fetch($$$)',
 ];
 
-const UI_AST_RULE = { any: UI_AST_PATTERNS.map((p) => ({ pattern: p })) };
 const LOGIC_AST_RULE = { any: LOGIC_AST_PATTERNS.map((p) => ({ pattern: p })) };
 
 /** AST 패턴 분석을 통해 복잡도 해결을 위한 구체적인 가이드를 생성합니다. */
