@@ -1,13 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { AnalysisService } from '../src/service/AnalysisService.js';
-import * as fs from 'fs';
-import { join } from 'path';
-import { DependencyGraph } from '../src/utils/DependencyGraph.js';
-import glob from 'fast-glob';
+import * as env from '../src/checkers/env.js';
 
-vi.mock('../src/checkers/env.js', () => ({
-  checkEnv: vi.fn().mockResolvedValue({ pass: true }),
-}));
+vi.mock('../src/checkers/env.js', () => {
+  return {
+    checkEnv: vi.fn().mockResolvedValue({ pass: true })
+  };
+});
 vi.mock('fast-glob');
 vi.mock('simple-git', () => ({
   simpleGit: () => ({
@@ -18,13 +16,23 @@ vi.mock('simple-git', () => ({
 }));
 vi.mock('../src/utils/DependencyGraph.js');
 
+import { AnalysisService } from '../src/service/AnalysisService.js';
+import * as fs from 'fs';
+import { join } from 'path';
+import { DependencyGraph } from '../src/utils/DependencyGraph.js';
+import glob from 'fast-glob';
+
+
 describe('AnalysisService Extra (Coverage & Error)', () => {
   let service: AnalysisService;
   const testDir = join(process.cwd(), 'temp_coverage_service_test');
 
-  beforeEach(() => {
+  beforeEach(async () => {
     if (!fs.existsSync(testDir)) fs.mkdirSync(testDir, { recursive: true });
     vi.clearAllMocks();
+
+    vi.mocked(env.checkEnv).mockResolvedValue({ pass: true } as any);
+
     vi.mocked(DependencyGraph).prototype.build = vi.fn().mockResolvedValue(undefined);
     vi.mocked(DependencyGraph).prototype.getDependents = vi.fn().mockReturnValue([]);
     vi.mocked(DependencyGraph).prototype.getDependencies = vi.fn().mockReturnValue([]);
