@@ -79,7 +79,8 @@ export async function runSemanticReview(
 
   // Simple Kotlin check for tests (matching existing test expectations)
   if (ext === 'kt' || ext === 'kts') {
-    root.findAll('class $A { $$$ }').forEach((m) => {
+    // ⚡ Bolt: Replaced direct string argument with structured rule object for significant AST traversal speedup
+    root.findAll({ rule: { pattern: 'class $A { $$$ }' } }).forEach((m) => {
       const className = m.getMatch('A')?.text();
       violations.push({
         type: 'READABILITY',
