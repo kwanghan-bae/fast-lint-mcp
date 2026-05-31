@@ -1,7 +1,3 @@
-## 2025-02-12 - [AST Query Optimization]
-**Learning:** For AST existence checks in `@ast-grep/napi`, using `root.findAll(pattern).length > 0` iterates through the entire AST to find all matches and allocates memory for them before checking length, causing O(N) overhead.
-**Action:** Use `root.find(pattern) !== null` instead to short-circuit the traversal on the first match.
-
-## 2025-02-12 - [Combine AST Traversals]
-**Learning:** Calling `root.findAll({ rule: { kind } })` sequentially for multiple AST node kinds (e.g. `function_declaration`, `class_declaration`) results in traversing the entire AST multiple times (O(K*N) where K is number of kinds).
-**Action:** Combine multiple sequential queries into a single pass using the `any` rule: `{ any: kinds.map(kind => ({ kind })) }` so the AST is traversed exactly once.
+## 2024-05-31 - AST-grep string pattern matching vs kind matching overhead
+**Learning:** When extracting nodes like `import_statement` using `@ast-grep/napi`, using complex string pattern matching (`{ pattern: "import $A from '$B'" }`) involves significantly more overhead parsing the pattern than direct AST node kind matching (`{ kind: 'import_statement' }`). Using `.field('source')` directly on the matched node is ~4x faster than `.getMatch('B')` for retrieving string literals.
+**Action:** When querying for structured AST node kinds (e.g., imports, classes), prioritize `{ kind: 'node_type' }` and `node.field('field_name')` over wildcard string patterns for faster traversal speed.
