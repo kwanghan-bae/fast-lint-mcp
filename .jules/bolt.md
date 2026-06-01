@@ -13,3 +13,7 @@
 ## 2025-02-13 - [Concurrent File Analysis]
 **Learning:** Extracting data sequentially across many files wastes CPU cycles waiting for I/O and synchronous parsing one file at a time. Concurrency allows the event loop to manage parallel file reads and interleaved parsing effectively.
 **Action:** For cross-file operations, wrap the per-file logic in async functions and execute them concurrently via `Promise.all` or bounded concurrency tools like `p-map` (which is already a project dependency).
+
+## 2025-02-13 - [Vitest and Node 18 Compatibility]
+**Learning:** Vitest 4.x in this repository requires Node.js 20+. Running tests via `npm test` on Node 18 fails with module resolution errors (`node:inspector/promises`). Modifying `package.json` breaks newer Node.js versions or peer dependencies.
+**Action:** Do not attempt to fix this by modifying `package.json` to downgrade vitest or breaking the CI matrix by dropping Node 18 unless explicitly instructed. Instead, dynamically downgrade vitest in the GitHub Actions workflow using `npm install vitest@^2.1.8 @vitest/coverage-v8@^2.1.8 --no-save` specifically for Node 18.
