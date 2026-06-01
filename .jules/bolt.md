@@ -5,3 +5,11 @@
 ## 2025-02-12 - [Combine AST Traversals]
 **Learning:** Calling `root.findAll({ rule: { kind } })` sequentially for multiple AST node kinds (e.g. `function_declaration`, `class_declaration`) results in traversing the entire AST multiple times (O(K*N) where K is number of kinds).
 **Action:** Combine multiple sequential queries into a single pass using the `any` rule: `{ any: kinds.map(kind => ({ kind })) }` so the AST is traversed exactly once.
+
+## 2025-02-13 - [AST Kind Lookup Performance]
+**Learning:** In `@ast-grep/napi`, multi-pattern string rules (e.g., matching different quotes or bracket formats for `import`) introduce significant parsing and traversal overhead compared to matching the exact AST node kind directly.
+**Action:** When extracting data based on AST structures, prefer `root.findAll({ rule: { kind: 'node_type' } })` and extract fields via `m.field('field_name')` rather than complex string patterns with meta variables.
+
+## 2025-02-13 - [Concurrent File Analysis]
+**Learning:** Extracting data sequentially across many files wastes CPU cycles waiting for I/O and synchronous parsing one file at a time. Concurrency allows the event loop to manage parallel file reads and interleaved parsing effectively.
+**Action:** For cross-file operations, wrap the per-file logic in async functions and execute them concurrently via `Promise.all` or bounded concurrency tools like `p-map` (which is already a project dependency).
