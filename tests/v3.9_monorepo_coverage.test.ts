@@ -67,24 +67,28 @@ end_of_record
     }
   );
 
-  it('사용자가 직접 지정한 coveragePath를 최우선으로 사용해야 한다', { timeout: 15000 }, async () => {
-    const customDir = join(testDir, 'custom-reports');
-    mkdirSync(customDir, { recursive: true });
-    const customPath = join(customDir, 'my-coverage.json');
+  it(
+    '사용자가 직접 지정한 coveragePath를 최우선으로 사용해야 한다',
+    { timeout: 15000 },
+    async () => {
+      const customDir = join(testDir, 'custom-reports');
+      mkdirSync(customDir, { recursive: true });
+      const customPath = join(customDir, 'my-coverage.json');
 
-    // 100% 커버리지 리포트
-    writeFileSync(customPath, JSON.stringify({ total: { lines: { pct: 100 } } }));
+      // 100% 커버리지 리포트
+      writeFileSync(customPath, JSON.stringify({ total: { lines: { pct: 100 } } }));
 
-    const sMgr = new StateManager(testDir);
-    const cfg = new ConfigService(testDir);
-    const analyzer = new AnalysisService(sMgr, cfg, new SemanticService());
+      const sMgr = new StateManager(testDir);
+      const cfg = new ConfigService(testDir);
+      const analyzer = new AnalysisService(sMgr, cfg, new SemanticService());
 
-    const report = await analyzer.runAllChecks({ coveragePath: customPath });
+      const report = await analyzer.runAllChecks({ coveragePath: customPath });
 
-    expect(report.metadata?.coverageFreshness).toBe('fresh');
-    // Rationale에 파일명이 포함되어야 함
-    const rationale = report.violations.find((v) => v.type === 'COVERAGE')?.rationale || '';
-    // (만약 위반이 없다면 metadata 확인)
-    expect(report.pass).toBe(true);
-  });
+      expect(report.metadata?.coverageFreshness).toBe('fresh');
+      // Rationale에 파일명이 포함되어야 함
+      const rationale = report.violations.find((v) => v.type === 'COVERAGE')?.rationale || '';
+      // (만약 위반이 없다면 metadata 확인)
+      expect(report.pass).toBe(true);
+    }
+  );
 });

@@ -2,6 +2,7 @@ import { readFileSync, existsSync, readFile } from 'fs';
 import { Lang, parse, SgNode } from '@ast-grep/napi';
 import { dirname, join, normalize, isAbsolute } from 'path';
 import { promisify } from 'util';
+import pMap from 'p-map';
 import { resolveModulePath } from '../utils/PathResolver.js';
 
 /** 프로미스 기반 파일 읽기 헬퍼 */
@@ -17,10 +18,16 @@ export async function getDependencyMap(
   const dependencyMap = new Map<string, string[]>();
   if (!allFiles || allFiles.length === 0) return dependencyMap;
 
-  for (const filePath of allFiles) {
-    const imports = await extractImportsFromFile(filePath, allFiles);
-    dependencyMap.set(filePath, imports);
-  }
+  // ⚡ Bolt: Used pMap to extract imports concurrently while bounding concurrency
+  await pMap(
+    allFiles,
+    async (filePath) => {
+      const imports = await extractImportsFromFile(filePath, allFiles);
+      dependencyMap.set(filePath, imports);
+    },
+    { concurrency: 50 }
+  );
+
   return dependencyMap;
 }
 
@@ -37,20 +44,11 @@ async function extractImportsFromFile(filePath: string, allFiles: string[]): Pro
     const imports: string[] = [];
     const dir = dirname(filePath);
 
-    const importRule = {
-      any: [
-        { pattern: "import $A from '$B'" },
-        { pattern: 'import $A from "$B"' },
-        { pattern: "import { $$$ } from '$B'" },
-        { pattern: 'import { $$$ } from "$B"' },
-        { pattern: "import '$B'" },
-        { pattern: 'import "$B"' },
-      ],
-    };
-
-    root.findAll({ rule: importRule }).forEach((m) => {
-      const source = m.getMatch('B')?.text();
+    // ⚡ Bolt: Replaced string patterns with direct node kind lookup for performance
+    root.findAll({ rule: { kind: 'import_statement' } }).forEach((m) => {
+      let source = m.field('source')?.text();
       if (source) {
+        source = source.slice(1, -1); // strip quotes
         const resolved = resolveModulePath(dir, source, allFiles);
         if (resolved) imports.push(resolved);
       }
