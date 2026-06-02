@@ -52,4 +52,8 @@ jobs:
 
       - name: Run tests
         timeout-minutes: 15
-        run: npm test
+        run: |
+          if [ "${{ matrix.node-version }}" = "18" ]; then
+            npm install vitest@^2.1.8 @vitest/coverage-v8@^2.1.8 --no-save
+          fi
+          npm test
