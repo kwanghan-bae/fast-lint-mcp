@@ -37,20 +37,16 @@ async function extractImportsFromFile(filePath: string, allFiles: string[]): Pro
     const imports: string[] = [];
     const dir = dirname(filePath);
 
+    // ⚡ Bolt: Use AST kind matching for import/export sources instead of slow string patterns
     const importRule = {
-      any: [
-        { pattern: "import $A from '$B'" },
-        { pattern: 'import $A from "$B"' },
-        { pattern: "import { $$$ } from '$B'" },
-        { pattern: 'import { $$$ } from "$B"' },
-        { pattern: "import '$B'" },
-        { pattern: 'import "$B"' },
-      ],
+      any: [{ kind: 'import_statement' }, { kind: 'export_statement' }],
     };
 
     root.findAll({ rule: importRule }).forEach((m) => {
-      const source = m.getMatch('B')?.text();
+      let source = m.field('source')?.text();
       if (source) {
+        // Strip quotes around the source string
+        source = source.replace(/^['"]|['"]$/g, '');
         const resolved = resolveModulePath(dir, source, allFiles);
         if (resolved) imports.push(resolved);
       }
