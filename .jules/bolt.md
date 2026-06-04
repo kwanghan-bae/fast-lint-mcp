@@ -13,3 +13,11 @@
 ## 2025-02-13 - [Kotlin AST Node Kinds]
 **Learning:** In the tree-sitter Kotlin grammar used by @ast-grep/napi, class names within a `class_declaration` are represented by the `type_identifier` node kind, not `identifier`. Using `identifier` will result in missing nodes and regressions.
 **Action:** Always verify tree-sitter specific grammar structures when replacing string patterns with AST kinds.
+
+## 2025-02-13 - [Vitest Mocks and Coverage]
+**Learning:** When using Vitest's `vi.restoreAllMocks()` in `afterEach`, it can unexpectedly restore stubs created by dependency mocks (like `checkEnv` replacing the underlying implementation with `undefined`) making subsequent tests fail with opaque errors like `TypeError: Cannot read properties of undefined`.
+**Action:** Use `vi.clearAllMocks()` in `beforeEach` and `afterEach` hooks if you need to reset call state without destroying the structural definition of `vi.mock` replacements.
+
+## 2025-02-13 - [Native ES Module Resolution in Tests]
+**Learning:** Hardcoding static import paths like `../../native/index.js` inside test bodies evaluates the path relative to the test runner execution path, which can cause module-not-found errors if the directory nesting of the test script changes or behaves differently across CI platforms.
+**Action:** Always import native modules relatively (`../native/index.js`) to the `tests/` directory ensuring correct runtime resolution.
