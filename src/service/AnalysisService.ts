@@ -133,7 +133,7 @@ export class AnalysisService {
 
   private async validateEnvironment() {
     const res = await checkEnv();
-    if (res.pass) return { pass: true };
+    if (res.pass) return { pass: true, report: null };
     return {
       pass: false,
       report: {
