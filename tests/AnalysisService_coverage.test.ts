@@ -5,6 +5,8 @@ import { join } from 'path';
 import { DependencyGraph } from '../src/utils/DependencyGraph.js';
 import glob from 'fast-glob';
 
+import { checkEnv } from '../src/checkers/env.js';
+
 vi.mock('../src/checkers/env.js', () => ({
   checkEnv: vi.fn().mockResolvedValue({ pass: true }),
 }));
@@ -25,6 +27,7 @@ describe('AnalysisService Extra (Coverage & Error)', () => {
   beforeEach(() => {
     if (!fs.existsSync(testDir)) fs.mkdirSync(testDir, { recursive: true });
     vi.clearAllMocks();
+    vi.mocked(checkEnv).mockResolvedValue({ pass: true, missing: [] } as any);
     vi.mocked(DependencyGraph).prototype.build = vi.fn().mockResolvedValue(undefined);
     vi.mocked(DependencyGraph).prototype.getDependents = vi.fn().mockReturnValue([]);
     vi.mocked(DependencyGraph).prototype.getDependencies = vi.fn().mockReturnValue([]);
