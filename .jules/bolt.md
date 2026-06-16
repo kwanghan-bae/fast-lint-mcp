@@ -9,3 +9,7 @@
 ## 2025-02-13 - [AST Optimization Constraint]
 **Learning:** Optimizing AST queries using `ast-grep` by changing string patterns to `kind` matching is a significant performance boost (3x+ improvement). However, care must be taken to only match the original nodes targeted by the string patterns. Adding `{ kind: 'export_statement' }` to a query designed only to extract `imports` is a functional regression/behavioral change.
 **Action:** When converting regex-like string matchers to AST node kinds, strictly maintain the exact bounds of the original search.
+
+## 2025-02-13 - [Optional Chaining with Promises]
+**Learning:** Using optional chaining with promises (e.g., `const res = await checkEnv(); if (res?.pass) ...`) or returning objects that may be `undefined` from mocks in tests can cause `TypeError` if not handled correctly.
+**Action:** When mocking dependencies that return promises containing objects, ensure the mock explicitly resolves to the expected object shape to prevent destructuring or property access errors in tests. Add defensive null checks in production code if necessary.
