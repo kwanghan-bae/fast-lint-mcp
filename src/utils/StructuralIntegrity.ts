@@ -2,6 +2,7 @@ import { Violation } from '../types/index.js';
 import { DependencyGraph } from './DependencyGraph.js';
 import { existsSync } from 'fs';
 import { readFile } from 'fs/promises';
+import pMap from 'p-map';
 
 /**
  * 프로젝트의 구조적 무결성(순환 참조 등 아키텍처 결함)을 심층 검사합니다.
@@ -15,24 +16,26 @@ export async function checkStructuralIntegrity(dg?: DependencyGraph): Promise<Vi
 
   // 1. 모듈 간 순환 참조(Circular Dependency) 탐지 및 forwardRef 예외 처리
   const cycles = dg.detectCycles() || [];
-  await Promise.all(
-    cycles.map(async (cycle) => {
+  // ⚡ Bolt: p-map with bounded concurrency prevents resource exhaustion.
+  await pMap(
+    cycles,
+    async (cycle) => {
       // 순환 경로 상에 존재하는 파일들의 내용을 읽어 forwardRef 사용 여부 확인
       let hasForwardRef = false;
-      await Promise.all(
-        cycle.map(async (file) => {
-          if (!hasForwardRef && existsSync(file)) {
-            try {
-              const content = await readFile(file, 'utf-8');
-              if (content.includes('forwardRef')) {
-                hasForwardRef = true;
-              }
-            } catch (e) {
-              // 무시
+      // ⚡ Bolt: sequential loop allows true early exit on forwardRef discovery, saving I/O overhead.
+      for (const file of cycle) {
+        if (existsSync(file)) {
+          try {
+            const content = await readFile(file, 'utf-8');
+            if (content.includes('forwardRef')) {
+              hasForwardRef = true;
+              break;
             }
+          } catch (e) {
+            // 무시
           }
-        })
-      );
+        }
+      }
 
       if (hasForwardRef) {
         violations.push({
@@ -47,7 +50,8 @@ export async function checkStructuralIntegrity(dg?: DependencyGraph): Promise<Vi
           message: `[순환 참조] 치명적인 구조적 결함이 발견되었습니다: ${cycle.map((c) => c.split('/').pop()).join(' -> ')}`,
         });
       }
-    })
+    },
+    { concurrency: 50 }
   );
 
   // 2. 단방향 레이어 아키텍처 흐름 검사 (Controller -> Service -> Repository)
