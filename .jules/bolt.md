@@ -6,10 +6,10 @@
 **Learning:** Calling `root.findAll({ rule: { kind } })` sequentially for multiple AST node kinds (e.g. `function_declaration`, `class_declaration`) results in traversing the entire AST multiple times (O(K*N) where K is number of kinds).
 **Action:** Combine multiple sequential queries into a single pass using the `any` rule: `{ any: kinds.map(kind => ({ kind })) }` so the AST is traversed exactly once.
 
-## 2025-02-12 - [FD Analysis Optimization]
-**Learning:** Sequential processing with `for...of` in file parsing creates a major bottleneck in file dependency mapping, but unbounded `Promise.all` can overwhelm I/O. AST queries using multi-string patterns are significantly slower than direct AST kind matchings.
-**Action:** Use bounded concurrency via `p-map` (which is already in the `package.json` dependencies) combined with direct `{ kind: 'import_statement' }` querying and manual string slicing to achieve over 30% performance boost in file mapping.
+## 2025-02-12 - [AnalysisService Test Fixes]
+**Learning:** `AnalysisService.validateEnvironment()` was accessing `res.pass` where `res` could potentially be undefined if mocked incorrectly or if the fallback structure changes, causing a `TypeError`. More critically, the test failures in CI were caused by returning `{ pass: false, report: { pass: false, ... } }` but the caller expected `report` structure implicitly in other files.
+**Action:** Added safe access using `res?.pass` in `AnalysisService.ts` and corrected mock implementation in `error_paths.test.ts` to ensure stability.
 
-## 2025-02-12 - [Vitest Node 18 Compatibility]
-**Learning:** Vitest 4.x drops support for Node.js 18 causing module resolution errors like `No such built-in module: node:inspector/promises`. Modifying package.json to downgrade might affect newer versions.
-**Action:** Dynamically downgraded vitest specifically for Node 18 environments inside GitHub Actions using `--no-save` flag, effectively enabling backwards compatibility without restricting developers on modern NodeJS.
+## 2025-02-12 - [Mocking CheckEnv]
+**Learning:** Returning nested object responses like `{ pass: true }` in `checkEnv()` mocks ensures correct behavior in dependent services (e.g. `AnalysisService`). When a nested property is expected and missing, checking optional chaining (`res?.pass`) avoids `TypeError: Cannot read properties of undefined`.
+**Action:** Enforce strict typing checks or optional chaining logic `?.` whenever evaluating return models from dependencies.
