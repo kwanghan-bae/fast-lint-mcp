@@ -13,3 +13,7 @@
 ## 2025-02-12 - [Mocking CheckEnv]
 **Learning:** Returning nested object responses like `{ pass: true }` in `checkEnv()` mocks ensures correct behavior in dependent services (e.g. `AnalysisService`). When a nested property is expected and missing, checking optional chaining (`res?.pass`) avoids `TypeError: Cannot read properties of undefined`.
 **Action:** Enforce strict typing checks or optional chaining logic `?.` whenever evaluating return models from dependencies.
+
+## 2025-02-12 - [CLI Tests Timeout]
+**Learning:** `cli.test.ts` spawning processes sequentially via `execSync` combined with heavy CI parallelism can occasionally push process execution beyond the default 5000ms Vitest timeout, causing flaky failures.
+**Action:** Enforced explicit higher timeout (`{ timeout: 15000 }`) on all CLI flags tests to ensure resilience under varying load.
