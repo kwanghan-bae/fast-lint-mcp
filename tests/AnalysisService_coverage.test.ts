@@ -75,6 +75,10 @@ describe('AnalysisService Extra (Coverage & Error)', () => {
     const summaryPath = join(testDir, 'coverage-summary.json');
     fs.writeFileSync(summaryPath, JSON.stringify({ total: { lines: { pct: 90 } } }));
 
+    // mock checkEnv to return pass: true for this test
+    const envModule = await import('../src/checkers/env.js');
+    vi.mocked(envModule.checkEnv).mockResolvedValue({ pass: true, missing: [] });
+
     // utimesSync를 사용하여 실제 파일 시간 조작 (ESM spyOn 이슈 우회)
     const now = Date.now();
     const staleTime = (now - 2000000) / 1000; // 2000초 전
