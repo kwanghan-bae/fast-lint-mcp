@@ -5,3 +5,7 @@
 ## 2025-02-12 - [Combine AST Traversals]
 **Learning:** Calling `root.findAll({ rule: { kind } })` sequentially for multiple AST node kinds (e.g. `function_declaration`, `class_declaration`) results in traversing the entire AST multiple times (O(K*N) where K is number of kinds).
 **Action:** Combine multiple sequential queries into a single pass using the `any` rule: `{ any: kinds.map(kind => ({ kind })) }` so the AST is traversed exactly once.
+
+## 2025-02-12 - [AST Named Field Extraction]
+**Learning:** Extracting named fields using string replacement patterns (`m.getMatch('B')`) is significantly slower than using direct AST node kind matching combined with `m.field('fieldName')`. Additionally, `m.field('source')?.text()` returns the text with quotes included which require manual stripping (`text.slice(1, -1)`).
+**Action:** Use `{ rule: { kind: 'import_statement' } }` and `.field('source')` instead of `{ pattern: "import $A from '$B'" }` and `.getMatch('B')`. Remember to manually strip quotes from the extracted field string.
