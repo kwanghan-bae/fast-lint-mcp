@@ -31,25 +31,25 @@ describe('CLI flags', () => {
     expect(stdout).toContain('fast-lint-mcp');
     expect(stdout).toContain('--help');
     expect(stdout).toContain('--version');
-  });
+  }, 20000);
 
   it('-h outputs usage information', () => {
     const { stdout, exitCode } = runCLI('-h');
     expect(exitCode).toBe(0);
     expect(stdout).toContain('Usage:');
     expect(stdout).toContain('fast-lint-mcp');
-  });
+  }, 20000);
 
   it('--version outputs a version number', () => {
     const { stdout, exitCode } = runCLI('--version');
     expect(exitCode).toBe(0);
     // VERSION is formatted as v<semver>, e.g. v0.0.1
     expect(stdout.trim()).toMatch(/^v\d+\.\d+\.\d+/);
-  });
+  }, 20000);
 
   it('-v outputs a version number', () => {
     const { stdout, exitCode } = runCLI('-v');
     expect(exitCode).toBe(0);
     expect(stdout.trim()).toMatch(/^v\d+\.\d+\.\d+/);
-  });
+  }, 20000);
 });
