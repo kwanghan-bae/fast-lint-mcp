@@ -3,6 +3,7 @@ import { Lang, parse, SgNode } from '@ast-grep/napi';
 import { dirname, join, normalize, isAbsolute } from 'path';
 import { promisify } from 'util';
 import { resolveModulePath } from '../utils/PathResolver.js';
+import pMap from 'p-map';
 
 /** 프로미스 기반 파일 읽기 헬퍼 */
 const readFileAsync = promisify(readFile);
@@ -17,10 +18,16 @@ export async function getDependencyMap(
   const dependencyMap = new Map<string, string[]>();
   if (!allFiles || allFiles.length === 0) return dependencyMap;
 
-  for (const filePath of allFiles) {
-    const imports = await extractImportsFromFile(filePath, allFiles);
-    dependencyMap.set(filePath, imports);
-  }
+  // ⚡ Bolt: Using p-map for concurrent cross-file async processing
+  await pMap(
+    allFiles,
+    async (filePath) => {
+      const imports = await extractImportsFromFile(filePath, allFiles);
+      dependencyMap.set(filePath, imports);
+    },
+    { concurrency: 50 }
+  );
+
   return dependencyMap;
 }
 
@@ -37,20 +44,13 @@ async function extractImportsFromFile(filePath: string, allFiles: string[]): Pro
     const imports: string[] = [];
     const dir = dirname(filePath);
 
-    const importRule = {
-      any: [
-        { pattern: "import $A from '$B'" },
-        { pattern: 'import $A from "$B"' },
-        { pattern: "import { $$$ } from '$B'" },
-        { pattern: 'import { $$$ } from "$B"' },
-        { pattern: "import '$B'" },
-        { pattern: 'import "$B"' },
-      ],
-    };
+    // ⚡ Bolt: Using direct AST node kind matching and .field() instead of string replacement patterns
+    const importRule = { kind: 'import_statement' };
 
     root.findAll({ rule: importRule }).forEach((m) => {
-      const source = m.getMatch('B')?.text();
-      if (source) {
+      const sourceText = m.field('source')?.text();
+      if (sourceText && sourceText.length >= 2) {
+        const source = sourceText.slice(1, -1);
         const resolved = resolveModulePath(dir, source, allFiles);
         if (resolved) imports.push(resolved);
       }
