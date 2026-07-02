@@ -138,7 +138,7 @@ export class AnalysisService {
       pass: false,
       report: {
         pass: false,
-        violations: [{ type: 'ENV' as ViolationType, message: res.suggestion || 'Error' }],
+        violations: [{ type: 'ENV' as ViolationType, message: res?.suggestion || 'Error' }],
         metadata: {
           analyzedFiles: 0,
           analysisMode: 'full',
