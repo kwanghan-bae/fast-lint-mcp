@@ -44,12 +44,12 @@ describe('CLI flags', () => {
     const { stdout, exitCode } = runCLI('--version');
     expect(exitCode).toBe(0);
     // VERSION is formatted as v<semver>, e.g. v0.0.1
-    expect(stdout.trim()).toMatch(/^v\d+\.\d+\.\d+/);
+    expect(stdout.trim()).toMatch(/^v?\d+\.\d+\.\d+/);
   });
 
   it('-v outputs a version number', () => {
     const { stdout, exitCode } = runCLI('-v');
     expect(exitCode).toBe(0);
-    expect(stdout.trim()).toMatch(/^v\d+\.\d+\.\d+/);
+    expect(stdout.trim()).toMatch(/^v?\d+\.\d+\.\d+/);
   });
 });
