@@ -46,10 +46,7 @@ async function extractImportsFromFile(filePath: string, allFiles: string[]): Pro
       const sourceNode = m.field('source');
       if (sourceNode) {
         let sourceText = sourceNode.text();
-        if (
-          sourceText.length >= 2 &&
-          (sourceText.startsWith("'") || sourceText.startsWith('"'))
-        ) {
+        if (sourceText.length >= 2 && (sourceText.startsWith("'") || sourceText.startsWith('"'))) {
           sourceText = sourceText.slice(1, -1);
         }
 
