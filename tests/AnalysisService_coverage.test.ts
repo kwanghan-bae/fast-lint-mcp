@@ -76,9 +76,10 @@ describe('AnalysisService Extra (Coverage & Error)', () => {
     fs.writeFileSync(summaryPath, JSON.stringify({ total: { lines: { pct: 90 } } }));
 
     // utimesSync를 사용하여 실제 파일 시간 조작 (ESM spyOn 이슈 우회)
+    // ⚡ Bolt: Unix timestamp as number (in seconds) can cause issues in CI; passing explicit Date objects ensures predictability
     const now = Date.now();
-    const staleTime = (now - 2000000) / 1000; // 2000초 전
-    fs.utimesSync(summaryPath, staleTime, staleTime);
+    const staleDate = new Date(now - 2000000); // 2000초 전
+    fs.utimesSync(summaryPath, staleDate, staleDate);
 
     // glob이 testDir 내의 실제 파일을 반환하도록 설정
     // getLatestMtime이 현재 시간(now)을 반환하게 하여 timeDiff > GRACE_PERIOD 조건 충족

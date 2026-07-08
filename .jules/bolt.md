@@ -5,3 +5,11 @@
 ## 2025-02-12 - [Combine AST Traversals]
 **Learning:** Calling `root.findAll({ rule: { kind } })` sequentially for multiple AST node kinds (e.g. `function_declaration`, `class_declaration`) results in traversing the entire AST multiple times (O(K*N) where K is number of kinds).
 **Action:** Combine multiple sequential queries into a single pass using the `any` rule: `{ any: kinds.map(kind => ({ kind })) }` so the AST is traversed exactly once.
+
+## 2025-02-13 - [AST Parsing Language Fallback]
+**Learning:** The `AstCacheManager` currently parses all files that aren't strictly `.ts` or `.tsx` using `Lang.JavaScript` (or falls back to string patterns). This means Kotlin files (`.kt`) are parsed using a JavaScript grammar. Consequently, attempting to use Kotlin-specific AST node kind matching (e.g., `{ kind: 'class_declaration' }` or `{ kind: 'type_identifier' }`) will either fail or perform worse than direct string pattern matching because the AST structure does not match the actual language grammar.
+**Action:** Do not attempt to optimize non-JS/TS fallbacks with specific AST node kinds unless the `AstCacheManager` is updated to instantiate the correct `@ast-grep/napi` `Lang` enum for those file types. Stick to string pattern matching for unsupported languages.
+
+## 2025-02-13 - [Vitest Module Mocking Path Rules]
+**Learning:** Vitest tests involving `import('../../native/index.js')` might fail with `Failed to load url ... Does the file exist?` if the relative path from the test to the native module is incorrect. The native build artifacts sit at the repository root level `/native/index.js`, so when imported from the `/tests/` directory, the relative path must strictly be `../native/index.js`.
+**Action:** When updating tests or reviewing missing module import errors, rigorously check the directory depth traversal.
