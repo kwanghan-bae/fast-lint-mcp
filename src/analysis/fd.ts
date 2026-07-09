@@ -37,22 +37,21 @@ async function extractImportsFromFile(filePath: string, allFiles: string[]): Pro
     const imports: string[] = [];
     const dir = dirname(filePath);
 
+    // ⚡ Bolt: Optimized string patterns out in favor of direct AST kind matching
+    // Using m.field('source') provides a significant speedup over getMatch
     const importRule = {
-      any: [
-        { pattern: "import $A from '$B'" },
-        { pattern: 'import $A from "$B"' },
-        { pattern: "import { $$$ } from '$B'" },
-        { pattern: 'import { $$$ } from "$B"' },
-        { pattern: "import '$B'" },
-        { pattern: 'import "$B"' },
-      ],
+      any: [{ kind: 'import_statement' }, { kind: 'export_statement' }],
     };
 
     root.findAll({ rule: importRule }).forEach((m) => {
-      const source = m.getMatch('B')?.text();
-      if (source) {
-        const resolved = resolveModulePath(dir, source, allFiles);
-        if (resolved) imports.push(resolved);
+      const sourceNode = m.field('source');
+      if (sourceNode) {
+        const rawText = sourceNode.text();
+        if (rawText.length >= 2) {
+          const source = rawText.slice(1, -1);
+          const resolved = resolveModulePath(dir, source, allFiles);
+          if (resolved) imports.push(resolved);
+        }
       }
     });
     return [...new Set(imports)];
