@@ -12,3 +12,7 @@
 ## 2025-02-13 - [Vitest and Node 18 CI Issue]
 **Learning:** Vitest v4 uses `node:inspector/promises` which is a builtin module not present or not fully supported in Node.js 18. This causes the test suite to fail completely when running on Node 18 in GitHub Actions.
 **Action:** When working with GitHub Actions workflows where Node 18 is part of the matrix, dynamically downgrade Vitest to `vitest@^2.1.8` and `@vitest/coverage-v8@^2.1.8` using `--no-save` specifically for Node 18.
+
+## 2025-02-13 - [Vitest and Mock Restoration]
+**Learning:** Using `vi.restoreAllMocks()` in an `afterEach` hook destroys the mock implementation established by `vi.mock()`, replacing it with `undefined`. This causes subsequent tests or other test files running in the same thread (or affected by module caching) to fail with `TypeError: Cannot read properties of undefined` when trying to call mocked methods.
+**Action:** Always use `vi.clearAllMocks()` instead of `vi.restoreAllMocks()` in `afterEach` hooks if the intention is simply to reset call counts and mock results without destroying the mock functions themselves.
