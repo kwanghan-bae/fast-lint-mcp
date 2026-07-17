@@ -45,7 +45,13 @@ jobs:
           npx @napi-rs/cli build --platform --release
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          if [ "${{ matrix.node-version }}" == "18" ]; then
+            npm ci
+            npm install vitest@^2.1.8 @vitest/coverage-v8@^2.1.8 --no-save
+          else
+            npm ci
+          fi
 
       - name: Build TypeScript
         run: npm run build
