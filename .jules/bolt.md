@@ -9,3 +9,7 @@
 ## 2025-02-13 - [Optimize AST node field extraction]
 **Learning:** When using @ast-grep/napi to extract named fields (like the 'source' of an import statement), extracting parts of matches via string replacement patterns (e.g., `m.getMatch('VAR')`) is significantly slower than direct AST node kind matching (e.g., `{ kind: 'import_statement' }`) combined with `m.field('fieldName')`.
 **Action:** Replace complex `any` rules containing multiple string patterns with a direct AST node kind match and extract the node using `m.field()`. Remove surrounding quotes programmatically if necessary.
+
+## 2025-02-13 - [CI TypeError fix]
+**Learning:** `TypeError: Cannot read properties of undefined (reading 'pass')` occurs when `checkEnv` is mocked asynchronously but evaluated incorrectly, or if it lacks default properties that the testing module relies on.
+**Action:** When mocking dependencies that return object properties accessed by `validateEnvironment` like `checkEnv()`, ensure that default properties match the function call signature properly or wrap it in a mock returning a valid object `{ pass: true }`.
