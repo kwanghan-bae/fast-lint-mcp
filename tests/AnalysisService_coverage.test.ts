@@ -5,6 +5,7 @@ import { join } from 'path';
 import { DependencyGraph } from '../src/utils/DependencyGraph.js';
 import glob from 'fast-glob';
 
+import { checkEnv } from '../src/checkers/env.js';
 vi.mock('../src/checkers/env.js', () => ({
   checkEnv: vi.fn().mockResolvedValue({ pass: true }),
 }));
@@ -56,6 +57,10 @@ describe('AnalysisService Extra (Coverage & Error)', () => {
     service = new AnalysisService(mockStateManager as any, mockConfig as any, mockSemantic as any);
   });
 
+  beforeEach(() => {
+    vi.mocked(checkEnv).mockResolvedValue({ pass: true });
+  });
+
   afterEach(() => {
     if (fs.existsSync(testDir)) fs.rmSync(testDir, { recursive: true, force: true });
     vi.restoreAllMocks();
@@ -77,17 +82,24 @@ describe('AnalysisService Extra (Coverage & Error)', () => {
 
     // utimesSync를 사용하여 실제 파일 시간 조작 (ESM spyOn 이슈 우회)
     const now = Date.now();
-    const staleTime = (now - 2000000) / 1000; // 2000초 전
-    fs.utimesSync(summaryPath, staleTime, staleTime);
+    const staleTimeMs = now - 2000000; // 2000초 전
+    const staleDate = new Date(staleTimeMs);
 
     // glob이 testDir 내의 실제 파일을 반환하도록 설정
     // getLatestMtime이 현재 시간(now)을 반환하게 하여 timeDiff > GRACE_PERIOD 조건 충족
     const srcFilePath = join(testDir, 'src', 'test.ts');
     fs.mkdirSync(join(testDir, 'src'), { recursive: true });
     fs.writeFileSync(srcFilePath, '// test');
+
+    // Set stale time for coverage
+    fs.utimesSync(summaryPath, staleDate, staleDate);
+    // Set new time for src file
+    fs.utimesSync(srcFilePath, new Date(), new Date());
+
     vi.mocked(glob).mockResolvedValue([srcFilePath] as any);
 
     const report = await service.runAllChecks({ coveragePath: summaryPath });
+    console.log(JSON.stringify(report.violations, null, 2));
     expect(report.violations.some((v) => v.message.includes('만료'))).toBe(true);
   }, 30000); // 30초 타임아웃
 });
