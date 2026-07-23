@@ -95,7 +95,7 @@ impl User {
     expect(rustProvider).toBeDefined();
 
     // Re-verify exact output structure
-    const { extractSymbolsRustNative } = await import('../../native/index.js');
+    const { extractSymbolsRustNative } = await import('../native/index.js');
     const content = fs.readFileSync(exampleFilePath, 'utf-8');
     const symbols = extractSymbolsRustNative(exampleFilePath, content);
 
@@ -114,7 +114,7 @@ impl User {
     const invalidFilePath = path.join(testDir, 'invalid.rs');
     fs.writeFileSync(invalidFilePath, `pub fn invalid() -> { let x = ; }`); // syntax error
 
-    const { extractSymbolsRustNative } = await import('../../native/index.js');
+    const { extractSymbolsRustNative } = await import('../native/index.js');
     const content = fs.readFileSync(invalidFilePath, 'utf-8');
 
     // Should gracefully return empty array and not panic
