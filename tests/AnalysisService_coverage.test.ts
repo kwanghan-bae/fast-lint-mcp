@@ -58,7 +58,7 @@ describe('AnalysisService Extra (Coverage & Error)', () => {
 
   afterEach(() => {
     if (fs.existsSync(testDir)) fs.rmSync(testDir, { recursive: true, force: true });
-    vi.restoreAllMocks();
+    vi.clearAllMocks();
   });
 
   it('lcov.info 형식을 올바르게 파싱해야 한다', async () => {
@@ -77,8 +77,8 @@ describe('AnalysisService Extra (Coverage & Error)', () => {
 
     // utimesSync를 사용하여 실제 파일 시간 조작 (ESM spyOn 이슈 우회)
     const now = Date.now();
-    const staleTime = (now - 2000000) / 1000; // 2000초 전
-    fs.utimesSync(summaryPath, staleTime, staleTime);
+    const staleDate = new Date(now - 2000000); // 2000초 전
+    fs.utimesSync(summaryPath, staleDate, staleDate);
 
     // glob이 testDir 내의 실제 파일을 반환하도록 설정
     // getLatestMtime이 현재 시간(now)을 반환하게 하여 timeDiff > GRACE_PERIOD 조건 충족
