@@ -3,7 +3,6 @@ import { Lang, parse, SgNode } from '@ast-grep/napi';
 import { dirname, join, normalize, isAbsolute } from 'path';
 import { promisify } from 'util';
 import { resolveModulePath } from '../utils/PathResolver.js';
-import pMap from 'p-map';
 
 /** 프로미스 기반 파일 읽기 헬퍼 */
 const readFileAsync = promisify(readFile);
@@ -18,15 +17,20 @@ export async function getDependencyMap(
   const dependencyMap = new Map<string, string[]>();
   if (!allFiles || allFiles.length === 0) return dependencyMap;
 
-  // ⚡ Bolt: Use p-map for concurrent cross-file async I/O to improve performance on large file sets.
-  await pMap(
-    allFiles,
-    async (filePath) => {
-      const imports = await extractImportsFromFile(filePath, allFiles);
-      dependencyMap.set(filePath, imports);
-    },
-    { concurrency: 50 }
-  );
+  // ⚡ Bolt: Optimize async file reading and AST parsing using chunked parallel execution.
+  // Instead of sequential loop, we use Promise.all to fetch dependencies concurrently to avoid
+  // Node event loop blocking during heavy I/O operations without relying on external non-standard dependencies.
+
+  const concurrency = 50;
+  for (let i = 0; i < allFiles.length; i += concurrency) {
+    const chunk = allFiles.slice(i, i + concurrency);
+    await Promise.all(
+      chunk.map(async (filePath) => {
+        const imports = await extractImportsFromFile(filePath, allFiles);
+        dependencyMap.set(filePath, imports);
+      })
+    );
+  }
 
   return dependencyMap;
 }
