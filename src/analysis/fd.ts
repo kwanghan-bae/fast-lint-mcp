@@ -3,6 +3,7 @@ import { Lang, parse, SgNode } from '@ast-grep/napi';
 import { dirname, join, normalize, isAbsolute } from 'path';
 import { promisify } from 'util';
 import { resolveModulePath } from '../utils/PathResolver.js';
+import pMap from 'p-map';
 
 /** 프로미스 기반 파일 읽기 헬퍼 */
 const readFileAsync = promisify(readFile);
@@ -17,10 +18,16 @@ export async function getDependencyMap(
   const dependencyMap = new Map<string, string[]>();
   if (!allFiles || allFiles.length === 0) return dependencyMap;
 
-  for (const filePath of allFiles) {
-    const imports = await extractImportsFromFile(filePath, allFiles);
-    dependencyMap.set(filePath, imports);
-  }
+  // ⚡ Bolt: Use p-map for concurrent cross-file async I/O to improve performance on large file sets.
+  await pMap(
+    allFiles,
+    async (filePath) => {
+      const imports = await extractImportsFromFile(filePath, allFiles);
+      dependencyMap.set(filePath, imports);
+    },
+    { concurrency: 50 }
+  );
+
   return dependencyMap;
 }
 
