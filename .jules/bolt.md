@@ -5,3 +5,7 @@
 ## 2025-02-12 - [Combine AST Traversals]
 **Learning:** Calling `root.findAll({ rule: { kind } })` sequentially for multiple AST node kinds (e.g. `function_declaration`, `class_declaration`) results in traversing the entire AST multiple times (O(K*N) where K is number of kinds).
 **Action:** Combine multiple sequential queries into a single pass using the `any` rule: `{ any: kinds.map(kind => ({ kind })) }` so the AST is traversed exactly once.
+
+## 2025-02-13 - [Optimize AST Match Extraction & Parallelize I/O]
+**Learning:** Using @ast-grep/napi string matching patterns with `getMatch` to extract imports is slow. Additionally, extracting imports sequentially blocks the event loop.
+**Action:** Replace string patterns with direct AST kind matching (`kind: 'import_statement'`) and use `m.field('source')`. Use `pMap` with concurrency to parallelize the asynchronous file I/O operations for extracting imports.
