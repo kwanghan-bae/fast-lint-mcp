@@ -133,7 +133,8 @@ export class AnalysisService {
 
   private async validateEnvironment() {
     const res = await checkEnv();
-    if (res.pass) return { pass: true };
+    // ⚡ Bolt: Use optional chaining to safely handle undefined returns from mocks during tests
+    if (res?.pass) return { pass: true };
     return {
       pass: false,
       report: {
