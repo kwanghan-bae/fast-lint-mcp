@@ -47,6 +47,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install older vitest for Node 18
+        if: matrix.node-version == 18
+        run: npm install vitest@^2.1.8 @vitest/coverage-v8@^2.1.8 --no-save
+
       - name: Build TypeScript
         run: npm run build
 
