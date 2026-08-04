@@ -116,22 +116,66 @@ export async function analyzeFile(
       'arrow_function',
     ];
 
-    // ⚡ Bolt: Combined sequential findAll loops into a single pass for better performance
-    const symbolRule = { any: symbolKinds.map((kind) => ({ kind })) };
-    root.findAll({ rule: symbolRule }).forEach((node) => {
+    // ⚡ Bolt: Combined AST node kinds into a single query to prevent multiple O(N) boundary crossing traversals
+    // Resolved nesting complexity structurally via interval range stack logic in a single unified pass
+    const combinedRule = {
+      any: [
+        ...symbolKinds.map((kind) => ({ kind })),
+        ...COMPLEXITY_KINDS.map((kind) => ({ kind })),
+      ],
+    };
+
+    const matches = root.findAll({ rule: combinedRule });
+    const symbolStack: { start: number; end: number; symbol: any }[] = [];
+
+    for (const node of matches) {
       const kind = node.kind() as string;
-      const name = node.find({ rule: { kind: 'identifier' } })?.text() || 'anonymous';
-      // 복잡도 계산: 해당 노드 하위의 제어문 개수
-      const symbolComplexity = node.findAll({ rule: COMPLEXITY_RULE }).length;
       const range = node.range();
-      symbols.push({
-        name,
-        complexity: symbolComplexity,
-        kind: kind.replace('_declaration', '').replace('_definition', ''),
-        line: range.start.line + 1,
-        endLine: range.end.line + 1,
-      });
-    });
+      const start = range.start.index;
+      const end = range.end.index;
+
+      // ⚡ Bolt: Corrected bounds check to use <= to handle adjacent sibling symbols properly
+      while (symbolStack.length > 0 && symbolStack[symbolStack.length - 1].end <= start) {
+        symbols.push(symbolStack.pop()!.symbol);
+      }
+
+      if (symbolKinds.includes(kind)) {
+        // ⚡ Bolt: Optimized node name extraction using field('name') instead of expensive subtree identifier queries
+        let name = node.field('name')?.text();
+        if (!name) {
+          const parent = node.parent();
+          if (parent) {
+            const pKind = parent.kind();
+            if (pKind === 'variable_declarator') {
+              name = parent.field('name')?.text();
+            } else if (pKind === 'pair') {
+              name = parent.field('key')?.text();
+            }
+          }
+        }
+        name = name || 'anonymous';
+
+        symbolStack.push({
+          start,
+          end,
+          symbol: {
+            name,
+            complexity: 0,
+            kind: kind.replace('_declaration', '').replace('_definition', ''),
+            line: range.start.line + 1,
+            endLine: range.end.line + 1,
+          },
+        });
+      } else {
+        for (const stackItem of symbolStack) {
+          stackItem.symbol.complexity++;
+        }
+      }
+    }
+
+    while (symbolStack.length > 0) {
+      symbols.push(symbolStack.pop()!.symbol);
+    }
 
     const topComplexSymbols = symbols.sort((a, b) => b.complexity - a.complexity).slice(0, 3);
 
