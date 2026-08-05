@@ -116,22 +116,64 @@ export async function analyzeFile(
       'arrow_function',
     ];
 
-    // ⚡ Bolt: Combined sequential findAll loops into a single pass for better performance
-    const symbolRule = { any: symbolKinds.map((kind) => ({ kind })) };
-    root.findAll({ rule: symbolRule }).forEach((node) => {
+    // ⚡ Bolt: Optimize AST traversal for complexity calculation using a stack-based single pass
+    // Combine both symbol rules and complexity rules into one query to avoid repeatedly traversing sub-trees and C++/JS boundary
+    const allKinds = [...symbolKinds, ...COMPLEXITY_KINDS];
+    const allRule = { any: allKinds.map((kind) => ({ kind })) };
+    const allKindsSet = new Set(COMPLEXITY_KINDS);
+    const symbolKindsSet = new Set(symbolKinds);
+    const stack: { name: string; complexity: number; kind: string; start: number; end: number; line: number; endLine: number; }[] = [];
+
+    root.findAll({ rule: allRule }).forEach((node) => {
       const kind = node.kind() as string;
-      const name = node.find({ rule: { kind: 'identifier' } })?.text() || 'anonymous';
-      // 복잡도 계산: 해당 노드 하위의 제어문 개수
-      const symbolComplexity = node.findAll({ rule: COMPLEXITY_RULE }).length;
       const range = node.range();
-      symbols.push({
-        name,
-        complexity: symbolComplexity,
-        kind: kind.replace('_declaration', '').replace('_definition', ''),
-        line: range.start.line + 1,
-        endLine: range.end.line + 1,
-      });
+      const currentStart = range.start.index;
+      const currentEnd = range.end.index;
+
+      while (stack.length > 0 && stack[stack.length - 1].end <= currentStart) {
+        const completed = stack.pop();
+        if (completed) {
+          symbols.push(completed);
+        }
+      }
+
+      if (allKindsSet.has(kind)) {
+        for (const item of stack) {
+          item.complexity++;
+        }
+      }
+
+      if (symbolKindsSet.has(kind)) {
+        let nameNode = node.field('name');
+        if (!nameNode) {
+            const parent = node.parent();
+            if (parent) {
+                const pKind = parent.kind();
+                if (pKind === 'variable_declarator' || pKind === 'pair') {
+                    nameNode = parent.field('name') || parent.field('key');
+                }
+            }
+        }
+        const name = nameNode?.text() || 'anonymous';
+
+        stack.push({
+          name,
+          complexity: 0,
+          kind: kind.replace('_declaration', '').replace('_definition', ''),
+          start: currentStart,
+          end: currentEnd,
+          line: range.start.line + 1,
+          endLine: range.end.line + 1,
+        });
+      }
     });
+
+    while (stack.length > 0) {
+      const completed = stack.pop();
+      if (completed) {
+        symbols.push(completed);
+      }
+    }
 
     const topComplexSymbols = symbols.sort((a, b) => b.complexity - a.complexity).slice(0, 3);
 
