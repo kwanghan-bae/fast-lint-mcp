@@ -108,6 +108,7 @@ export async function analyzeFile(
       kind: string;
       line: number;
       endLine: number;
+      end?: number;
     }[] = [];
     const symbolKinds = [
       'function_declaration',
@@ -116,21 +117,58 @@ export async function analyzeFile(
       'arrow_function',
     ];
 
-    // ⚡ Bolt: Combined sequential findAll loops into a single pass for better performance
-    const symbolRule = { any: symbolKinds.map((kind) => ({ kind })) };
-    root.findAll({ rule: symbolRule }).forEach((node) => {
+    // ⚡ Bolt: Using a single pass stack-based approach for symbols and complexity to avoid O(N*M) nested findAll
+    const combinedRule = {
+      any: [
+        ...symbolKinds.map((kind) => ({ kind })),
+        ...COMPLEXITY_KINDS.map((kind) => ({ kind })),
+      ],
+    };
+
+    const stack: typeof symbols = [];
+
+    root.findAll({ rule: combinedRule }).forEach((node) => {
       const kind = node.kind() as string;
-      const name = node.find({ rule: { kind: 'identifier' } })?.text() || 'anonymous';
-      // 복잡도 계산: 해당 노드 하위의 제어문 개수
-      const symbolComplexity = node.findAll({ rule: COMPLEXITY_RULE }).length;
       const range = node.range();
-      symbols.push({
-        name,
-        complexity: symbolComplexity,
-        kind: kind.replace('_declaration', '').replace('_definition', ''),
-        line: range.start.line + 1,
-        endLine: range.end.line + 1,
-      });
+
+      while (stack.length > 0 && stack[stack.length - 1].end! <= range.start.index) {
+        stack.pop();
+      }
+
+      if (symbolKinds.includes(kind)) {
+        let name = 'anonymous';
+        const nameNode = node.field('name');
+        if (nameNode) {
+          name = nameNode.text();
+        } else if (kind === 'arrow_function') {
+          const parent = node.parent();
+          if (parent) {
+            const parentKind = parent.kind();
+            if (parentKind === 'variable_declarator') {
+              const idNode = parent.field('name');
+              if (idNode) name = idNode.text();
+            } else if (parentKind === 'pair') {
+              const keyNode = parent.field('key');
+              if (keyNode) name = keyNode.text();
+            }
+          }
+        }
+
+        const symbolInfo = {
+          name,
+          complexity: 0,
+          kind: kind.replace('_declaration', '').replace('_definition', ''),
+          line: range.start.line + 1,
+          endLine: range.end.line + 1,
+          end: range.end.index,
+        };
+        symbols.push(symbolInfo);
+        stack.push(symbolInfo);
+      } else {
+        for (const s of stack) {
+          s.complexity++;
+        }
+      }
     });
 
     const topComplexSymbols = symbols.sort((a, b) => b.complexity - a.complexity).slice(0, 3);
