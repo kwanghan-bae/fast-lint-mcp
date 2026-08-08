@@ -120,7 +120,24 @@ export async function analyzeFile(
     const symbolRule = { any: symbolKinds.map((kind) => ({ kind })) };
     root.findAll({ rule: symbolRule }).forEach((node) => {
       const kind = node.kind() as string;
-      const name = node.find({ rule: { kind: 'identifier' } })?.text() || 'anonymous';
+
+      // ⚡ Bolt: Fast O(1) field lookup instead of O(N) subtree traversal for node name extraction
+      let name = 'anonymous';
+      const nameNode = node.field('name');
+      if (nameNode) {
+        name = nameNode.text();
+      } else {
+        const parent = node.parent();
+        if (parent) {
+          const parentKind = parent.kind();
+          if (parentKind === 'variable_declarator') {
+            name = parent.field('name')?.text() || 'anonymous';
+          } else if (parentKind === 'pair') {
+            name = parent.field('key')?.text() || 'anonymous';
+          }
+        }
+      }
+
       // 복잡도 계산: 해당 노드 하위의 제어문 개수
       const symbolComplexity = node.findAll({ rule: COMPLEXITY_RULE }).length;
       const range = node.range();
