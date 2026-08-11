@@ -13,53 +13,59 @@
 ## File Map
 
 ### Phase 1 (P0: 긴급 수정)
-| Action | File | Purpose |
-|--------|------|---------|
-| Modify | `src/service/AnalysisService.ts:26` | Export 문법 오류 수정 |
-| Modify | `src/utils/CoverageAnalyzer.ts:8` | Export 문법 오류 수정 |
-| Modify | `src/agent/workflow.ts:27,61` | Command Injection 방어 |
-| Create | `tests/workflow_security.test.ts` | 보안 검증 테스트 |
+
+| Action | File                                | Purpose                |
+| ------ | ----------------------------------- | ---------------------- |
+| Modify | `src/service/AnalysisService.ts:26` | Export 문법 오류 수정  |
+| Modify | `src/utils/CoverageAnalyzer.ts:8`   | Export 문법 오류 수정  |
+| Modify | `src/agent/workflow.ts:27,61`       | Command Injection 방어 |
+| Create | `tests/workflow_security.test.ts`   | 보안 검증 테스트       |
 
 ### Phase 2 (P1: 타입 안전성)
-| Action | File | Purpose |
-|--------|------|---------|
-| Modify | `src/types/index.ts` | ToolArgs 인터페이스 추가 |
-| Modify | `src/agent/handlers.ts` | `any` → 구체적 타입 |
-| Modify | `src/index.ts` | AnalyzerFactory, ToolHandler 타입 적용 |
-| Modify | `src/service/AnalysisService.ts` | options/rules 타입 정의 |
-| Modify | `src/utils/CoverageAnalyzer.ts` | 메서드 파라미터 타입 |
+
+| Action | File                             | Purpose                                |
+| ------ | -------------------------------- | -------------------------------------- |
+| Modify | `src/types/index.ts`             | ToolArgs 인터페이스 추가               |
+| Modify | `src/agent/handlers.ts`          | `any` → 구체적 타입                    |
+| Modify | `src/index.ts`                   | AnalyzerFactory, ToolHandler 타입 적용 |
+| Modify | `src/service/AnalysisService.ts` | options/rules 타입 정의                |
+| Modify | `src/utils/CoverageAnalyzer.ts`  | 메서드 파라미터 타입                   |
 
 ### Phase 3 (P2: 에러 처리)
-| Action | File | Purpose |
-|--------|------|---------|
-| Modify | `src/state.ts` | 5개 empty catch → 로깅 추가 |
-| Modify | `src/checkers/security.ts:79` | empty catch → 로깅 |
-| Modify | `src/utils/SymbolIndexer.ts:54` | empty catch → 로깅 |
-| Modify | `src/analysis/import-check.ts:126` | empty catch → 로깅 |
-| Modify | `src/providers/JavascriptProvider.ts:52,156` | empty catch → 로깅 |
-| Modify | `src/utils/CoverageAnalyzer.ts:67` | empty catch → 로깅 |
+
+| Action | File                                         | Purpose                     |
+| ------ | -------------------------------------------- | --------------------------- |
+| Modify | `src/state.ts`                               | 5개 empty catch → 로깅 추가 |
+| Modify | `src/checkers/security.ts:79`                | empty catch → 로깅          |
+| Modify | `src/utils/SymbolIndexer.ts:54`              | empty catch → 로깅          |
+| Modify | `src/analysis/import-check.ts:126`           | empty catch → 로깅          |
+| Modify | `src/providers/JavascriptProvider.ts:52,156` | empty catch → 로깅          |
+| Modify | `src/utils/CoverageAnalyzer.ts:67`           | empty catch → 로깅          |
 
 ### Phase 4 (P3: 테스트 커버리지)
-| Action | File | Purpose |
-|--------|------|---------|
-| Create | `tests/handlers.test.ts` | MCP 핸들러 테스트 |
-| Create | `tests/ReportService.test.ts` | 리포트 조립 테스트 |
+
+| Action | File                             | Purpose                 |
+| ------ | -------------------------------- | ----------------------- |
+| Create | `tests/handlers.test.ts`         | MCP 핸들러 테스트       |
+| Create | `tests/ReportService.test.ts`    | 리포트 조립 테스트      |
 | Create | `tests/TsProgramManager.test.ts` | TS 컴파일러 관리 테스트 |
-| Create | `tests/cli.test.ts` | CLI 명령어 테스트 |
+| Create | `tests/cli.test.ts`              | CLI 명령어 테스트       |
 
 ### Phase 5 (P4: 대형 파일 분리)
-| Action | File | Purpose |
-|--------|------|---------|
-| Create | `src/utils/StructuralIntegrity.ts` | AnalysisUtils에서 추출 |
-| Modify | `src/utils/AnalysisUtils.ts` | 구조 검증 로직 분리 |
-| Create | `src/providers/ComplexityAdvisor.ts` | JavascriptProvider에서 추출 |
-| Modify | `src/providers/JavascriptProvider.ts` | 조언 생성 로직 분리 |
+
+| Action | File                                  | Purpose                     |
+| ------ | ------------------------------------- | --------------------------- |
+| Create | `src/utils/StructuralIntegrity.ts`    | AnalysisUtils에서 추출      |
+| Modify | `src/utils/AnalysisUtils.ts`          | 구조 검증 로직 분리         |
+| Create | `src/providers/ComplexityAdvisor.ts`  | JavascriptProvider에서 추출 |
+| Modify | `src/providers/JavascriptProvider.ts` | 조언 생성 로직 분리         |
 
 ---
 
 ## Task 1: Export 문법 오류 수정
 
 **Files:**
+
 - Modify: `src/service/AnalysisService.ts:26-27`
 - Modify: `src/utils/CoverageAnalyzer.ts:8-9`
 
@@ -113,6 +119,7 @@ git commit -m "fix: export 문법 오류 수정 (export // comment → export cl
 ## Task 2: Command Injection 보안 취약점 수정
 
 **Files:**
+
 - Modify: `src/agent/workflow.ts:27,44,61,63`
 - Create: `tests/workflow_security.test.ts`
 
@@ -253,6 +260,7 @@ git commit -m "fix(security): Command Injection 방어 — execSync 입력 검�
 ## Task 3: 타입 안전성 강화 — types/index.ts 인터페이스 추가
 
 **Files:**
+
 - Modify: `src/types/index.ts`
 
 - [ ] **Step 1: 현재 타입 정의 확인**
@@ -306,11 +314,13 @@ export type ToolHandler = (
   args: Record<string, unknown>,
   semanticSvc: import('../service/SemanticService.js').SemanticService,
   workspace: string,
-  getAnalyzer: AnalyzerFactory,
+  getAnalyzer: AnalyzerFactory
 ) => Promise<unknown>;
 
 /** AnalyzerFactory 타입 */
-export type AnalyzerFactory = (workspace: string) => import('../service/AnalysisService.js').AnalysisService;
+export type AnalyzerFactory = (
+  workspace: string
+) => import('../service/AnalysisService.js').AnalysisService;
 ```
 
 - [ ] **Step 3: Violation 인터페이스의 any 제거**
@@ -344,6 +354,7 @@ git commit -m "feat(types): MCP 도구 인자 및 핸들러 타입 정의 추가
 ## Task 4: 타입 안전성 강화 — handlers.ts, index.ts 적용
 
 **Files:**
+
 - Modify: `src/agent/handlers.ts`
 - Modify: `src/index.ts`
 
@@ -364,7 +375,7 @@ import type { AnalyzerFactory } from '../types/index.js';
 import { AgentWorkflow } from './workflow.js';
 
 export const toolHandlers: Record<string, ToolHandler> = {
-  'guide': async () => {
+  guide: async () => {
     // ... 기존 SOP 텍스트 반환 로직 유지
   },
 
@@ -390,10 +401,7 @@ export const toolHandlers: Record<string, ToolHandler> = {
 ```typescript
 import type { ToolHandler, AnalyzerFactory } from './types/index.js';
 
-async function handleToolCall(
-  name: string,
-  args: Record<string, unknown>,
-): Promise<unknown> {
+async function handleToolCall(name: string, args: Record<string, unknown>): Promise<unknown> {
   // ...
 }
 ```
@@ -415,6 +423,7 @@ git commit -m "refactor(types): handlers/index에서 any 제거, 구체적 타�
 ## Task 5: 타입 안전성 강화 — AnalysisService, CoverageAnalyzer 적용
 
 **Files:**
+
 - Modify: `src/service/AnalysisService.ts`
 - Modify: `src/utils/CoverageAnalyzer.ts`
 
@@ -498,6 +507,7 @@ git commit -m "refactor(types): AnalysisService/CoverageAnalyzer에서 any 제�
 ## Task 6: Empty Catch 블록 개선 — state.ts (5건)
 
 **Files:**
+
 - Modify: `src/state.ts:40,72,102,115,150`
 
 - [ ] **Step 1: 로깅 유틸 확인**
@@ -561,6 +571,7 @@ git commit -m "fix: state.ts empty catch 블록에 경고 로깅 추가 (5건)"
 ## Task 7: Empty Catch 블록 개선 — 나머지 모듈 (9건)
 
 **Files:**
+
 - Modify: `src/checkers/security.ts:79`
 - Modify: `src/utils/SymbolIndexer.ts:54`
 - Modify: `src/analysis/import-check.ts:126`
@@ -646,6 +657,7 @@ git commit -m "fix: 나머지 모듈 empty catch 블록에 경고 로깅 추가 
 ## Task 8: 테스트 추가 — handlers.ts
 
 **Files:**
+
 - Create: `tests/handlers.test.ts`
 
 - [ ] **Step 1: 테스트 작성**
@@ -698,14 +710,24 @@ describe('toolHandlers', () => {
 
   it('get-symbol-metrics 도구는 심볼 메트릭을 반환해야 한다', async () => {
     const args = { filePath: 'test.ts' };
-    const result = await toolHandlers['get-symbol-metrics'](args, mockSemanticSvc, '/test', mockGetAnalyzer);
+    const result = await toolHandlers['get-symbol-metrics'](
+      args,
+      mockSemanticSvc,
+      '/test',
+      mockGetAnalyzer
+    );
     expect(mockSemanticSvc.getSymbolMetrics).toHaveBeenCalledWith('test.ts');
     expect(result).toBeDefined();
   });
 
   it('get-symbol-content 도구는 심볼 내용을 반환해야 한다', async () => {
     const args = { filePath: 'test.ts', symbolName: 'foo' };
-    const result = await toolHandlers['get-symbol-content'](args, mockSemanticSvc, '/test', mockGetAnalyzer);
+    const result = await toolHandlers['get-symbol-content'](
+      args,
+      mockSemanticSvc,
+      '/test',
+      mockGetAnalyzer
+    );
     expect(mockSemanticSvc.getSymbolContent).toHaveBeenCalledWith('test.ts', 'foo');
   });
 
@@ -744,6 +766,7 @@ git commit -m "test: MCP 도구 핸들러 테스트 추가 (handlers.ts)"
 ## Task 9: 테스트 추가 — ReportService.ts
 
 **Files:**
+
 - Create: `tests/ReportService.test.ts`
 
 - [ ] **Step 1: 테스트 작성**
@@ -846,6 +869,7 @@ git commit -m "test: ReportService 리포트 조립 테스트 추가"
 ## Task 10: 테스트 추가 — TsProgramManager.ts
 
 **Files:**
+
 - Create: `tests/TsProgramManager.test.ts`
 
 - [ ] **Step 1: 테스트 작성**
@@ -867,9 +891,14 @@ beforeEach(() => {
   writeFileSync(
     join(testDir, 'tsconfig.json'),
     JSON.stringify({
-      compilerOptions: { target: 'ES2022', module: 'NodeNext', moduleResolution: 'NodeNext', strict: true },
+      compilerOptions: {
+        target: 'ES2022',
+        module: 'NodeNext',
+        moduleResolution: 'NodeNext',
+        strict: true,
+      },
       include: ['src/**/*'],
-    }),
+    })
   );
 });
 
@@ -897,10 +926,13 @@ describe('TsProgramManager', () => {
 
   it('존재하지 않는 심볼 사용 시 환각으로 탐지해야 한다', () => {
     const badFile = join(srcDir, 'bad.ts');
-    writeFileSync(badFile, `
+    writeFileSync(
+      badFile,
+      `
       import { nonExistentFunction } from './nowhere';
       nonExistentFunction();
-    `);
+    `
+    );
 
     const mgr = TsProgramManager.getInstance();
     mgr.init(testDir, [badFile]);
@@ -937,6 +969,7 @@ git commit -m "test: TsProgramManager 환각 탐지 테스트 추가"
 ## Task 11: 테스트 추가 — cli.ts
 
 **Files:**
+
 - Create: `tests/cli.test.ts`
 
 - [ ] **Step 1: 테스트 작성**
@@ -1002,6 +1035,7 @@ git commit -m "test: CLI 명령어 파싱 테스트 추가 (--help, --version)"
 ## Task 12: 대형 파일 분리 — AnalysisUtils에서 StructuralIntegrity 추출
 
 **Files:**
+
 - Create: `src/utils/StructuralIntegrity.ts`
 - Modify: `src/utils/AnalysisUtils.ts:194-278`
 
@@ -1024,7 +1058,7 @@ import type { DependencyGraph } from './DependencyGraph.js';
  */
 export function checkStructuralIntegrity(
   depGraph: DependencyGraph,
-  allFiles: string[],
+  allFiles: string[]
 ): Violation[] {
   // AnalysisUtils.ts의 line 194-278 내용을 그대로 이동
   // (실제 구현 시 해당 코드를 복사)
@@ -1060,6 +1094,7 @@ git commit -m "refactor: checkStructuralIntegrity를 StructuralIntegrity.ts로 �
 ## Task 13: 대형 파일 분리 — JavascriptProvider에서 ComplexityAdvisor 추출
 
 **Files:**
+
 - Create: `src/providers/ComplexityAdvisor.ts`
 - Modify: `src/providers/JavascriptProvider.ts:209-268`
 
@@ -1077,7 +1112,7 @@ import { readFileSync } from 'fs';
 export function generateComplexityAdvice(
   filePath: string,
   giantSymbol: { name: string; line: number; endLine?: number } | undefined,
-  functionCount: number,
+  functionCount: number
 ): string {
   // JavascriptProvider.ts의 line 209-268 내용을 그대로 이동
   // (실제 구현 시 해당 코드를 복사)
@@ -1115,6 +1150,7 @@ git commit -m "refactor: generateComplexityAdvice를 ComplexityAdvisor.ts로 분
 ## Task 14: 최종 검증 및 정리
 
 **Files:**
+
 - 전체 프로젝트
 
 - [ ] **Step 1: 전체 빌드 확인**

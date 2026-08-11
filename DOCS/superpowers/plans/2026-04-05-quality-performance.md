@@ -11,6 +11,9 @@
 ---
 
 ## Phase 1: 잔여 any 10건 완전 제거 (Tasks 1-3)
+
 ## Phase 2: 성능 최적화 (Tasks 4-5)
+
 ## Phase 3: 스킵된 테스트 복구 (Tasks 6-7)
+
 ## Phase 4: 최종 검증 (Task 8)

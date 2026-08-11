@@ -3,17 +3,20 @@
 ## [0.1.0] - 2026-04-05
 
 ### 품질 개선
+
 - **타입 안전성 100%**: `any` 타입 40건 → 0건 완전 제거, Native FFI 타입 전면 적용
 - **에러 처리 강화**: empty catch 블록 11건 → 0건, 전체 경고 로깅 추가
 - **보안**: Command Injection 방어 (execSync 입력 검증)
 - **Export 문법 오류**: `export // comment` 패턴 2건 수정
 
 ### 성능 최적화
+
 - **DependencyGraph**: `includes()` O(n) → `Set.add()` O(1) 변경
 - **DependencyGraph**: 모듈 리졸브 캐시 추가 (중복 FFI 호출 제거)
 - **AnalysisService**: setImmediate 배치 yield (매 파일 → 50파일마다)
 
 ### 테스트
+
 - 테스트 수: 181 → **275** (+94)
 - 스킵 테스트: 6 → **0** (전체 복구)
 - 실패 테스트: **0**
@@ -21,23 +24,27 @@
 - 폐기된 native_hallucination 테스트 2파일 삭제
 
 ### 아키텍처
+
 - `checkStructuralIntegrity` → `StructuralIntegrity.ts` 분리
 - `generateComplexityAdvice` → `ComplexityAdvisor.ts` 분리
 - `toolHandlers` → `agent/handlers.ts` 분리 (전략 패턴)
 
 ### 인프라
+
 - GitHub Actions CI/CD (Node 18/20/22 매트릭스 + Rust 빌드)
-- npm publish 워크플로우 (v* 태그 트리거)
+- npm publish 워크플로우 (v\* 태그 트리거)
 
 ---
 
 ## [2.1.2] - 2026-02-26 (목요일)
 
 ### 추가 ✨
+
 - **ast-grep 배치 처리(Batching)**: `findDeadCode` 분석 시 의존성 파일을 단 한 번만 파싱하여 수백 개의 심볼을 동시에 검색하는 배치 처리 방식을 도입, 대규모 프로젝트 분석 성능을 비약적으로 향상시켰습니다.
 - **의존성 스캔 통합**: `DependencyGraph` 빌드 시 수십 번의 `findAll` 호출을 단 하나의 통합 규칙으로 합쳐 Native Rust 엔진의 처리 효율을 극대화했습니다.
 
 ### 수정 🛠️
+
 - **심볼 식별자 탐색 안정화**: 클래스 및 메서드의 이름을 추출할 때 `ast-grep`의 `field('name')` API를 우선 사용하여 식별자 탐색의 정확도와 일관성을 높였습니다.
 - **75개 전체 테스트 케이스 검증**: 아키텍처 최적화 이후에도 모든 기능적 무결성이 유지됨을 확인했습니다.
 
@@ -46,10 +53,12 @@
 ## [2.1.1] - 2026-02-26 (목요일)
 
 ### 추가 ✨
+
 - **맥락 인식 주석 규칙 (Context-aware Rules)**: `.test.js`, `.spec.ts` 등 테스트 관련 파일과 디렉토리를 가독성(주석 강제) 규칙에서 자동으로 제외하여 프로젝트 소음을 획기적으로 줄였습니다.
 - **분석 투명성 강화**: 리포트 하단에 분석 대상 파일들이 선정된 기준(예: Git staging, 역의존성 추적 등)을 명시하여 분석 결과에 대한 신뢰도를 높였습니다.
 
 ### 수정 🛠️
+
 - **스코프 정밀 분석 (Parser Accuracy)**: 함수 내부의 지역 변수나 테스트 코드 내의 변수를 전역 요소로 오인하여 주석을 요구하던 버그를 수정했습니다.
 - **상대 경로 해소 개선**: `.json`, `.css` 등 자산 파일에 대한 상대 경로 임포트를 정확히 해소하여 가짜 환각(Hallucination) 경고가 발생하지 않도록 보완했습니다.
 
@@ -58,6 +67,7 @@
 ## [2.1.0] - 2026-02-26 (목요일)
 
 ### 추가 ✨
+
 - **Zero-Cache 실시간 분석 아키텍처**: SQLite 기반 캐시 시스템을 제거하고 매 실행 시 실시간으로 전체 분석을 수행하여 규칙 업데이트의 즉각적인 반영을 보장합니다.
 - **범용 주석 강제 (ESM & CJS)**: ESM(`export`) 뿐만 아니라 Node.js의 **CommonJS(`module.exports`, `exports`)** 패턴까지 인식하여 한글 주석 작성을 강제합니다.
-...
+  ...
