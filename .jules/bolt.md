@@ -5,3 +5,7 @@
 ## 2025-02-12 - [Combine AST Traversals]
 **Learning:** Calling `root.findAll({ rule: { kind } })` sequentially for multiple AST node kinds (e.g. `function_declaration`, `class_declaration`) results in traversing the entire AST multiple times (O(K*N) where K is number of kinds).
 **Action:** Combine multiple sequential queries into a single pass using the `any` rule: `{ any: kinds.map(kind => ({ kind })) }` so the AST is traversed exactly once.
+
+## 2025-02-12 - [Combine Sequential Traversals]
+**Learning:** Sequential `node.findAll` queries inside a loop (e.g., iterating through symbols to find complexity) cross the JS/C++ boundary repeatedly and result in O(N*M) performance overhead. Additionally, searching the whole subtree with `{ rule: { kind: 'identifier' } }` to get a function's name is slow and imprecise.
+**Action:** Combine multiple node kind queries into a single `root.findAll({ any: [...] })` and reconstruct structural relationships (like nesting) using a stack based on interval ranges (`range.start.index` and `range.end.index`). Use `node.field('name')` to extract identifiers efficiently.

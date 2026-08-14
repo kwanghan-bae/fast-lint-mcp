@@ -116,22 +116,85 @@ export async function analyzeFile(
       'arrow_function',
     ];
 
-    // ⚡ Bolt: Combined sequential findAll loops into a single pass for better performance
-    const symbolRule = { any: symbolKinds.map((kind) => ({ kind })) };
-    root.findAll({ rule: symbolRule }).forEach((node) => {
+    // ⚡ Bolt: Combine multiple sequential queries into a single pass using the `any` rule and a stack
+    const allKindsRule = {
+      any: [...symbolKinds, ...COMPLEXITY_KINDS].map((kind) => ({ kind })),
+    };
+
+    const stack: {
+      name: string;
+      complexity: number;
+      kind: string;
+      startLine: number;
+      endLine: number;
+      endIndex: number;
+    }[] = [];
+
+    root.findAll({ rule: allKindsRule }).forEach((node) => {
       const kind = node.kind() as string;
-      const name = node.find({ rule: { kind: 'identifier' } })?.text() || 'anonymous';
-      // 복잡도 계산: 해당 노드 하위의 제어문 개수
-      const symbolComplexity = node.findAll({ rule: COMPLEXITY_RULE }).length;
       const range = node.range();
-      symbols.push({
-        name,
-        complexity: symbolComplexity,
-        kind: kind.replace('_declaration', '').replace('_definition', ''),
-        line: range.start.line + 1,
-        endLine: range.end.line + 1,
-      });
+      const isSymbol = symbolKinds.includes(kind);
+
+      // Pop nodes from stack that have ended before or at the start of current node
+      while (stack.length > 0 && stack[stack.length - 1].endIndex <= range.start.index) {
+        const popped = stack.pop()!;
+        symbols.push({
+          name: popped.name,
+          complexity: popped.complexity,
+          kind: popped.kind.replace('_declaration', '').replace('_definition', ''),
+          line: popped.startLine,
+          endLine: popped.endLine,
+        });
+      }
+
+      if (isSymbol) {
+        // ⚡ Bolt: Use field('name') before falling back to identifier search
+        let nameNode = node.field('name');
+        if (!nameNode) {
+          // fallback to variable declarator name or pair key for function expressions
+          const parent = node.parent();
+          if (parent) {
+            const parentKind = parent.kind();
+            if (parentKind === 'variable_declarator') {
+              nameNode = parent.field('name');
+            } else if (parentKind === 'pair') {
+              nameNode = parent.field('key');
+            }
+          }
+        }
+        if (!nameNode) {
+          nameNode = node.find({ rule: { kind: 'identifier' } });
+        }
+        const name = nameNode?.text() || 'anonymous';
+
+        stack.push({
+          name,
+          complexity: 0,
+          kind,
+          startLine: range.start.line + 1,
+          endLine: range.end.line + 1,
+          endIndex: range.end.index,
+        });
+      } else {
+        // It's a complexity node. Increment complexity for all symbols currently in stack
+        // (which means this node is nested inside them)
+        for (let j = 0; j < stack.length; j++) {
+          stack[j].complexity++;
+        }
+      }
     });
+
+    // Flush remaining nodes in stack
+    while (stack.length > 0) {
+      const popped = stack.pop()!;
+      symbols.push({
+        name: popped.name,
+        complexity: popped.complexity,
+        kind: popped.kind.replace('_declaration', '').replace('_definition', ''),
+        line: popped.startLine,
+        endLine: popped.endLine,
+      });
+    }
 
     const topComplexSymbols = symbols.sort((a, b) => b.complexity - a.complexity).slice(0, 3);
 
