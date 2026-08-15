@@ -116,22 +116,64 @@ export async function analyzeFile(
       'arrow_function',
     ];
 
-    // ⚡ Bolt: Combined sequential findAll loops into a single pass for better performance
-    const symbolRule = { any: symbolKinds.map((kind) => ({ kind })) };
-    root.findAll({ rule: symbolRule }).forEach((node) => {
+    // ⚡ Bolt: Optimize node querying to O(N) single-pass with stack-based nesting resolution
+    const ALL_KINDS = [...symbolKinds, ...COMPLEXITY_KINDS];
+    const allMatches = root.findAll({ rule: { any: ALL_KINDS.map((kind) => ({ kind })) } });
+
+    const stack: {
+      end: number;
+      sym: {
+        name: string;
+        complexity: number;
+        kind: string;
+        line: number;
+        endLine: number;
+      };
+    }[] = [];
+
+    for (const node of allMatches) {
       const kind = node.kind() as string;
-      const name = node.find({ rule: { kind: 'identifier' } })?.text() || 'anonymous';
-      // 복잡도 계산: 해당 노드 하위의 제어문 개수
-      const symbolComplexity = node.findAll({ rule: COMPLEXITY_RULE }).length;
       const range = node.range();
-      symbols.push({
-        name,
-        complexity: symbolComplexity,
-        kind: kind.replace('_declaration', '').replace('_definition', ''),
-        line: range.start.line + 1,
-        endLine: range.end.line + 1,
-      });
-    });
+
+      while (stack.length > 0 && stack[stack.length - 1].end <= range.start.index) {
+        stack.pop();
+      }
+
+      if (symbolKinds.includes(kind)) {
+        let name = 'anonymous';
+        const nameNode = node.field('name');
+
+        if (nameNode) {
+          name = nameNode.text();
+        } else {
+          const parent = node.parent();
+          if (parent) {
+            const parentKind = parent.kind();
+            if (parentKind === 'variable_declarator') {
+              const pName = parent.field('name');
+              if (pName) name = pName.text();
+            } else if (parentKind === 'pair') {
+              const pKey = parent.field('key');
+              if (pKey) name = pKey.text();
+            }
+          }
+        }
+
+        const sym = {
+          name,
+          complexity: 0,
+          kind: kind.replace('_declaration', '').replace('_definition', ''),
+          line: range.start.line + 1,
+          endLine: range.end.line + 1,
+        };
+        symbols.push(sym);
+        stack.push({ end: range.end.index, sym });
+      } else if (COMPLEXITY_KINDS.includes(kind)) {
+        for (const item of stack) {
+          item.sym.complexity++;
+        }
+      }
+    }
 
     const topComplexSymbols = symbols.sort((a, b) => b.complexity - a.complexity).slice(0, 3);
 
