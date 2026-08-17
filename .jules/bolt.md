@@ -5,3 +5,7 @@
 ## 2025-02-12 - [Combine AST Traversals]
 **Learning:** Calling `root.findAll({ rule: { kind } })` sequentially for multiple AST node kinds (e.g. `function_declaration`, `class_declaration`) results in traversing the entire AST multiple times (O(K*N) where K is number of kinds).
 **Action:** Combine multiple sequential queries into a single pass using the `any` rule: `{ any: kinds.map(kind => ({ kind })) }` so the AST is traversed exactly once.
+
+## 2025-02-12 - [AST Import Query Optimization]
+**Learning:** Extracting module paths from `import_statement` nodes using string patterns (e.g., `import $A from '$B'`) in `@ast-grep/napi` is computationally expensive due to the large number of potential variations and regex operations.
+**Action:** Replace string patterns for imports with direct AST node kind matching (`{ kind: 'import_statement' }`) and extract the source path directly using `m.field('source')` (stripping quotes), which yields a ~10x performance improvement in local profiling.
