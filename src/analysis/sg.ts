@@ -116,22 +116,59 @@ export async function analyzeFile(
       'arrow_function',
     ];
 
-    // ⚡ Bolt: Combined sequential findAll loops into a single pass for better performance
-    const symbolRule = { any: symbolKinds.map((kind) => ({ kind })) };
-    root.findAll({ rule: symbolRule }).forEach((node) => {
+    // ⚡ Bolt: Stack-based single pass AST traversal to avoid O(N*M) nested node.findAll() performance overhead
+    const stack: {
+      name: string;
+      complexity: number;
+      kind: string;
+      line: number;
+      endLine: number;
+      end: number;
+      start: number;
+    }[] = [];
+
+    const combinedRule = {
+      any: [...symbolKinds.map((kind) => ({ kind })), ...COMPLEXITY_RULE.any],
+    };
+
+    const allMatches = root.findAll({ rule: combinedRule });
+
+    for (const node of allMatches) {
       const kind = node.kind() as string;
-      const name = node.find({ rule: { kind: 'identifier' } })?.text() || 'anonymous';
-      // 복잡도 계산: 해당 노드 하위의 제어문 개수
-      const symbolComplexity = node.findAll({ rule: COMPLEXITY_RULE }).length;
       const range = node.range();
-      symbols.push({
-        name,
-        complexity: symbolComplexity,
-        kind: kind.replace('_declaration', '').replace('_definition', ''),
-        line: range.start.line + 1,
-        endLine: range.end.line + 1,
-      });
-    });
+
+      while (stack.length > 0 && stack[stack.length - 1].end <= range.start.index) {
+        const finishedSymbol = stack.pop()!;
+        symbols.push(finishedSymbol);
+      }
+
+      const isSymbol = symbolKinds.includes(kind);
+
+      if (isSymbol) {
+        const name = node.find({ rule: { kind: 'identifier' } })?.text() || 'anonymous';
+        stack.push({
+          name,
+          complexity: 0,
+          kind: kind.replace('_declaration', '').replace('_definition', ''),
+          line: range.start.line + 1,
+          endLine: range.end.line + 1,
+          end: range.end.index,
+          start: range.start.index,
+        });
+      } else {
+        // It's a complexity node
+        for (const stackItem of stack) {
+          stackItem.complexity++;
+        }
+      }
+    }
+
+    while (stack.length > 0) {
+      symbols.push(stack.pop()!);
+    }
+
+    // Sort by original position
+    symbols.sort((a, b) => (a as any).start - (b as any).start);
 
     const topComplexSymbols = symbols.sort((a, b) => b.complexity - a.complexity).slice(0, 3);
 
