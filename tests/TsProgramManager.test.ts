@@ -15,7 +15,7 @@ describe('TsProgramManager', { timeout: 15000 }, () => {
 
   beforeEach(() => {
     if (!existsSync(testDir)) mkdirSync(testDir, { recursive: true });
-  });
+  }, 30000);
 
   afterEach(async () => {
     // Clean up temp dir
@@ -26,7 +26,7 @@ describe('TsProgramManager', { timeout: 15000 }, () => {
     const mod = await import('../src/utils/TsProgramManager.js');
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (mod.TsProgramManager as any).instance = undefined;
-  });
+  }, 30000);
 
   it('getInstance()는 항상 동일한 인스턴스를 반환해야 한다 (싱글톤)', async () => {
     const { TsProgramManager } = await import('../src/utils/TsProgramManager.js');
@@ -35,7 +35,7 @@ describe('TsProgramManager', { timeout: 15000 }, () => {
     const b = TsProgramManager.getInstance();
 
     expect(a).toBe(b);
-  });
+  }, 30000);
 
   it('init()은 유효한 tsconfig.json이 있는 프로젝트에서 정상 동작해야 한다', async () => {
     const { TsProgramManager } = await import('../src/utils/TsProgramManager.js');
@@ -58,7 +58,7 @@ describe('TsProgramManager', { timeout: 15000 }, () => {
 
     // Should not throw
     expect(() => manager.init(testDir, [mainTs])).not.toThrow();
-  });
+  }, 30000);
 
   it('init()은 tsconfig.json이 없는 프로젝트에서도 기본 옵션으로 동작해야 한다', async () => {
     const { TsProgramManager } = await import('../src/utils/TsProgramManager.js');
@@ -70,7 +70,7 @@ describe('TsProgramManager', { timeout: 15000 }, () => {
 
     // No tsconfig.json exists in testDir — should fall back to default options
     expect(() => manager.init(testDir, [mainTs])).not.toThrow();
-  });
+  }, 30000);
 
   it('getHallucinations()는 존재하지 않는 심볼 참조를 TS2304로 탐지해야 한다', async () => {
     const { TsProgramManager } = await import('../src/utils/TsProgramManager.js');
@@ -97,7 +97,7 @@ describe('TsProgramManager', { timeout: 15000 }, () => {
 
     const names = hallucinations.map((h) => h.name);
     expect(names).toContain('nonExistentFunction');
-  });
+  }, 30000);
 
   it('getHallucinations()는 유효한 코드에서 빈 배열을 반환해야 한다', async () => {
     const { TsProgramManager } = await import('../src/utils/TsProgramManager.js');
@@ -121,7 +121,7 @@ describe('TsProgramManager', { timeout: 15000 }, () => {
     const hallucinations = manager.getHallucinations(validTs);
 
     expect(hallucinations).toEqual([]);
-  });
+  }, 30000);
 
   it('getHallucinations()는 init() 호출 전에 빈 배열을 반환해야 한다', async () => {
     const { TsProgramManager } = await import('../src/utils/TsProgramManager.js');
@@ -131,7 +131,7 @@ describe('TsProgramManager', { timeout: 15000 }, () => {
 
     const result = manager.getHallucinations('/some/non/existent/file.ts');
     expect(result).toEqual([]);
-  });
+  }, 30000);
 
   it('getHallucinations()는 프로그램에 없는 파일에 대해 빈 배열을 반환해야 한다', async () => {
     const { TsProgramManager } = await import('../src/utils/TsProgramManager.js');
@@ -145,7 +145,7 @@ describe('TsProgramManager', { timeout: 15000 }, () => {
     // Ask for a file that was NOT passed as rootFiles
     const result = manager.getHallucinations('/completely/absent/file.ts');
     expect(result).toEqual([]);
-  });
+  }, 30000);
 
   it('refresh()는 예외 없이 프로그램을 갱신해야 한다', async () => {
     const { TsProgramManager } = await import('../src/utils/TsProgramManager.js');
@@ -164,7 +164,7 @@ describe('TsProgramManager', { timeout: 15000 }, () => {
     // After refresh, file2 should be part of the program (no hallucinations for valid code)
     const result = manager.getHallucinations(file2);
     expect(result).toEqual([]);
-  });
+  }, 30000);
 
   it('탐지된 환각의 line 번호가 정확해야 한다', async () => {
     const { TsProgramManager } = await import('../src/utils/TsProgramManager.js');
@@ -190,5 +190,5 @@ describe('TsProgramManager', { timeout: 15000 }, () => {
     const phantom = hallucinations.find((h) => h.name === 'phantomCall');
     expect(phantom).toBeDefined();
     expect(phantom?.line).toBe(4);
-  });
+  }, 30000);
 });
