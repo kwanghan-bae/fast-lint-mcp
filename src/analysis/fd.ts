@@ -37,20 +37,14 @@ async function extractImportsFromFile(filePath: string, allFiles: string[]): Pro
     const imports: string[] = [];
     const dir = dirname(filePath);
 
-    const importRule = {
-      any: [
-        { pattern: "import $A from '$B'" },
-        { pattern: 'import $A from "$B"' },
-        { pattern: "import { $$$ } from '$B'" },
-        { pattern: 'import { $$$ } from "$B"' },
-        { pattern: "import '$B'" },
-        { pattern: 'import "$B"' },
-      ],
-    };
+    // ⚡ Bolt: Optimize AST node extraction using node kind matching instead of string pattern matching
+    const importRule = { kind: 'import_statement' };
 
     root.findAll({ rule: importRule }).forEach((m) => {
-      const source = m.getMatch('B')?.text();
-      if (source) {
+      const sourceNode = m.field('source');
+      if (sourceNode) {
+        const text = sourceNode.text();
+        const source = text.length >= 2 ? text.slice(1, -1) : text;
         const resolved = resolveModulePath(dir, source, allFiles);
         if (resolved) imports.push(resolved);
       }
