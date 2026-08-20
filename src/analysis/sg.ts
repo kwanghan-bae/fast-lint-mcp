@@ -116,22 +116,90 @@ export async function analyzeFile(
       'arrow_function',
     ];
 
-    // ⚡ Bolt: Combined sequential findAll loops into a single pass for better performance
-    const symbolRule = { any: symbolKinds.map((kind) => ({ kind })) };
-    root.findAll({ rule: symbolRule }).forEach((node) => {
+    // ⚡ Bolt: Stack-based single-pass AST traversal to avoid O(N*M) sequential node.findAll() calls
+    const allKinds = [...symbolKinds, ...COMPLEXITY_KINDS];
+    const combinedRule = { any: allKinds.map((kind) => ({ kind })) };
+
+    const stack: {
+      isSymbol: boolean;
+      name: string;
+      kind: string;
+      complexity: number;
+      start: number;
+      end: number;
+      line: number;
+      endLine: number;
+    }[] = [];
+
+    root.findAll({ rule: combinedRule }).forEach((node) => {
       const kind = node.kind() as string;
-      const name = node.find({ rule: { kind: 'identifier' } })?.text() || 'anonymous';
-      // 복잡도 계산: 해당 노드 하위의 제어문 개수
-      const symbolComplexity = node.findAll({ rule: COMPLEXITY_RULE }).length;
       const range = node.range();
-      symbols.push({
-        name,
-        complexity: symbolComplexity,
-        kind: kind.replace('_declaration', '').replace('_definition', ''),
-        line: range.start.line + 1,
-        endLine: range.end.line + 1,
-      });
+
+      // Pop nodes from stack that don't contain current node
+      while (stack.length > 0 && stack[stack.length - 1].end <= range.start.index) {
+        const popped = stack.pop()!;
+        if (popped.isSymbol) {
+          symbols.push({
+            name: popped.name,
+            complexity: popped.complexity,
+            kind: popped.kind.replace('_declaration', '').replace('_definition', ''),
+            line: popped.line,
+            endLine: popped.endLine,
+          });
+        }
+      }
+
+      if (symbolKinds.includes(kind)) {
+        let name = 'anonymous';
+        if (['function_declaration', 'class_declaration', 'method_definition'].includes(kind)) {
+           const nameNode = node.field('name');
+           if (nameNode) name = nameNode.text();
+        } else if (kind === 'arrow_function') {
+           const parent = node.parent();
+           if (parent) {
+             const parentKind = parent.kind();
+             if (parentKind === 'variable_declarator') {
+               const parentNameNode = parent.field('name');
+               if (parentNameNode) name = parentNameNode.text();
+             } else if (parentKind === 'pair') {
+               const keyNode = parent.field('key');
+               if (keyNode) name = keyNode.text();
+             }
+           }
+        }
+
+        stack.push({
+          isSymbol: true,
+          name,
+          kind,
+          complexity: 0,
+          start: range.start.index,
+          end: range.end.index,
+          line: range.start.line + 1,
+          endLine: range.end.line + 1,
+        });
+      } else {
+        // It's a complexity node, increment complexity of all symbols in current stack (ancestors)
+        for (let i = 0; i < stack.length; i++) {
+          if (stack[i].isSymbol) {
+            stack[i].complexity++;
+          }
+        }
+      }
     });
+
+    while (stack.length > 0) {
+      const popped = stack.pop()!;
+      if (popped.isSymbol) {
+        symbols.push({
+          name: popped.name,
+          complexity: popped.complexity,
+          kind: popped.kind.replace('_declaration', '').replace('_definition', ''),
+          line: popped.line,
+          endLine: popped.endLine,
+        });
+      }
+    }
 
     const topComplexSymbols = symbols.sort((a, b) => b.complexity - a.complexity).slice(0, 3);
 
