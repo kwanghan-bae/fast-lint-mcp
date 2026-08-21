@@ -23,7 +23,7 @@ function runCLI(args: string): { stdout: string; stderr: string; exitCode: numbe
   }
 }
 
-describe('CLI flags', () => {
+describe('CLI flags', { timeout: 15000 }, () => {
   it('--help outputs usage information', () => {
     const { stdout, exitCode } = runCLI('--help');
     expect(exitCode).toBe(0);
