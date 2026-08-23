@@ -5,3 +5,7 @@
 ## 2025-02-12 - [Combine AST Traversals]
 **Learning:** Calling `root.findAll({ rule: { kind } })` sequentially for multiple AST node kinds (e.g. `function_declaration`, `class_declaration`) results in traversing the entire AST multiple times (O(K*N) where K is number of kinds).
 **Action:** Combine multiple sequential queries into a single pass using the `any` rule: `{ any: kinds.map(kind => ({ kind })) }` so the AST is traversed exactly once.
+
+## 2026-08-23 - [AST Field Extraction Optimization]
+**Learning:** When extracting named fields with `@ast-grep/napi`, searching the entire subtree using `node.find({ rule: { kind: 'identifier' } })` is significantly slower (up to 5x) than using `node.field('name')` directly. Furthermore, combining sequential `node.findAll()` queries (e.g. iterating through symbols and finding complexity nodes inside each) leads to O(N*M) performance, which can be optimized to O(N) by querying all node kinds in a single pass and resolving nesting with an interval stack.
+**Action:** Use `node.field('fieldName')` instead of searching subtrees for identifiers. Combine multiple `node.findAll()` queries and use a stack with `range.start.index` and `range.end.index` to process relationships.
