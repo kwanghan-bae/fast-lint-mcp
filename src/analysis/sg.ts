@@ -120,7 +120,20 @@ export async function analyzeFile(
     const symbolRule = { any: symbolKinds.map((kind) => ({ kind })) };
     root.findAll({ rule: symbolRule }).forEach((node) => {
       const kind = node.kind() as string;
-      const name = node.find({ rule: { kind: 'identifier' } })?.text() || 'anonymous';
+
+      // ⚡ Bolt: Optimized AST node name extraction. Avoided find({ kind: 'identifier' }) which searches
+      // the entire subtree (O(N)), replaced with O(1) field lookup and parent context fallback.
+      let name = node.field('name')?.text();
+      if (!name) {
+        const parent = node.parent();
+        if (parent?.kind() === 'variable_declarator') {
+          name = parent.field('name')?.text();
+        } else if (parent?.kind() === 'pair') {
+          name = parent.field('key')?.text();
+        }
+      }
+      name = name || 'anonymous';
+
       // 복잡도 계산: 해당 노드 하위의 제어문 개수
       const symbolComplexity = node.findAll({ rule: COMPLEXITY_RULE }).length;
       const range = node.range();
