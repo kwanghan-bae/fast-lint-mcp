@@ -17,3 +17,7 @@
 ## 2025-02-23 - [Safe optional chaining]
 **Learning:** Hard crash from `TypeError: Cannot read properties of undefined` in Node testing environments when internal dependency mocks return empty or invalid structures.
 **Action:** When evaluating return models from external or mocked dependencies like `checkEnv()`, always enforce strict typing checks or use optional chaining logic (`res?.pass`, `res?.suggestion`).
+
+## 2025-02-23 - [Date objects in `fs.utimesSync`]
+**Learning:** `fs.utimesSync` in testing environments can evaluate numeric arguments unexpectedly (interpreting as seconds instead of milliseconds), leading to false negatives in time-sensitive CI checks.
+**Action:** Always use strict `Date` objects (e.g., `new Date(Date.now() - offset)`) rather than numeric timestamp division when mocking or manipulating file modification times.
