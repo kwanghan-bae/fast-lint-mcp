@@ -9,3 +9,7 @@
 ## 2025-02-23 - [Single-pass AST complexity calculation]
 **Learning:** Using `@ast-grep/napi`, calling `node.findAll()` sequentially for nested rules inside a loop over matching symbols results in O(N*M) performance penalty across the JS/C++ boundary.
 **Action:** Combine the parent and child AST node kinds into a single `root.findAll({ rule: { any: [...] } })` query and use a stack checking against `node.range()` indices to resolve nested relationships in one O(N) pass, significantly reducing overall complexity.
+
+## 2025-02-23 - [Vitest Node 18 CI Failure]
+**Learning:** Vitest 4.x fails with `Error: No such built-in module: node:inspector/promises` when executed on Node 18 environments due to Node version requirements.
+**Action:** When this CI error occurs, add a step to `.github/workflows/ci.yml` conditionally downgrading `vitest` and `@vitest/coverage-v8` to `^2.1.8` specifically for Node 18 via `npm install --no-save` rather than rewriting standard configuration files.
