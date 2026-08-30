@@ -13,3 +13,7 @@
 ## 2025-02-23 - [Vitest Node 18 CI Failure]
 **Learning:** Vitest 4.x fails with `Error: No such built-in module: node:inspector/promises` when executed on Node 18 environments due to Node version requirements.
 **Action:** When this CI error occurs, add a step to `.github/workflows/ci.yml` conditionally downgrading `vitest` and `@vitest/coverage-v8` to `^2.1.8` specifically for Node 18 via `npm install --no-save` rather than rewriting standard configuration files.
+
+## 2025-02-23 - [Safe optional chaining]
+**Learning:** Hard crash from `TypeError: Cannot read properties of undefined` in Node testing environments when internal dependency mocks return empty or invalid structures.
+**Action:** When evaluating return models from external or mocked dependencies like `checkEnv()`, always enforce strict typing checks or use optional chaining logic (`res?.pass`, `res?.suggestion`).
