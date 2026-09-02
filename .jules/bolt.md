@@ -5,3 +5,7 @@
 ## 2025-02-12 - [Combine AST Traversals]
 **Learning:** Calling `root.findAll({ rule: { kind } })` sequentially for multiple AST node kinds (e.g. `function_declaration`, `class_declaration`) results in traversing the entire AST multiple times (O(K*N) where K is number of kinds).
 **Action:** Combine multiple sequential queries into a single pass using the `any` rule: `{ any: kinds.map(kind => ({ kind })) }` so the AST is traversed exactly once.
+
+## 2025-02-12 - [Optimize AST node nested findAll]
+**Learning:** When using `@ast-grep/napi`, calling `node.findAll()` sequentially inside a loop over matched nodes (e.g., iterating through symbols to find their complexity) is highly inefficient (O(N*M)) as it repeatedly crosses the JS/C++ boundary.
+**Action:** Optimize this by combining target node kinds into a single `root.findAll({ rule: { any: [...] } })` query, and resolving structural relationships (like nesting) in a single pass using a stack based on node interval ranges (`range.start.index` and `range.end.index`). Use `<=` instead of `<` when checking bounds to properly handle adjacent symbol overlap boundaries correctly.
