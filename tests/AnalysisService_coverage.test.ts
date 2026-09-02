@@ -85,6 +85,7 @@ describe('AnalysisService Extra (Coverage & Error)', () => {
     const srcFilePath = join(testDir, 'src', 'test.ts');
     fs.mkdirSync(join(testDir, 'src'), { recursive: true });
     fs.writeFileSync(srcFilePath, '// test');
+    fs.utimesSync(srcFilePath, new Date(now), new Date(now));
     vi.mocked(glob).mockResolvedValue([srcFilePath] as any);
 
     const report = await service.runAllChecks({ coveragePath: summaryPath });
