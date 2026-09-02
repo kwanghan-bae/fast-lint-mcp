@@ -108,6 +108,7 @@ export async function analyzeFile(
       kind: string;
       line: number;
       endLine: number;
+      end: number;
     }[] = [];
     const symbolKinds = [
       'function_declaration',
@@ -117,20 +118,39 @@ export async function analyzeFile(
     ];
 
     // ⚡ Bolt: Combined sequential findAll loops into a single pass for better performance
+    // and replaced O(N*M) nested findAll calls with an O(N) stack-based traversal
     const symbolRule = { any: symbolKinds.map((kind) => ({ kind })) };
-    root.findAll({ rule: symbolRule }).forEach((node) => {
+    const ALL_RULE = { any: [symbolRule, COMPLEXITY_RULE] };
+
+    const stack: typeof symbols = [];
+
+    root.findAll({ rule: ALL_RULE }).forEach((node) => {
       const kind = node.kind() as string;
-      const name = node.find({ rule: { kind: 'identifier' } })?.text() || 'anonymous';
-      // 복잡도 계산: 해당 노드 하위의 제어문 개수
-      const symbolComplexity = node.findAll({ rule: COMPLEXITY_RULE }).length;
       const range = node.range();
-      symbols.push({
-        name,
-        complexity: symbolComplexity,
-        kind: kind.replace('_declaration', '').replace('_definition', ''),
-        line: range.start.line + 1,
-        endLine: range.end.line + 1,
-      });
+
+      // Pop symbols from stack if the current node is outside of them
+      while (stack.length > 0 && stack[stack.length - 1].end <= range.start.index) {
+          stack.pop();
+      }
+
+      if (symbolKinds.includes(kind)) {
+          const name = node.find({ rule: { kind: 'identifier' } })?.text() || 'anonymous';
+
+          const symbol = {
+              name,
+              complexity: 0,
+              kind: kind.replace('_declaration', '').replace('_definition', ''),
+              line: range.start.line + 1,
+              endLine: range.end.line + 1,
+              end: range.end.index
+          };
+          symbols.push(symbol);
+          stack.push(symbol);
+      } else {
+          // Increment complexity for every symbol currently enclosing this node
+          // to perfectly match the original findAll() nested behavior
+          stack.forEach((s) => s.complexity++);
+      }
     });
 
     const topComplexSymbols = symbols.sort((a, b) => b.complexity - a.complexity).slice(0, 3);
