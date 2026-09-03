@@ -5,3 +5,7 @@
 ## 2025-02-12 - [Combine AST Traversals]
 **Learning:** Calling `root.findAll({ rule: { kind } })` sequentially for multiple AST node kinds (e.g. `function_declaration`, `class_declaration`) results in traversing the entire AST multiple times (O(K*N) where K is number of kinds).
 **Action:** Combine multiple sequential queries into a single pass using the `any` rule: `{ any: kinds.map(kind => ({ kind })) }` so the AST is traversed exactly once.
+
+## 2025-02-12 - [Single-Pass Symbol Complexity Calculation & Name Extraction]
+**Learning:** When using `@ast-grep/napi`, calling `node.findAll()` sequentially inside a loop over matched nodes (e.g., iterating through symbols to find their complexity) is highly inefficient (O(N*M)) as it repeatedly crosses the JS/C++ boundary. Similarly, extracting names via `node.find({ rule: { kind: 'identifier' } })` searches the entire subtree.
+**Action:** Optimize by combining target node kinds (symbols and complexity constructs) into a single `root.findAll({ rule: { any: [...] } })` query, and resolving structural relationships (like nesting) in a single pass using a stack based on node interval ranges (`range.start.index` and `range.end.index`). Use `node.field('name')` (with parent fallback) for O(1) name extraction.
