@@ -133,12 +133,12 @@ export class AnalysisService {
 
   private async validateEnvironment() {
     const res = await checkEnv();
-    if (res.pass) return { pass: true };
+    if (res?.pass) return { pass: true };
     return {
       pass: false,
       report: {
         pass: false,
-        violations: [{ type: 'ENV' as ViolationType, message: res.suggestion || 'Error' }],
+        violations: [{ type: 'ENV' as ViolationType, message: res?.suggestion || 'Error' }],
         metadata: {
           analyzedFiles: 0,
           analysisMode: 'full',
